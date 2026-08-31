@@ -10,8 +10,9 @@ public class BeatScroller : MonoBehaviour
 
     public bool IsLeft;
 
-    // Start is called once before the first execution of Update after the MonoBehaviour is created
-    void Start()
+    // Runs in Awake (not Start) so NoteObject.Start() can safely read the
+    // normalized speed regardless of script execution order.
+    void Awake()
     {
         beatTempo = beatTempo / 60f;
     }

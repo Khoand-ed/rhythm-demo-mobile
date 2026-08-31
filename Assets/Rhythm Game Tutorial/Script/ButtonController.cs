@@ -9,6 +9,8 @@ public class ButtonController : MonoBehaviour
     public Sprite pressedImage;
 
     public KeyCode keyToPress;
+    public float touchFlashDuration = 0.1f;
+
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
@@ -23,8 +25,23 @@ public class ButtonController : MonoBehaviour
             theSR.sprite = pressedImage;
         }
         if(Input.GetKeyUp(keyToPress))
-        { 
+        {
            theSR.sprite = defaultImage;
         }
+    }
+
+    // Called by GameManager when a touch zone (see TouchInputZone) presses
+    // this button's key. Touches have no key-up to pair with, so the pressed
+    // sprite reverts on its own after touchFlashDuration.
+    public void FlashPressed()
+    {
+        theSR.sprite = pressedImage;
+        CancelInvoke(nameof(ResetSprite));
+        Invoke(nameof(ResetSprite), touchFlashDuration);
+    }
+
+    private void ResetSprite()
+    {
+        theSR.sprite = defaultImage;
     }
 }
