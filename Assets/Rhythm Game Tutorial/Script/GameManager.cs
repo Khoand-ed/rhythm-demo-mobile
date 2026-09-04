@@ -43,6 +43,18 @@ public class GameManager : MonoBehaviour
     // Where the character stands. A missed note travels here and pauses before disappearing.
     public Transform middleZoneMarker;
 
+    public NoteSpawner noteSpawner;
+
+    // Runs the old NoteHolder/BeatScroller path instead of the spawner, so the
+    // two can be compared side by side. Removed once the new path is signed off.
+    public bool useLegacyNoteHolders = false;
+
+    // Hoisted off NoteObject: every note carried the same three prefabs and the
+    // same two windows, so they belong in one place now that judging lives here.
+    public GameObject hitEffect, goodEffect, perfectEffect;
+    public float perfectWindow = 0.05f;
+    public float goodWindow = 0.1f;
+
     private readonly Dictionary<KeyCode, List<NoteObject>> activeNotesByKey = new Dictionary<KeyCode, List<NoteObject>>();
     private readonly Dictionary<KeyCode, float> hitZoneXByKey = new Dictionary<KeyCode, float>();
     private readonly Dictionary<KeyCode, ButtonController> buttonsByKey = new Dictionary<KeyCode, ButtonController>();
@@ -65,6 +77,17 @@ public class GameManager : MonoBehaviour
             hitZoneXByKey[button.keyToPress] = button.transform.position.x;
             buttonsByKey[button.keyToPress] = button;
         }
+
+        ApplyNoteSystemMode();
+    }
+
+    // The legacy holders and the spawner are mutually exclusive - only one of
+    // them may be feeding notes to the judge.
+    private void ApplyNoteSystemMode()
+    {
+        if (theBsLeft != null) theBsLeft.gameObject.SetActive(useLegacyNoteHolders);
+        if (theBsRight != null) theBsRight.gameObject.SetActive(useLegacyNoteHolders);
+        if (noteSpawner != null) noteSpawner.gameObject.SetActive(!useLegacyNoteHolders);
     }
 
     // Returns the world-space x position notes for this key should be hit at.
@@ -102,7 +125,21 @@ public class GameManager : MonoBehaviour
         multiText.text = "0";
         currentMultiplier = 1;
 
-        totalNotes = FindObjectsByType<NoteObject>().Length;
+        if (useLegacyNoteHolders)
+        {
+            totalNotes = FindObjectsByType<NoteObject>().Length;
+        }
+        else
+        {
+            if (Conductor.instance == null || noteSpawner == null || noteSpawner.chart == null)
+            {
+                Debug.LogError("The spawner path needs a Conductor, a NoteSpawner and a chart. " +
+                               "Run Tools/Rhythm/Set Up Note System and Tools/Rhythm/Extract Chart From Open Scene, " +
+                               "or tick useLegacyNoteHolders to stay on the old system.");
+            }
+
+            totalNotes = noteSpawner != null && noteSpawner.chart != null ? noteSpawner.chart.notes.Count : 0;
+        }
 
 }
 
@@ -114,16 +151,26 @@ void Update()
             if(Input.anyKeyDown)
             {
                 startPlaying = true;
-                theBsLeft.hasStarted = true;
-                theBsRight.hasStarted = true;
 
-                theMusic.Play();
+                if (useLegacyNoteHolders)
+                {
+                    theBsLeft.hasStarted = true;
+                    theBsRight.hasStarted = true;
+
+                    theMusic.Play();
+                }
+                else if (Conductor.instance != null)
+                {
+                    // The run-up has to cover the longest marker-to-button trip,
+                    // or the earliest notes cannot start at their spawn point.
+                    Conductor.instance.StartSong(noteSpawner != null ? noteSpawner.GetRequiredLeadIn() : 0f);
+                }
             }
         }else
         {
             HandleNoteInput();
 
-            if(!theMusic.isPlaying && !resultsScreen.activeInHierarchy)
+            if(SongFinished() && !resultsScreen.activeInHierarchy)
             {
                 resultsScreen.SetActive(true);
 
@@ -142,6 +189,13 @@ void Update()
                 finalScoreText.text = currentScore.ToString();
             }
         }
+    }
+
+    // The Conductor schedules playback a moment ahead, so theMusic.isPlaying is
+    // briefly false right after the song starts - only the legacy path can use it.
+    private bool SongFinished()
+    {
+        return useLegacyNoteHolders ? !theMusic.isPlaying : Conductor.instance.IsFinished;
     }
 
     private static string CalculateRank(float percentHit)
@@ -166,9 +220,23 @@ void Update()
         return "F";
     }
 
+    private void HandleNoteInput()
+    {
+        if (useLegacyNoteHolders)
+        {
+            HandleLegacyNoteInput();
+        }
+        else
+        {
+            HandleSpawnedNoteInput();
+        }
+
+        simulatedKeyDownsThisFrame.Clear();
+    }
+
     // Resolves at most one queued note per key per frame, so two notes
     // that are close together can never both consume the same key press.
-    private void HandleNoteInput()
+    private void HandleLegacyNoteInput()
     {
         foreach (var kvp in activeNotesByKey)
         {
@@ -185,8 +253,63 @@ void Update()
                 note.TryHit();
             }
         }
+    }
 
-        simulatedKeyDownsThisFrame.Clear();
+    // The same one-note-per-key-per-frame rule, except the candidate comes from
+    // the spawner's active list and "in range" is a song time window rather
+    // than a collider overlap.
+    private void HandleSpawnedNoteInput()
+    {
+        // Start() has already logged what is missing if either is absent.
+        if (noteSpawner == null || noteSpawner.lanes == null || Conductor.instance == null) return;
+
+        float songTime = Conductor.instance.SongTime;
+
+        for (int laneIndex = 0; laneIndex < noteSpawner.lanes.Length; laneIndex++)
+        {
+            KeyCode key = noteSpawner.lanes[laneIndex].key;
+
+            if (!Input.GetKeyDown(key) && !simulatedKeyDownsThisFrame.Contains(key))
+            {
+                continue;
+            }
+
+            NoteView note = noteSpawner.PeekJudgeable(laneIndex, songTime);
+
+            // A press with nothing in range does nothing, as before.
+            if (note == null) continue;
+
+            JudgeNote(note, songTime);
+        }
+    }
+
+    // The three-tier grading NoteObject.TryHit() used to do, moved here so the
+    // windows live in one place instead of on every note.
+    private void JudgeNote(NoteView note, float songTime)
+    {
+        Vector3 hitAt = note.transform.position;
+        float delta = Mathf.Abs(songTime - note.Data.hitTime);
+
+        note.MarkHit();
+
+        if (delta <= perfectWindow)
+        {
+            Debug.Log("Perfect");
+            PerfectHit();
+            Instantiate(perfectEffect, hitAt, perfectEffect.transform.rotation);
+        }
+        else if (delta <= goodWindow)
+        {
+            Debug.Log("Good");
+            GoodHit();
+            Instantiate(goodEffect, hitAt, goodEffect.transform.rotation);
+        }
+        else
+        {
+            Debug.Log("Hit");
+            NormalHit();
+            Instantiate(hitEffect, hitAt, hitEffect.transform.rotation);
+        }
     }
 
     public void RegisterNote(KeyCode key, NoteObject note)
@@ -246,6 +369,43 @@ void Update()
     {
         NoteHit(scorePerPerfectNote);
         perfectHits++;
+    }
+
+    // Pausing is safe on the new path because nothing there uses WaitForSeconds
+    // or Time.deltaTime - note positions come from song time, which stops with
+    // the Conductor.
+    public void PauseGame()
+    {
+        Conductor.instance.Pause();
+        Time.timeScale = 0f;
+    }
+
+    public void ResumeGame()
+    {
+        Time.timeScale = 1f;
+        Conductor.instance.Resume();
+    }
+
+    public void RestartSong()
+    {
+        // Restart through StartSong rather than Seek(0), so the run-up is
+        // applied again and the first notes still begin at their markers.
+        noteSpawner.SeekTo(0f);
+        Conductor.instance.StopSong();
+        Conductor.instance.StartSong(noteSpawner.GetRequiredLeadIn());
+
+        currentScore = 0;
+        currentCombo = 0;
+        currentMultiplier = 1;
+        multiplierTracker = 0;
+        normalHits = 0;
+        goodHits = 0;
+        perfectHits = 0;
+        missedHits = 0;
+
+        scoreText.text = "Score: 0";
+        multiText.text = "0";
+        resultsScreen.SetActive(false);
     }
 
     public void NoteMissed()
