@@ -85,7 +85,7 @@ public class NoteObject : MonoBehaviour
 
             if (!Obtained)
             {
-                GameManager.instance.NoteMissed();
+                GameManager.instance.NoteMissed(NoteType.Tap);
                 StartCoroutine(StandAtMiddleThenDisappear());
             }
 

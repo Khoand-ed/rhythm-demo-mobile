@@ -15,10 +15,6 @@ public class LaneConfig
     [Tooltip("Where notes in this lane are judged - normally this lane's button.")]
     public Transform hitPoint;
 
-    [Tooltip("A press resolves a note while |songTime - hitTime| is within this; past it the note is missed. " +
-             "Reproduces the width of the old Activator trigger for this lane.")]
-    public float hitWindow = 0.6f;
-
     public bool IsValid
     {
         get { return spawnPoint != null && hitPoint != null; }

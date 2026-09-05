@@ -12,7 +12,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c014338eed8469146ad80f99bccf7a22, type: 3}
   m_Name: RhythmTutorial
   m_EditorClassIdentifier: Assembly-CSharp::SongChart
+  stageId: 
+  songId: 
+  songName: 
+  author: 
+  cover: {fileID: 0}
+  demoClip: {fileID: 0}
   clip: {fileID: 8300000, guid: e3903f052f6e1c84385cd598b244e788, type: 3}
+  offset: 0
+  difficulty: 1
   bpm: 120
   noteSpeed: 2
   notes:

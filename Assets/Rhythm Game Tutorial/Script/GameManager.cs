@@ -40,6 +40,9 @@ public class GameManager : MonoBehaviour
     public GameObject resultsScreen;
     public TextMeshProUGUI percentHitText, normalsText, goodsText, perfectsText, missesText, rankText, finalScoreText;
 
+    [Tooltip("Optional. Left unassigned, the results screen simply omits these.")]
+    public TextMeshProUGUI maxComboText, fullComboText;
+
     // Where the character stands. A missed note travels here and pauses before disappearing.
     public Transform middleZoneMarker;
 
@@ -49,11 +52,31 @@ public class GameManager : MonoBehaviour
     // two can be compared side by side. Removed once the new path is signed off.
     public bool useLegacyNoteHolders = false;
 
-    // Hoisted off NoteObject: every note carried the same three prefabs and the
-    // same two windows, so they belong in one place now that judging lives here.
+    // Hoisted off NoteObject: every note carried the same three prefabs, so they
+    // belong in one place now that judging lives here.
     public GameObject hitEffect, goodEffect, perfectEffect;
-    public float perfectWindow = 0.05f;
-    public float goodWindow = 0.1f;
+
+    public JudgeSettings judge = new JudgeSettings();
+    public HealthSettings health = new HealthSettings();
+    public FeverSettings fever = new FeverSettings();
+
+    [Tooltip("Points per 100ms of a held note's body. Awards no combo.")]
+    public int scorePerHoldTick = 10;
+
+    public GaugeBar hpBar;
+    public GaugeBar feverBar;
+
+    [Tooltip("Shown when HP runs out. The scene's existing FailedText fits.")]
+    public GameObject failedText;
+
+    public int currentHp;
+    public float currentFever;
+    public bool feverActive;
+    public int maxCombo;
+    public bool fullCombo = true;
+
+    private float feverEndsAtSongTime;
+    private bool runFailed;
 
     private readonly Dictionary<KeyCode, List<NoteObject>> activeNotesByKey = new Dictionary<KeyCode, List<NoteObject>>();
     private readonly Dictionary<KeyCode, float> hitZoneXByKey = new Dictionary<KeyCode, float>();
@@ -125,6 +148,16 @@ public class GameManager : MonoBehaviour
         multiText.text = "0";
         currentMultiplier = 1;
 
+        currentHp = health.maxHp;
+        currentFever = 0f;
+        feverActive = false;
+        fullCombo = true;
+        maxCombo = 0;
+        runFailed = false;
+
+        if (failedText != null) failedText.SetActive(false);
+        PushGauges();
+
         if (useLegacyNoteHolders)
         {
             totalNotes = FindObjectsByType<NoteObject>().Length;
@@ -139,6 +172,8 @@ public class GameManager : MonoBehaviour
             }
 
             totalNotes = noteSpawner != null && noteSpawner.chart != null ? noteSpawner.chart.notes.Count : 0;
+
+            ApplyChartToConductor();
         }
 
 }
@@ -169,6 +204,7 @@ void Update()
         }else
         {
             HandleNoteInput();
+            UpdateFever();
 
             if(SongFinished() && !resultsScreen.activeInHierarchy)
             {
@@ -180,14 +216,42 @@ void Update()
                 missesText.text = "" + missedHits;
 
                 float totalHit = normalHits + goodHits + perfectHits;
-                float percentHit = (totalHit / totalNotes) * 100f;
+                float percentHit = totalNotes > 0f ? (totalHit / totalNotes) * 100f : 0f;
 
                 percentHitText.text = percentHit.ToString("F1") + "%";
 
                 rankText.text = CalculateRank(percentHit);
 
                 finalScoreText.text = currentScore.ToString();
+
+                if (maxComboText != null) maxComboText.text = maxCombo.ToString();
+
+                if (fullComboText != null)
+                {
+                    // A run that ran out of HP is never a full combo, whatever
+                    // the counters say about the notes that did get played.
+                    fullComboText.text = (fullCombo && !runFailed) ? "FULL COMBO" : "";
+                }
             }
+        }
+    }
+
+    // The chart owns its own audio and sync offset, so a different song is a
+    // different chart asset rather than a scene edit.
+    private void ApplyChartToConductor()
+    {
+        if (Conductor.instance == null || noteSpawner == null || noteSpawner.chart == null) return;
+
+        SongChart chart = noteSpawner.chart;
+        Conductor.instance.songOffset = chart.offset;
+
+        if (chart.clip != null && Conductor.instance.theMusic != null)
+        {
+            Conductor.instance.theMusic.clip = chart.clip;
+        }
+        else if (chart.clip == null)
+        {
+            Debug.LogWarning($"{chart.name} has no gameplay clip; falling back to whatever the scene's AudioSource holds.", chart);
         }
     }
 
@@ -195,7 +259,10 @@ void Update()
     // briefly false right after the song starts - only the legacy path can use it.
     private bool SongFinished()
     {
-        return useLegacyNoteHolders ? !theMusic.isPlaying : Conductor.instance.IsFinished;
+        if (runFailed) return true;
+        if (useLegacyNoteHolders) return !theMusic.isPlaying;
+
+        return Conductor.instance != null && Conductor.instance.IsFinished;
     }
 
     private static string CalculateRank(float percentHit)
@@ -283,33 +350,39 @@ void Update()
         }
     }
 
-    // The three-tier grading NoteObject.TryHit() used to do, moved here so the
-    // windows live in one place instead of on every note.
+    // Grading now runs through JudgeSettings, so Tap/Twin and Hold can have
+    // different windows and a press outside the widest one resolves nothing.
     private void JudgeNote(NoteView note, float songTime)
     {
         Vector3 hitAt = note.transform.position;
         float delta = Mathf.Abs(songTime - note.Data.hitTime);
+        Judgement judgement = judge.Grade(note.Data.type, delta);
+
+        // PeekJudgeable already filtered by MaxWindow, so a Miss here means the
+        // press was out of range and should simply not consume the note.
+        if (judgement == Judgement.Miss) return;
 
         note.MarkHit();
 
-        if (delta <= perfectWindow)
+        switch (judgement)
         {
-            Debug.Log("Perfect");
-            PerfectHit();
-            Instantiate(perfectEffect, hitAt, perfectEffect.transform.rotation);
+            case Judgement.Perfect:
+                PerfectHit();
+                Instantiate(perfectEffect, hitAt, perfectEffect.transform.rotation);
+                break;
+
+            case Judgement.Great:
+                GoodHit();
+                Instantiate(goodEffect, hitAt, goodEffect.transform.rotation);
+                break;
+
+            default:
+                NormalHit();
+                Instantiate(hitEffect, hitAt, hitEffect.transform.rotation);
+                break;
         }
-        else if (delta <= goodWindow)
-        {
-            Debug.Log("Good");
-            GoodHit();
-            Instantiate(goodEffect, hitAt, goodEffect.transform.rotation);
-        }
-        else
-        {
-            Debug.Log("Hit");
-            NormalHit();
-            Instantiate(hitEffect, hitAt, hitEffect.transform.rotation);
-        }
+
+        AddFever(fever.GainFor(judgement));
     }
 
     public void RegisterNote(KeyCode key, NoteObject note)
@@ -346,11 +419,33 @@ void Update()
             }
         }
 
-        currentScore += baseScore * currentMultiplier;
+        currentScore += baseScore * currentMultiplier * (feverActive ? fever.feverScoreMultiplier : 1);
         currentCombo++;
+
+        if (currentCombo > maxCombo) maxCombo = currentCombo;
 
         multiText.text = currentCombo.ToString();
         scoreText.text = "Score: " + currentScore;
+    }
+
+    // Awarded per 100ms of a held note's body. Deliberately does not touch
+    // combo or the multiplier - the spec says only the head and tail do.
+    public void HoldTick()
+    {
+        currentScore += scorePerHoldTick * currentMultiplier * (feverActive ? fever.feverScoreMultiplier : 1);
+        scoreText.text = "Score: " + currentScore;
+    }
+
+    // Releasing a hold early kills the rest of the note: the spec drops the
+    // combo and the Full Combo, but charges no HP for it.
+    public void HoldDropped()
+    {
+        currentMultiplier = 1;
+        multiplierTracker = 0;
+        currentCombo = 0;
+        fullCombo = false;
+
+        multiText.text = currentCombo.ToString();
     }
 
     public void NormalHit()
@@ -403,21 +498,134 @@ void Update()
         perfectHits = 0;
         missedHits = 0;
 
+        currentHp = health.maxHp;
+        currentFever = 0f;
+        feverActive = false;
+        fullCombo = true;
+        maxCombo = 0;
+        runFailed = false;
+
+        if (failedText != null) failedText.SetActive(false);
+        PushGauges();
+
         scoreText.text = "Score: 0";
         multiText.text = "0";
         resultsScreen.SetActive(false);
     }
 
-    public void NoteMissed()
+    public void NoteMissed(NoteType type)
     {
-        Debug.Log("Missed Notes");
-
         currentMultiplier = 1;
         multiplierTracker = 0;
         currentCombo = 0;
+        fullCombo = false;
 
         multiText.text = currentCombo.ToString();
 
         missedHits++;
+
+        AddFever(-fever.missLoss);
+        Damage(health.DamageFor(type));
+    }
+
+    public void Damage(int amount)
+    {
+        if (runFailed) return;
+
+        currentHp = Mathf.Max(0, currentHp - amount);
+        PushGauges();
+
+        if (currentHp == 0) FailRun();
+    }
+
+    public void Heal(int amount)
+    {
+        if (runFailed) return;
+
+        currentHp = Mathf.Min(health.maxHp, currentHp + amount);
+        PushGauges();
+    }
+
+    // Out of HP: stop the song and let Update's normal end-of-song branch raise
+    // the results screen, so the summary is assembled in exactly one place.
+    private void FailRun()
+    {
+        runFailed = true;
+
+        if (failedText != null) failedText.SetActive(true);
+
+        if (!useLegacyNoteHolders && Conductor.instance != null)
+        {
+            Conductor.instance.StopSong();
+        }
+        else if (theMusic != null)
+        {
+            theMusic.Stop();
+        }
+    }
+
+    private void AddFever(float amount)
+    {
+        // While fever is burning, its own drain owns the gauge.
+        if (feverActive || Mathf.Approximately(amount, 0f))
+        {
+            PushGauges();
+            return;
+        }
+
+        currentFever = Mathf.Clamp(currentFever + amount, 0f, fever.maxFever);
+
+        if (currentFever >= fever.maxFever && fever.autoActivate) ActivateFever();
+
+        PushGauges();
+    }
+
+    public void ActivateFever()
+    {
+        if (feverActive || currentFever < fever.maxFever) return;
+
+        feverActive = true;
+        feverEndsAtSongTime = SongTimeNow() + fever.feverDuration;
+    }
+
+    // Fever runs on song time rather than Time.time, so pausing and restarting
+    // cannot desync it - the same reason the note path avoids WaitForSeconds.
+    private void UpdateFever()
+    {
+        if (!feverActive)
+        {
+            if (!fever.autoActivate && currentFever >= fever.maxFever
+                && Input.GetKeyDown(fever.manualActivateKey))
+            {
+                ActivateFever();
+            }
+
+            return;
+        }
+
+        float remaining = feverEndsAtSongTime - SongTimeNow();
+
+        if (remaining <= 0f)
+        {
+            feverActive = false;
+            currentFever = 0f;
+        }
+        else
+        {
+            currentFever = fever.maxFever * Mathf.Clamp01(remaining / Mathf.Max(0.0001f, fever.feverDuration));
+        }
+
+        PushGauges();
+    }
+
+    private float SongTimeNow()
+    {
+        return Conductor.instance != null ? Conductor.instance.SongTime : 0f;
+    }
+
+    private void PushGauges()
+    {
+        if (hpBar != null) hpBar.SetValue(currentHp, health.maxHp);
+        if (feverBar != null) feverBar.SetValue(currentFever, fever.maxFever);
     }
 }
