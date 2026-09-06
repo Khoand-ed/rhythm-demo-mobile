@@ -15,8 +15,18 @@ public class Conductor : MonoBehaviour
     // output latency on a given device. Tune by ear.
     public float latencyOffset = 0f;
 
+    // Per-song sync offset, taken from the chart. Device latency is a per-player
+    // calibration; this is a per-chart constant. Both shift judging, so both
+    // have to appear in every time computation - hence TotalOffset below.
+    public float songOffset = 0f;
+
     // Silence before song time 0, giving the first note runway to travel in.
     public float startDelay = 0.5f;
+
+    private float TotalOffset
+    {
+        get { return latencyOffset + songOffset; }
+    }
 
     private double songStartDsp;
     private float pausedSongTime;
@@ -33,7 +43,7 @@ public class Conductor : MonoBehaviour
             if (!IsPlaying) return 0f;
             if (IsPaused) return pausedSongTime;
 
-            return (float)(AudioSettings.dspTime - songStartDsp) - latencyOffset;
+            return (float)(AudioSettings.dspTime - songStartDsp) - TotalOffset;
         }
     }
 
@@ -95,7 +105,7 @@ public class Conductor : MonoBehaviour
         if (!IsPlaying || !IsPaused) return;
 
         // Re-anchor so SongTime picks up exactly where it left off.
-        songStartDsp = AudioSettings.dspTime - latencyOffset - pausedSongTime;
+        songStartDsp = AudioSettings.dspTime - TotalOffset - pausedSongTime;
         theMusic.UnPause();
         IsPaused = false;
     }
@@ -110,7 +120,7 @@ public class Conductor : MonoBehaviour
             theMusic.time = Mathf.Min(songTime, theMusic.clip.length - 0.01f);
         }
 
-        songStartDsp = AudioSettings.dspTime - latencyOffset - songTime;
+        songStartDsp = AudioSettings.dspTime - TotalOffset - songTime;
         pausedSongTime = songTime;
     }
 

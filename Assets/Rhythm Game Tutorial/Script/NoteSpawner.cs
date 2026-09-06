@@ -89,20 +89,22 @@ public class NoteSpawner : MonoBehaviour
 
     private void UpdateActive(float songTime)
     {
+        JudgeSettings judge = GameManager.instance.judge;
+
         for (int laneIndex = 0; laneIndex < activeByLane.Length; laneIndex++)
         {
             List<NoteView> notes = activeByLane[laneIndex];
-            float window = lanes[laneIndex].hitWindow;
 
             for (int i = notes.Count - 1; i >= 0; i--)
             {
                 NoteView note = notes[i];
                 note.UpdatePosition(songTime);
 
-                if (!note.Judged && songTime > note.Data.hitTime + window)
+                // The window is a property of the note type now, not the lane.
+                if (!note.Judged && songTime > note.Data.hitTime + judge.MaxWindow(note.Data.type))
                 {
                     note.MarkMissed();
-                    GameManager.instance.NoteMissed();
+                    GameManager.instance.NoteMissed(note.Data.type);
                 }
 
                 if (note.IsFinished(songTime))
@@ -123,7 +125,7 @@ public class NoteSpawner : MonoBehaviour
         if (activeByLane == null || laneIndex < 0 || laneIndex >= activeByLane.Length) return null;
 
         List<NoteView> notes = activeByLane[laneIndex];
-        float window = lanes[laneIndex].hitWindow;
+        JudgeSettings judge = GameManager.instance.judge;
         NoteView best = null;
 
         for (int i = 0; i < notes.Count; i++)
@@ -131,7 +133,7 @@ public class NoteSpawner : MonoBehaviour
             NoteView note = notes[i];
 
             if (note.Judged) continue;
-            if (Mathf.Abs(songTime - note.Data.hitTime) > window) continue;
+            if (Mathf.Abs(songTime - note.Data.hitTime) > judge.MaxWindow(note.Data.type)) continue;
             if (best == null || note.Data.hitTime < best.Data.hitTime) best = note;
         }
 

@@ -293,7 +293,6 @@ public class NoteSystemSetup
             }
 
             float hitX = button.transform.position.x;
-            float legacyNoteY = notes[0].transform.position.y;
 
             float farthestNoteX = notes[0].transform.position.x;
             foreach (NoteObject note in notes)
@@ -318,7 +317,6 @@ public class NoteSystemSetup
                 spawnPoint = EnsureSpawnPoint($"SpawnPoint ({laneName})", markerParent,
                                               new Vector3(spawnX, button.transform.position.y, 0f)),
                 hitPoint = button.transform,
-                hitWindow = DeriveHitWindow(button, notes[0], legacyNoteY, speed),
             });
         }
 
@@ -353,43 +351,6 @@ public class NoteSystemSetup
         return marker.transform;
     }
 
-    // The old system made a note pressable while its collider overlapped the
-    // Activator trigger, so the equivalent time window is the x half-width of
-    // that overlap divided by the note speed. Measured against the legacy note
-    // height, because that is the behaviour being reproduced.
-    private static float DeriveHitWindow(ButtonController button, NoteObject note, float noteY, float speed)
-    {
-        CircleCollider2D buttonCollider = button.GetComponent<CircleCollider2D>();
-        CircleCollider2D noteCollider = note.GetComponent<CircleCollider2D>();
-
-        if (buttonCollider == null || noteCollider == null || speed <= 0f)
-        {
-            Debug.LogWarning($"{button.name}: could not measure the Activator overlap, defaulting hitWindow to 0.6s.");
-            return 0.6f;
-        }
-
-        float buttonRadius = buttonCollider.radius * MaxScale(button.transform);
-        float noteRadius = noteCollider.radius * MaxScale(note.transform);
-        float reach = buttonRadius + noteRadius;
-
-        Vector2 buttonCenter = (Vector2)button.transform.position + buttonCollider.offset * MaxScale(button.transform);
-        float dy = Mathf.Abs(noteY - buttonCenter.y);
-
-        if (reach <= dy)
-        {
-            Debug.LogWarning($"{button.name}: notes at y={noteY} never overlap this Activator, defaulting hitWindow to 0.6s.");
-            return 0.6f;
-        }
-
-        return Mathf.Sqrt(reach * reach - dy * dy) / speed;
-    }
-
-    private static float MaxScale(Transform transform)
-    {
-        Vector3 scale = transform.lossyScale;
-        return Mathf.Max(Mathf.Abs(scale.x), Mathf.Abs(scale.y));
-    }
-
     // Every note referenced the same three effect prefabs, so they move to the
     // one place that now spawns them.
     private static void CopyEffectPrefabs(GameManager gameManager, BeatScroller[] holders)
@@ -402,8 +363,6 @@ public class NoteSystemSetup
             gameManager.hitEffect = note.hitEffect;
             gameManager.goodEffect = note.goodEffect;
             gameManager.perfectEffect = note.perfectEffect;
-            gameManager.perfectWindow = note.perfectWindow;
-            gameManager.goodWindow = note.goodWindow;
             return;
         }
     }
