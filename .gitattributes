@@ -118,6 +118,8 @@ Packages/packages-lock.json linguist-generated
 *.mpg                   lfs
 *.ogv                   lfs
 *.wmv                   lfs
+*.ogg                   lfs
+
 
 # Images
 *.bmp                   lfs
