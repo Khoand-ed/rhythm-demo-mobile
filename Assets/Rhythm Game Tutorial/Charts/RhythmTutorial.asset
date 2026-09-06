@@ -1,0 +1,58 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c014338eed8469146ad80f99bccf7a22, type: 3}
+  m_Name: RhythmTutorial
+  m_EditorClassIdentifier: Assembly-CSharp::SongChart
+  clip: {fileID: 8300000, guid: e3903f052f6e1c84385cd598b244e788, type: 3}
+  bpm: 120
+  noteSpeed: 2
+  notes:
+  - hitTime: 3.2
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 3.7
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 4.2
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 4.7
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 5.2
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 5.7
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 6.2
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 6.7
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 7.2
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 7.7
+    lane: 0
+    duration: 0
+    type: 0
