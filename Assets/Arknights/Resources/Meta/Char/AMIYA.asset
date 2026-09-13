@@ -1,0 +1,80 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b0b80c519d4a0244aadf0bad59c42eb5, type: 3}
+  m_Name: AMIYA
+  m_EditorClassIdentifier: Arknights::Data.Char.CharMeta
+  chineseName: "\u963F\u7C73\u5A05"
+  englishName: Amiya
+  rarity: 5
+  profession: 6
+  charPosition: 1
+  camp: 4
+  tags: 
+  eliteAttributes:
+  - maxHealth: 1060
+    atk: 264
+    def: 83
+    magicResistance: 0
+    atkSpeed: 1.3
+    respawnTime: 70
+    cost: 18
+    block: 1
+  - maxHealth: 1643
+    atk: 409.19998
+    def: 128.65
+    magicResistance: 0
+    atkSpeed: 1.3
+    respawnTime: 70
+    cost: 18
+    block: 1
+  - maxHealth: 2226
+    atk: 554.39996
+    def: 174.29999
+    magicResistance: 0
+    atkSpeed: 1.3
+    respawnTime: 70
+    cost: 18
+    block: 1
+  levelAttributes:
+  - maxHealth: 24
+    atk: 5.2
+    def: 1.6
+    magicResistance: 0
+    atkSpeed: 0
+    respawnTime: 0
+    cost: 0
+    block: 0
+  - maxHealth: 24
+    atk: 5.2
+    def: 1.6
+    magicResistance: 0
+    atkSpeed: 0
+    respawnTime: 0
+    cost: 0
+    block: 0
+  - maxHealth: 24
+    atk: 5.2
+    def: 1.6
+    magicResistance: 0
+    atkSpeed: 0
+    respawnTime: 0
+    cost: 0
+    block: 0
+  atkRange:
+  - ooo
+  talent:
+  - First Aid Kit
+  feature: Placeholder operator - see SETUP.md.
+  image1: {fileID: 0}
+  image2: {fileID: 0}
+  image3: {fileID: 0}
+  skeleton: {fileID: 0}

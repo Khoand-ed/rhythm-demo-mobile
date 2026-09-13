@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c59fa90f2e268314da2e2c346e9c0066, type: 3}
+  m_Name: 1
+  m_EditorClassIdentifier: Arknights::Data.Item.ItemMeta
+  id: 1
+  name: Orundum
+  icon: {fileID: 21300000, guid: 037cdc9966a62a74a91ef47135ac3a5e, type: 3}
+  rarity: 4
+  type: 0
+  useInfo: Synthetic material. Commonly spent on recruiting operators.
+  description: Synthetic material. Commonly spent on recruiting operators.
+  waysObtain: Certificate Exchange
