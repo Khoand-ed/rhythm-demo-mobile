@@ -1,6 +1,8 @@
 using System.Collections;
 using System.Collections.Generic;
+using Tools;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using TMPro;
 
@@ -164,6 +166,15 @@ public class GameManager : MonoBehaviour
         }
         else
         {
+            // The song select screen leaves its pick here. Taking it before the
+            // checks below means the scene's own chart is only a fallback, so
+            // opening this scene directly in the Editor still plays something.
+            if (SongSession.HasChart && noteSpawner != null)
+            {
+                noteSpawner.chart = SongSession.Chart;
+                SongSession.Clear();
+            }
+
             if (Conductor.instance == null || noteSpawner == null || noteSpawner.chart == null)
             {
                 Debug.LogError("The spawner path needs a Conductor, a NoteSpawner and a chart. " +
@@ -479,6 +490,21 @@ void Update()
     {
         Time.timeScale = 1f;
         Conductor.instance.Resume();
+    }
+
+    // Hooked to the results screen's Back button by Tools/Rhythm/Wire Song Flow.
+    // The front-end lives in another scene, so leaving means loading it again
+    // and telling GameStart to open the song list instead of the login screen.
+    public void ReturnToSongSelect()
+    {
+        // Pausing leaves timeScale at 0, and it would stay there in the next
+        // scene - every tween and animation in the front-end would freeze.
+        Time.timeScale = 1f;
+
+        if (Conductor.instance != null) Conductor.instance.StopSong();
+
+        BootIntent.NextUI = SongSelectUI.UIName;
+        SceneManager.LoadScene(SongSelectUI.SelectScene);
     }
 
     public void RestartSong()

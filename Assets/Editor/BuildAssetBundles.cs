@@ -78,6 +78,39 @@ namespace Arknights.EditorTools {
         }
 
         /// <summary>
+        /// 只复制, 不重新构建 / Copies the bundles across without rebuilding them.
+        ///
+        /// persistentDataPath is AppData/LocalLow/&lt;companyName&gt;/&lt;productName&gt;, so renaming either
+        /// in Player Settings silently orphans an earlier deploy: the bundles are still on disk under
+        /// the old name and ABManager now looks under the new one, and every bundled asset - all of
+        /// the music included - goes missing with only a "未找到路径" warning to show for it. Run this
+        /// after any rename, rather than a full rebuild the project may not be set up for.
+        /// </summary>
+        [MenuItem("Arknights/AssetBundles/Deploy To Persistent Data Path", false, 3)]
+        public static void Deploy() {
+            BuildTarget target = EditorUserBuildSettings.activeBuildTarget;
+            string platformName = GetPlatformBundleName(target);
+            if (platformName == null) {
+                Debug.LogError($"[BuildAssetBundles] ABManager has no bundle path for build target '{target}'. " +
+                               "Switch to Windows, Android or iOS first.");
+                return;
+            }
+
+            if (!UsesPersistentDataPath(target)) {
+                Debug.Log($"[BuildAssetBundles] {target} reads bundles straight out of {OutputFolder}, " +
+                          "so there is nothing to deploy.");
+                return;
+            }
+
+            if (!Directory.Exists(OutputFolder)) {
+                Debug.LogError($"[BuildAssetBundles] {OutputFolder} does not exist - build the bundles first.");
+                return;
+            }
+
+            DeployToPersistentDataPath(platformName);
+        }
+
+        /// <summary>
         /// persistentDataPath 藏在 AppData/LocalLow 下面, 不好找 / That folder is hard to find by hand.
         /// </summary>
         [MenuItem("Arknights/AssetBundles/Reveal Bundle Folder", false, 2)]

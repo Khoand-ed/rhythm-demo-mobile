@@ -11,33 +11,103 @@ self = self
 local clip = Asset.Load("Audio/Music/Home", "m_sys_void_intro")
 local loop_clip = Asset.Load("Audio/Music/Home", "m_sys_void_loop")
 
+--- 视差 / Parallax.
+--- move1 是远景(背景横梁竖柱), 反向小幅漂移; move2 是近景(全部按钮面板), 同向大幅移动
+--- move1 is the far plane - the background beams and struts - and drifts
+--- slightly against the pointer. move2 is the near plane: the menu tiles the
+--- player aims at, plus the clock, the currency row and the news panel. The
+--- two moving opposite ways is what sells the depth.
+--- The top-left icons and the whole player plate stay still on purpose, so the
+--- movement has fixed points to read against.
+--- Which widgets sit under each is set by Arknights/Home/Apply Parallax Groups.
+--- 近景横向幅度受右边距限制 / The near group's horizontal throw is capped by the
+--- layout, not by taste: DepotTile sits about 34 units from the right edge, so
+--- anything past that pushes it off screen at full deflection. The depth comes
+--- from the two planes moving opposite ways - 32 out and 28 back is 60 units of
+--- relative travel, far more than the old version ever managed.
+local MOVE1_X = -28
+local MOVE1_Y = 16
+local MOVE2_X = 32
+local MOVE2_Y = -26
+
+--- 近景铺满屏幕, 倾斜要小 / The near group spans most of the screen, so its tilt
+--- stays small: a few degrees there already swings the outermost tiles a long way.
+local MOVE2_TILT_X = 2.5
+local MOVE2_TILT_Y = -2.5
+
+--- 指针停一秒后归位 / Settle back to centre once the pointer has been still for a
+--- second, so a screen nobody is touching stops holding a tilt. On a phone that
+--- is the moment a finger lifts, where there is no pointer to follow at all.
+local IDLE_SECONDS = 1
+local FOLLOW_SPEED = 6
+
+--- 移动多少才算动过(平方像素) / How far the pointer must travel to count as moving,
+--- squared, so a mouse jittering by a pixel still counts as still.
+local MOVED_THRESHOLD = 4
+
 local target = Vector2.zero
 local current = Vector2.zero
-local CanvasSizeExceptTwo = UIManager:GetCanvasSize() / 2;
+
+local move1Base
+local move2Base
+local lastX = -99999
+local lastY = -99999
+local idle = 0
 
 ---@type Data.Player.PlayerData
 local data;
 
+function init()
+    --- 记住静止位置 / The offsets below are relative to wherever the prefab rests
+    --- these two, so read that once rather than assuming it is zero.
+    move1Base = move1.localPosition
+    move2Base = move2.localPosition
+end
+
 function update()---刷新时间 - 跟随鼠标
     time.text = DateTime.Now:ToString("yyyy/MM/dd/ HH:mm")
-    if screenHasMouse() then
-        target = Input.mousePosition;
-        --- 这里遇到Vector3不能转Vector2的坑 自定义运算符倒是能支持
-        target = (Vector2(target.x, target.y) - CanvasSizeExceptTwo) / CanvasSizeExceptTwo
-    end
-    current = Vector2.Lerp(current, target, 1.5 * Time.deltaTime)
-    local rotationLocalPosition = move1.localPosition
-    rotationLocalPosition.x = current.x * 50
-    rotationLocalPosition.y = current.y * -30
-    move1.localPosition = rotationLocalPosition
 
-    local euler = move2.localRotation.eulerAngles
-    rotationLocalPosition = move2.localPosition
-    euler.y = current.x * -3
-    euler.x = current.y * 4
-    rotationLocalPosition.y = -current.y * 30
-    move2.localPosition = rotationLocalPosition
-    move2.rotation = Quaternion.Euler(euler)
+    local moved = false
+
+    if screenHasMouse() then
+        local pointer = Input.mousePosition
+        local dx = pointer.x - lastX
+        local dy = pointer.y - lastY
+
+        if dx * dx + dy * dy > MOVED_THRESHOLD then
+            lastX = pointer.x
+            lastY = pointer.y
+
+            --- 按屏幕分辨率归一化, 不是画布 / Normalise against the screen, not the
+            --- canvas. The two only agree at the reference resolution; anywhere
+            --- else the pointer never reached the ends of the range, which is
+            --- most of why this effect used to be so hard to notice.
+            target = Vector2(pointer.x / Screen.width * 2 - 1, pointer.y / Screen.height * 2 - 1)
+            moved = true
+        end
+    end
+
+    if moved then
+        idle = 0
+    else
+        idle = idle + Time.deltaTime
+        if idle >= IDLE_SECONDS then
+            target = Vector2.zero
+        end
+    end
+
+    current = Vector2.Lerp(current, target, FOLLOW_SPEED * Time.deltaTime)
+
+    local position = move1.localPosition
+    position.x = move1Base.x + current.x * MOVE1_X
+    position.y = move1Base.y + current.y * MOVE1_Y
+    move1.localPosition = position
+
+    position = move2.localPosition
+    position.x = move2Base.x + current.x * MOVE2_X
+    position.y = move2Base.y + current.y * MOVE2_Y
+    move2.localPosition = position
+    move2.localRotation = Quaternion.Euler(current.y * MOVE2_TILT_X, current.x * MOVE2_TILT_Y, 0)
 end
 
 function show()
@@ -47,7 +117,7 @@ function show()
     end)
     self.canvasGroup.alpha = 0
     self:FadeIn(0.5)
-    
+
     data = PlayerManager:Get()
 end
 

@@ -18,7 +18,7 @@ MonoBehaviour:
   author: hung
   cover: {fileID: 0}
   demoClip: {fileID: 0}
-  clip: {fileID: 0}
+  clip: {fileID: 8300000, guid: e3903f052f6e1c84385cd598b244e788, type: 3}
   offset: 0
   difficulty: 10
   bpm: 125.947
