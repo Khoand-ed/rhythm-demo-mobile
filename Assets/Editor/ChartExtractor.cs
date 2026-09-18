@@ -7,7 +7,7 @@ using UnityEngine;
 // reproduces the old timing exactly.
 public class ChartExtractor
 {
-    private const string ChartPath = "Assets/Rhythm Game Tutorial/Charts/RhythmTutorial.asset";
+    private const string ChartPath = "Assets/Source/Charts/RhythmTutorial.asset";
 
     [MenuItem("Tools/Rhythm/Extract Chart From Open Scene")]
     static void Extract()

@@ -1,4 +1,10 @@
 ﻿<Solution>
-  <Project Path="Assembly-CSharp-Editor.csproj" />
+  <Project Path="spine-unity-editor.csproj" />
+  <Project Path="Arknights.csproj" />
   <Project Path="Assembly-CSharp.csproj" />
+  <Project Path="spine-unity.csproj" />
+  <Project Path="Xlua.Core.csproj" />
+  <Project Path="Assembly-CSharp-Editor.csproj" />
+  <Project Path="DOTween.Modules.csproj" />
+  <Project Path="Xlua.Core.Editor.csproj" />
 </Solution>
