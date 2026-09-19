@@ -6,7 +6,7 @@ using UnityEngine;
 using UnityEngine.UI;
 
 namespace UI.Sub {
-    public class HouseUI : UIBase {
+    public class DepotUI : UIBase {
 
         public Toggle ALL;
         public Toggle JI_CHU;
@@ -34,6 +34,24 @@ namespace UI.Sub {
             });
         }
 
+        /// <summary>
+        /// 只显示有元数据的物品 / Only the stacks that actually have an ItemMeta behind them.
+        ///
+        /// 存档里可能存着还没建元数据的物品ID / A save can hold an item id that has no meta asset yet -
+        /// Asset.Load reports the miss and returns null, and ItemIconComponent.SetMeta would then
+        /// throw on GetRarity(). A missing icon is worth skipping; it is not worth taking the whole
+        /// depot down with it.
+        /// </summary>
+        private static List<ItemStack> Displayable(List<ItemStack> stacks) {
+            List<ItemStack> shown = new List<ItemStack>();
+
+            foreach (ItemStack stack in stacks) {
+                if (stack != null && stack.GetItemMeta() != null) shown.Add(stack);
+            }
+
+            return shown;
+        }
+
         // 筛选物品
         private void ShowItem(params ItemType[] type) {
             List<ItemType> types = new List<ItemType>(type);
@@ -44,7 +62,7 @@ namespace UI.Sub {
 
         public override void UpdateView() {
             data = PlayerManager.Inst().Get();
-            List<ItemStack> dataList = data.GetItems();
+            List<ItemStack> dataList = Displayable(data.GetItems());
             for (int i = 0; i < dataList.Count || i < list.Count; i++) {
                 if (i < dataList.Count) {
                     ItemStack itemStack = dataList[i];

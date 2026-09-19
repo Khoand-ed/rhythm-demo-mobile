@@ -270,7 +270,7 @@ public class SongSelectUI : UIBase
             group.DOFade(0f, 0.2f).OnComplete(() => group.gameObject.SetActive(false));
         }
 
-        // Rows are reused rather than rebuilt, the way HouseUI recycles its item
+        // Rows are reused rather than rebuilt, the way DepotUI recycles its item
         // icons, so switching songs does not churn through GameObjects.
         private void BuildRows(List<SongChart> charts)
         {

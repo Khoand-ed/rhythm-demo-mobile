@@ -77,7 +77,7 @@ namespace UI.Sub {
                     PlayerManager.Inst().Exit();
                     UIManager.Inst().Hide("HomeUI",true);
                     UIManager.Inst().Hide("SettingUI",true);
-                    UIManager.Inst().Hide("HouseUI",true);
+                    UIManager.Inst().Hide("DepotUI",true);
                     UIManager.Inst().Hide("CharUI",true);
                     float v = 0;
                     DOTween.To(() => v,value => v = value,3,2f).OnComplete(() => UIManager.Inst().Show("LoginUI"));

@@ -812,8 +812,11 @@ namespace Arknights.EditorTools {
             GameObject missions = MenuTile(root, "MissionsTile", "MISSIONS", null,
                 new Vector2(194, -325), new Vector2(219, 130), 36, TileLight, TileInk, null, null);
             AccentBar(missions, true);
+            // 制造站不是仓库 / Deliberately unwired. This tile used to open the depot, back when
+            // DepotTile did nothing and something had to reach the item screen; DepotTile opens it
+            // properly now, and a manufacturing station is not a warehouse.
             MenuTile(root, "ManufactureTile", "MANUFACTURE", null,
-                new Vector2(541, -325), new Vector2(255, 130), 28, TileLight, TileInk, ui, "HouseUI");
+                new Vector2(541, -325), new Vector2(255, 130), 28, TileLight, TileInk, null, null);
             MenuTile(root, "DepotTile", "DEPOT", null,
                 new Vector2(848, -349), new Vector2(154, 82), 26, TileLight, TileInk, null, null);
 
