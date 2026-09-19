@@ -1,0 +1,51 @@
+name: project-checks
+
+# Repository integrity checks that need no Unity licence and no secrets, so they
+# run on every pull request including ones from forks. The Unity editor job is a
+# separate workflow and a separate decision: see docs in the repo root.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: project-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Unity repo integrity
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      # lfs: false is deliberate. None of these checks read binary content, and
+      # the repository holds ~31 MB of LFS objects against a 1 GiB/month free
+      # bandwidth quota shared with every human clone. Fetching them on every
+      # push would exhaust that quota in about a month and break `git lfs pull`
+      # for the whole team until it resets.
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # A missing or duplicated .meta breaks asset references silently, and the
+      # symptom appears days later as "Missing (Mono Script)".
+      - name: Unity .meta integrity
+        run: python ci/check_meta.py
+
+      # Same script the pre-commit hook runs, with the structural rules added.
+      - name: Beatmap chart validity
+        run: python ci/check_beatmaps.py --all --strict
+
+      - name: Repo hygiene
+        run: python ci/check_repo_hygiene.py
