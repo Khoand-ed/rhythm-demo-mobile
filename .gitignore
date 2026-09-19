@@ -114,3 +114,13 @@ InitTestScene*.unity*
 # Imported music - reinstall with Arknights/Audio/Set * Music...
 /[Aa]ssets/[Aa]rknights/[Aa]udio/
 /[Aa]ssets/[Aa]rknights/[Aa]udio.meta
+
+# OS junk - Windows thumbnail cache, macOS folder metadata. Regenerated on
+# demand by the OS, changes whenever a folder is browsed, and means nothing
+# to Unity - but Unity will import it as an asset if it has a .meta.
+[Tt]humbs.db
+[Tt]humbs.db.meta
+[Dd]esktop.ini
+[Dd]esktop.ini.meta
+.DS_Store
+.DS_Store.meta
