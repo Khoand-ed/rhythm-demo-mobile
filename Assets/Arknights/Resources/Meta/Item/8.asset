@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c59fa90f2e268314da2e2c346e9c0066, type: 3}
+  m_Name: 8
+  m_EditorClassIdentifier: Arknights::Data.Item.ItemMeta
+  id: 8
+  name: Purchase Certificate
+  icon: {fileID: 21300000, guid: 0788498fa5ad5b849b02d515fa08e8b3, type: 3}
+  rarity: 4
+  type: 0
+  useInfo: A certificate of Rhodes Island's commercial operations, redeemable for
+    supplies.
+  description: Keeping Rhodes Island running takes enormous funding and a tangle
+    of raw materials, so trading through every channel available is simply necessary.
+  waysObtain: Mission Rewards, Stage Drops
