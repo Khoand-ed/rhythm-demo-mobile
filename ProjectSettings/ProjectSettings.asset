@@ -169,8 +169,8 @@ PlayerSettings:
   androidMaxAspectRatio: 2.4
   androidMinAspectRatio: 1
   applicationIdentifier:
-    Standalone: com.ab67.promuse
     Android: com.ab67.promuse
+    Standalone: com.ab67.promuse
   buildNumber:
     Standalone: 0
     VisionOS: 0

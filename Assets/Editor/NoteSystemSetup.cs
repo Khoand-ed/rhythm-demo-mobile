@@ -11,7 +11,13 @@ using UnityEngine;
 public class NoteSystemSetup
 {
     private const string NotePrefabPath = "Assets/Prefabs/Note.prefab";
-    private const string NoteSpritePath = "Assets/Rhythm Game Tutorial/Graphics/NoteCircle.png";
+    private const string NoteSpritePath = "Assets/Source/Graphics/NoteCircle.png";
+    private const string HoldNotePrefabPath = "Assets/Prefabs/HoldNote.prefab";
+    private const string TwinNotePrefabPath = "Assets/Prefabs/TwinNote.prefab";
+    private const string BarSpritePath = "Assets/Source/Graphics/NoteBar.png";
+
+    private static readonly Color HoldColor = new Color(0.55f, 0.9f, 1f, 1f);
+    private static readonly Color TwinColor = new Color(1f, 0.82f, 0.3f, 1f);
 
     [MenuItem("Tools/Rhythm/Set Up Note System")]
     static void SetUp()
@@ -62,9 +68,206 @@ public class NoteSystemSetup
         CopyEffectPrefabs(gameManager, holders);
         EditorUtility.SetDirty(gameManager);
 
+        BuildTypedPools(spawner);
+
         EditorSceneManager.MarkSceneDirty(gameManager.gameObject.scene);
 
         ReportTravelTimes(spawner, speed);
+    }
+
+    // Hold and Twin notes get their own prefabs and pools. Existing prefabs
+    // are left alone, so anything restyled by hand survives a rerun - delete
+    // one to have it rebuilt.
+    [MenuItem("Tools/Rhythm/Build Note Prefabs")]
+    static void BuildNotePrefabs()
+    {
+        NoteSpawner spawner = Object.FindAnyObjectByType<NoteSpawner>(FindObjectsInactive.Include);
+        if (spawner == null)
+        {
+            Debug.LogError("No NoteSpawner in the open scene - open Main.unity, or run Tools/Rhythm/Set Up Note System first.");
+            return;
+        }
+
+        if (BuildTypedPools(spawner))
+        {
+            EditorSceneManager.MarkSceneDirty(spawner.gameObject.scene);
+            Debug.Log($"Hold and Twin pools wired on {spawner.name}. Restyle {HoldNotePrefabPath} and " +
+                      $"{TwinNotePrefabPath} freely - rerunning this will not overwrite them.");
+        }
+    }
+
+    private static bool BuildTypedPools(NoteSpawner spawner)
+    {
+        NoteView tap = AssetDatabase.LoadAssetAtPath<NoteView>(NotePrefabPath);
+        if (tap == null)
+        {
+            Debug.LogError($"{NotePrefabPath} is missing - run Tools/Rhythm/Set Up Note System to build it.");
+            return false;
+        }
+
+        NoteView hold = AssetDatabase.LoadAssetAtPath<NoteView>(HoldNotePrefabPath);
+        if (hold == null) hold = BuildHoldPrefab(tap);
+
+        NoteView twin = AssetDatabase.LoadAssetAtPath<NoteView>(TwinNotePrefabPath);
+        if (twin == null) twin = BuildTwinPrefab(tap);
+
+        if (hold == null || twin == null) return false;
+
+        Undo.RecordObject(spawner, "Build Note Prefabs");
+        spawner.holdPool = EnsureChildPool(spawner, "HoldPool", hold, 4);
+        spawner.twinPool = EnsureChildPool(spawner, "TwinPool", twin, 4);
+        EditorUtility.SetDirty(spawner);
+
+        return true;
+    }
+
+    private static NotePool EnsureChildPool(NoteSpawner spawner, string childName, NoteView prefab, int prewarm)
+    {
+        Transform child = spawner.transform.Find(childName);
+
+        if (child == null)
+        {
+            GameObject created = new GameObject(childName);
+            Undo.RegisterCreatedObjectUndo(created, "Build Note Prefabs");
+            created.transform.SetParent(spawner.transform, false);
+            child = created.transform;
+        }
+
+        NotePool pool = child.GetComponent<NotePool>();
+        if (pool == null)
+        {
+            pool = Undo.AddComponent<NotePool>(child.gameObject);
+            pool.prewarm = prewarm;
+        }
+
+        Undo.RecordObject(pool, "Build Note Prefabs");
+        pool.notePrefab = prefab;
+        EditorUtility.SetDirty(pool);
+
+        return pool;
+    }
+
+    // Head on top, a stretchable bar behind it, and a smaller cap marking the
+    // end. NoteView sizes the bar every frame from the hold's duration.
+    private static NoteView BuildHoldPrefab(NoteView tap)
+    {
+        Sprite circle = EnsureCircleSprite();
+        Sprite bar = EnsureBarSprite();
+        if (circle == null || bar == null) return null;
+
+        SpriteRenderer tapRenderer = tap.GetComponent<SpriteRenderer>();
+        int sortingLayer = tapRenderer != null ? tapRenderer.sortingLayerID : 0;
+        int order = tapRenderer != null ? tapRenderer.sortingOrder : 0;
+
+        GameObject root = new GameObject("HoldNote");
+        root.transform.localScale = tap.transform.localScale;
+
+        AddSprite(root, circle, HoldColor, sortingLayer, order + 1);
+
+        GameObject bodyObject = new GameObject("Body");
+        bodyObject.transform.SetParent(root.transform, false);
+        SpriteRenderer body = AddSprite(bodyObject, bar, new Color(HoldColor.r, HoldColor.g, HoldColor.b, 0.55f),
+                                        sortingLayer, order);
+        body.drawMode = SpriteDrawMode.Sliced;
+        body.size = new Vector2(1f, 0.55f);
+
+        GameObject tailObject = new GameObject("Tail");
+        tailObject.transform.SetParent(root.transform, false);
+        tailObject.transform.localScale = Vector3.one * 0.6f;
+        AddSprite(tailObject, circle, HoldColor, sortingLayer, order + 1);
+
+        NoteView view = root.AddComponent<NoteView>();
+        view.body = body;
+        view.tail = tailObject.transform;
+
+        return SavePrefab(root, HoldNotePrefabPath);
+    }
+
+    // Same shape as a Tap, tinted so a note landing in both lanes at once
+    // reads as "press both" rather than as two unrelated taps.
+    private static NoteView BuildTwinPrefab(NoteView tap)
+    {
+        GameObject root = (GameObject)PrefabUtility.InstantiatePrefab(tap.gameObject);
+        PrefabUtility.UnpackPrefabInstance(root, PrefabUnpackMode.Completely, InteractionMode.AutomatedAction);
+        root.name = "TwinNote";
+
+        SpriteRenderer renderer = root.GetComponent<SpriteRenderer>();
+        if (renderer != null) renderer.color = TwinColor;
+
+        return SavePrefab(root, TwinNotePrefabPath);
+    }
+
+    private static SpriteRenderer AddSprite(GameObject target, Sprite sprite, Color color, int sortingLayer, int order)
+    {
+        SpriteRenderer renderer = target.AddComponent<SpriteRenderer>();
+        renderer.sprite = sprite;
+        renderer.sharedMaterial = AssetDatabase.GetBuiltinExtraResource<Material>("Sprites-Default.mat");
+        renderer.color = color;
+        renderer.sortingLayerID = sortingLayer;
+        renderer.sortingOrder = order;
+        return renderer;
+    }
+
+    private static NoteView SavePrefab(GameObject root, string path)
+    {
+        System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path));
+        GameObject saved = PrefabUtility.SaveAsPrefabAsset(root, path);
+        Object.DestroyImmediate(root);
+
+        return saved != null ? saved.GetComponent<NoteView>() : null;
+    }
+
+    // A plain white rounded bar for the hold body. Full Rect mesh and a border
+    // on the rounded ends, so Sliced draw mode stretches only the middle.
+    private static Sprite EnsureBarSprite()
+    {
+        Sprite existing = AssetDatabase.LoadAssetAtPath<Sprite>(BarSpritePath);
+        if (existing != null) return existing;
+
+        const int width = 128;
+        const int height = 64;
+        float radius = height * 0.5f;
+
+        Texture2D texture = new Texture2D(width, height, TextureFormat.RGBA32, false);
+
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                // Distance to the bar's centre line segment, so the ends are
+                // semicircles and the middle is flat.
+                float cx = Mathf.Clamp(x + 0.5f, radius, width - radius);
+                float distance = Vector2.Distance(new Vector2(x + 0.5f, y + 0.5f), new Vector2(cx, radius));
+                texture.SetPixel(x, y, new Color(1f, 1f, 1f, Mathf.Clamp01(radius - 1f - distance)));
+            }
+        }
+
+        texture.Apply();
+
+        System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(BarSpritePath));
+        System.IO.File.WriteAllBytes(BarSpritePath, texture.EncodeToPNG());
+        Object.DestroyImmediate(texture);
+
+        AssetDatabase.ImportAsset(BarSpritePath, ImportAssetOptions.ForceUpdate);
+
+        TextureImporter importer = AssetImporter.GetAtPath(BarSpritePath) as TextureImporter;
+        if (importer != null)
+        {
+            TextureImporterSettings settings = new TextureImporterSettings();
+            importer.ReadTextureSettings(settings);
+            settings.spriteMeshType = SpriteMeshType.FullRect;
+            importer.SetTextureSettings(settings);
+
+            importer.textureType = TextureImporterType.Sprite;
+            importer.spriteImportMode = SpriteImportMode.Single;
+            importer.spritePixelsPerUnit = height;   // 1 world unit tall
+            importer.spriteBorder = new Vector4(radius, 0f, radius, 0f);
+            importer.alphaIsTransparency = true;
+            importer.mipmapEnabled = false;
+            importer.SaveAndReimport();
+        }
+
+        return AssetDatabase.LoadAssetAtPath<Sprite>(BarSpritePath);
     }
 
     // Spells out what the marker positions mean in seconds, since that is the

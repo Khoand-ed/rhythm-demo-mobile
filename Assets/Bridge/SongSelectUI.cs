@@ -98,7 +98,7 @@ public class SongSelectUI : UIBase
         if (library == null || library.charts.Count == 0)
         {
             Debug.LogError("SongSelectUI has no BeatmapLibrary, or the library is empty. " +
-                           "Run Tools/Rhythm/Wire Song Flow, and Tools/Rhythm/Import Beatmaps " +
+                           "Run Tools/Rhythm/Wire Song Flow, and Beatmap/Import All Beatmaps " +
                            "first if nothing has been imported yet.", this);
             return;
         }

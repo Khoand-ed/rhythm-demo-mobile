@@ -500,7 +500,7 @@ public class SongSelectUISetup
         if (guids.Length == 0)
         {
             Debug.LogWarning("No BeatmapLibrary asset in the project, so the map will be empty. " +
-                             "Run Tools/Rhythm/Import Beatmaps first.");
+                             "Run Beatmap/Import All Beatmaps first.");
             return null;
         }
 

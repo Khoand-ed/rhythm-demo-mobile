@@ -1,0 +1,1331 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c014338eed8469146ad80f99bccf7a22, type: 3}
+  m_Name: easy
+  m_EditorClassIdentifier: Assembly-CSharp::SongChart
+  stageId: stage_AIW
+  songId: song_002
+  songName: All I Wanted
+  author: HungDepZai
+  cover: {fileID: 0}
+  demoClip: {fileID: 0}
+  clip: {fileID: 8300000, guid: 03e906264cfdb7640822725ec104bad9, type: 3}
+  offset: 0
+  difficulty: 4
+  bpm: 143.958
+  beatPhase: 0.201
+  noteSpeed: 2.3992999
+  notes:
+  - hitTime: 53.55
+    lane: 0
+    duration: 0
+    type: 2
+  - hitTime: 54.383
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 55.217
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 55.425
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 55.842
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 56.05
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 56.884
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 57.718
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 58.551
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 58.968
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 59.176
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 59.593
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 59.802
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 60.218
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 61.052
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 61.886
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 62.094
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 62.511
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 62.719
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 63.553
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 64.386
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 64.803
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 65.22
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 65.428
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 65.845
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 66.053
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 66.47
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 66.679
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 67.512
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 67.721
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 68.346
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 68.554
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 68.971
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 69.179
+    lane: 0
+    duration: 0.41699982
+    type: 1
+  - hitTime: 69.804
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 70.221
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 70.638
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 71.055
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 71.68
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 71.888
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 72.514
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 72.722
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 73.139
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 73.556
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 73.764
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 74.181
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 74.389
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 74.806
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 75.014
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 75.431
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 75.64
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 76.056
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 76.473
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 76.89
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 77.307
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 77.723
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 78.349
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 79.391
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 79.807
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 80.016
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 81.058
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 81.475
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 81.683
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 82.1
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 82.725
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 83.142
+    lane: 0
+    duration: 0.41699982
+    type: 1
+  - hitTime: 84.392
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 85.017
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 85.226
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 86.059
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 86.476
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 86.893
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 87.726
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 88.352
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 88.56
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 89.394
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 89.81
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 90.227
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 91.061
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 91.478
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 91.894
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 92.103
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 92.728
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 93.561
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 94.187
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 94.395
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 95.229
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 95.437
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 95.854
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 96.062
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 96.896
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 97.729
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 98.563
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 99.188
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 99.397
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 99.813
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 100.022
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 101.064
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 101.897
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 102.106
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 102.522
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 102.731
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 103.564
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 104.19
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 104.398
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 105.857
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 106.065
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 106.899
+    lane: 0
+    duration: 0
+    type: 2
+  - hitTime: 107.732
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 108.149
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 108.566
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 108.774
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 109.191
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 109.399
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 110.233
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 111.067
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 111.9
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 112.109
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 112.525
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 112.734
+    lane: 1
+    duration: 0.41699982
+    type: 1
+  - hitTime: 113.151
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 113.776
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 114.193
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 114.401
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 115.235
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 115.443
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 115.86
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 116.068
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 116.485
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 116.902
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 117.318
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 117.735
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 118.152
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 118.569
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 118.777
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 119.194
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 119.402
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 119.819
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 120.028
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 120.653
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 120.861
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 121.278
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 121.486
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 121.903
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 122.112
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 122.528
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 122.737
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 123.154
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 123.57
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 123.779
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 124.195
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 124.404
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 124.821
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 125.029
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 125.446
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 125.654
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 126.071
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 126.279
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 126.905
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 127.321
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 127.53
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 128.363
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 128.572
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 128.989
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 129.197
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 129.614
+    lane: 1
+    duration: 0.625
+    type: 1
+  - hitTime: 129.822
+    lane: 0
+    duration: 0.4169922
+    type: 1
+  - hitTime: 130.864
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 131.072
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 131.489
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 131.698
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 132.114
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 132.323
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 132.74
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 132.948
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 133.365
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 133.573
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 133.99
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 134.198
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 134.824
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 135.032
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 135.449
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 135.657
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 136.074
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 136.491
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 136.699
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 137.324
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 137.741
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 138.158
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 138.575
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 138.783
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 139.2
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 139.408
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 139.825
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 140.242
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 140.45
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 140.867
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 141.075
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 141.492
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 141.701
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 142.117
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 142.326
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 142.743
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 143.576
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 143.993
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 144.41
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 144.827
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 145.243
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 145.452
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 146.077
+    lane: 0
+    duration: 0
+    type: 2
+  - hitTime: 146.702
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 146.91
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 147.327
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 147.536
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 147.952
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 148.369
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 148.578
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 148.994
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 149.203
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 149.62
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 149.828
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 150.245
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 150.662
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 151.078
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 151.495
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 151.912
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 152.746
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 152.954
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 153.579
+    lane: 0
+    duration: 0
+    type: 2
+  - hitTime: 154.413
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 154.829
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 155.038
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 155.455
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 155.871
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 156.08
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 156.913
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 157.747
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 158.164
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 158.997
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 159.414
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 159.831
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 160.039
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 161.081
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 162.332
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 166.083
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 166.916
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 167.75
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 168.584
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 168.792
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 169.209
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 169.417
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 170.251
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 171.084
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 171.918
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 172.543
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 172.96
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 173.168
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 173.585
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 174.002
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 174.419
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 175.252
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 175.461
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 175.877
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 176.086
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 176.919
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 177.753
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 178.586
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 178.795
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 179.212
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 179.42
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 179.837
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 180.045
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 181.087
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 181.921
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 182.129
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 182.754
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 183.588
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 184.421
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 185.255
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 185.88
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 186.089
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 186.505
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 186.714
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 187.756
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 188.589
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 189.215
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 189.423
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 190.257
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 190.673
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 191.09
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 191.298
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 191.924
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 192.132
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 192.549
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 192.757
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 193.174
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 193.382
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 196.508
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 197.55
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 197.759
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 198.384
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 198.592
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 199.009
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 200.259
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 200.468
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 201.301
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 201.51
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 202.135
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 202.969
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 203.177
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 203.594
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 203.802
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 204.219
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 205.678
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 205.886
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 206.72
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 206.928
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 207.553
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 210.262
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 211.096
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 213.18
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 213.388
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 217.139
+    lane: 0
+    duration: 0
+    type: 0
+  - hitTime: 220.682
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 223.808
+    lane: 1
+    duration: 0
+    type: 0
+  - hitTime: 224.85
+    lane: 1
+    duration: 0
+    type: 0
