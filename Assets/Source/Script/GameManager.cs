@@ -14,6 +14,10 @@ public class GameManager : MonoBehaviour
 
     public bool startPlaying;
 
+    [Tooltip("Left on, the song starts on the first input. Tools/Rhythm/Set Up Pause And Intro " +
+             "turns it off, so the READY/GO sequence decides when the song starts instead.")]
+    public bool startOnFirstInput = true;
+
     public BeatScroller theBsRight;
 
     public BeatScroller theBsLeft;
@@ -215,23 +219,9 @@ void Update()
     {
         if(!startPlaying)
         {
-            if(Input.anyKeyDown)
+            if(startOnFirstInput && Input.anyKeyDown)
             {
-                startPlaying = true;
-
-                if (useLegacyNoteHolders)
-                {
-                    theBsLeft.hasStarted = true;
-                    theBsRight.hasStarted = true;
-
-                    theMusic.Play();
-                }
-                else if (Conductor.instance != null)
-                {
-                    // The run-up has to cover the longest marker-to-button trip,
-                    // or the earliest notes cannot start at their spawn point.
-                    Conductor.instance.StartSong(noteSpawner != null ? noteSpawner.GetRequiredLeadIn() : 0f);
-                }
+                BeginSong();
             }
         }else
         {
@@ -655,13 +645,48 @@ void Update()
         SceneManager.LoadScene(SongSelectUI.SelectScene);
     }
 
-    public void RestartSong()
+    /// <summary>
+    /// Starts the song. Safe to call twice - the second call does nothing.
+    ///
+    /// Split out of Update so the READY/GO intro can decide the moment instead of
+    /// the first tap. PauseMenu calls this at the end of its sequence; with no
+    /// PauseMenu in the scene, startOnFirstInput keeps the original behaviour.
+    /// </summary>
+    public void BeginSong()
     {
-        // Restart through StartSong rather than Seek(0), so the run-up is
-        // applied again and the first notes still begin at their markers.
+        if (startPlaying) return;
+
+        startPlaying = true;
+
+        if (useLegacyNoteHolders)
+        {
+            theBsLeft.hasStarted = true;
+            theBsRight.hasStarted = true;
+
+            theMusic.Play();
+        }
+        else if (Conductor.instance != null)
+        {
+            // The run-up has to cover the longest marker-to-button trip,
+            // or the earliest notes cannot start at their spawn point.
+            Conductor.instance.StartSong(noteSpawner != null ? noteSpawner.GetRequiredLeadIn() : 0f);
+        }
+    }
+
+    /// <summary>
+    /// Puts the run back to zero without starting it.
+    ///
+    /// Separate from RestartSong because the pause menu's Retry runs the READY/GO
+    /// intro in between - it needs the board cleared first and the song started
+    /// several seconds later.
+    /// </summary>
+    public void ResetRun()
+    {
+        // Back to the start through StopSong rather than Seek(0), so BeginSong
+        // applies the run-up again and the first notes still begin at their markers.
         noteSpawner.SeekTo(0f);
         Conductor.instance.StopSong();
-        Conductor.instance.StartSong(noteSpawner.GetRequiredLeadIn());
+        startPlaying = false;
 
         currentScore = 0;
         currentCombo = 0;
@@ -685,6 +710,13 @@ void Update()
         scoreText.text = "Score: 0";
         multiText.text = "0";
         resultsScreen.SetActive(false);
+    }
+
+    /// <summary>Clears the run and starts it straight away, with no intro in between.</summary>
+    public void RestartSong()
+    {
+        ResetRun();
+        BeginSong();
     }
 
     public void NoteMissed(NoteType type)
