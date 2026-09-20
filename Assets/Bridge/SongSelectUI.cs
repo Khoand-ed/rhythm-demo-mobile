@@ -327,41 +327,24 @@ public class SongSelectUI : UIBase
             }
         }
 
+        /// <summary>
+        /// 选好曲子后去选人 / Hands the chart to the operator picker; gameplay starts from there.
+        ///
+        /// 这里不写 SongSession / Deliberately writes nothing to SongSession and does not load the
+        /// scene. Both moved to CharSelectUI.Play, because the player can still back out of that
+        /// screen - deferring the write is what makes backing out leave nothing behind to clear.
+        ///
+        /// 也不清 selected / And `selected` is deliberately left alone. Clearing it here, the way
+        /// this method used to, would mean backing out of the operator picker drops the player on
+        /// a map with a dead START and forces them to re-pick the difficulty every time. A second
+        /// tap is harmless: CharSelectUI opens opaque and last-sibling over this screen, and its
+        /// own `leaving` latch guards the scene load.
+        /// </summary>
         private void StartSong()
         {
             if (selected == null) return;
 
-            SongSession.Set(selected);
-
-            // Cleared before the fade so a second tap cannot start twice - the
-            // same guard SelectDungeonUI used before instantiating its dungeon.
-            SongChart starting = selected;
-            selected = null;
-            startButton.interactable = false;
-
-            // SoundManager is DontDestroyOnLoad, so the front-end's music would
-            // keep playing underneath the song. HomeUI starts it again when the
-            // player comes back, because its Lua show() is what plays it.
-            SoundManager.Inst().StopMusic();
-
-            // Hidden, not destroyed - the built map is worth keeping, and
-            // HomeUI has to still be underneath for Back to land on.
-            UIManager.Inst().Hide(UIName);
-
-            // The UI camera and canvas are DontDestroyOnLoad, so they survive
-            // into the gameplay scene and would draw the front-end over the
-            // song. Switching the camera off takes the whole front-end out of
-            // the way at once; GameStart switches it back on when the player
-            // returns. Nothing needs destroying for that.
-            Delay.add(() =>
-            {
-                GameObject uiCamera = UIManager.Inst().GetCamera();
-                if (uiCamera != null) uiCamera.SetActive(false);
-
-                SceneManager.LoadScene(GameplayScene);
-            }, 0.6f);
-
-            Debug.Log($"Starting {starting.stageId} ({starting.name}).");
+            CharSelectUI.Show(selected);
         }
     }
 }

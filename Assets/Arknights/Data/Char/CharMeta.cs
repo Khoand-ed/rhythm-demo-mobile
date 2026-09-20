@@ -51,6 +51,24 @@ namespace Data.Char {
         [Header("特性"),SerializeField]
         private string feature;
 
+        // 音游属性 / The rhythm stat block, which is the one the game actually plays with.
+        //
+        // 和上面的塔防属性并存 / It sits alongside eliteAttributes/levelAttributes rather than
+        // replacing them: those still feed CharData.GetAttribute(), CharInfoUI and the Lua roster,
+        // which are tower-defense screens inherited with the front-end. A rhythm run has no use
+        // for ATK, DEF, block or DP cost, so CharSelectUI reads only what is below.
+        [Header("最大生命"),SerializeField]
+        private int maxHp;
+
+        [Header("分数系数"),SerializeField]
+        private float scoreModifier;
+
+        [Header("狂热系数"),SerializeField]
+        private float feverModifier;
+
+        [Header("被动"),SerializeField]
+        private CharPassive passive;
+
         [Header("立绘"),SerializeField]
         private Sprite image1;
         
@@ -77,6 +95,10 @@ namespace Data.Char {
         public List<Vector3> GetAttackRange() => attackRange;
         public string[] GetTalent() => talent;
         public string GetFeature() => feature;
+        public int GetMaxHp() => maxHp;
+        public float GetScoreModifier() => scoreModifier;
+        public float GetFeverModifier() => feverModifier;
+        public CharPassive GetPassive() => passive;
         public Sprite GetImage() => image1;
         public Sprite GetCharImage() => image2;
         public Sprite GetAvatar() => image3;

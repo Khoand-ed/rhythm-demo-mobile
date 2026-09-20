@@ -10,12 +10,12 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: b0b80c519d4a0244aadf0bad59c42eb5, type: 3}
-  m_Name: AMIYA
+  m_Name: ECHO
   m_EditorClassIdentifier: Arknights::Data.Char.CharMeta
-  chineseName: "\u963F\u7C73\u5A05"
-  englishName: Amiya
-  rarity: 5
-  profession: 6
+  chineseName: "\u56DE\u58F0"
+  englishName: Echo
+  rarity: 4
+  profession: 4
   charPosition: 1
   camp: 4
   tags: 
@@ -72,16 +72,16 @@ MonoBehaviour:
   atkRange:
   - ooo
   talent:
-  - Field Medic
+  - Resonance
   feature: Placeholder operator - see SETUP.md.
-  maxHp: 300
-  scoreModifier: 1.2
-  feverModifier: 1.2
+  maxHp: 275
+  scoreModifier: 1.1
+  feverModifier: 1.1
   passive:
-    name: Field Medic
-    description: The first Miss of a run does not break the combo.
-    icon: {fileID: 21300000, guid: a4f12814353a0f945a5141eaa855e835, type: 3}
-  image1: {fileID: 21300000, guid: e348b199fd543994fb121c681a5557fa, type: 3}
-  image2: {fileID: 21300000, guid: e348b199fd543994fb121c681a5557fa, type: 3}
-  image3: {fileID: 21300000, guid: a67b3afe217211644865255408503ab3, type: 3}
+    name: Resonance
+    description: A high combo extends how long Fever lasts.
+    icon: {fileID: 21300000, guid: 26dc2beda2a9f4e468beb5b94630a536, type: 3}
+  image1: {fileID: 21300000, guid: d87178ed7dec0784b80745dcb671d1d8, type: 3}
+  image2: {fileID: 21300000, guid: d87178ed7dec0784b80745dcb671d1d8, type: 3}
+  image3: {fileID: 21300000, guid: 7814dfb26f658f74ba7f05552c2d7b48, type: 3}
   skeleton: {fileID: 0}

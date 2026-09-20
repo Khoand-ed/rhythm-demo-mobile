@@ -10,12 +10,12 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: b0b80c519d4a0244aadf0bad59c42eb5, type: 3}
-  m_Name: AMIYA
+  m_Name: NOVA
   m_EditorClassIdentifier: Arknights::Data.Char.CharMeta
-  chineseName: "\u963F\u7C73\u5A05"
-  englishName: Amiya
-  rarity: 5
-  profession: 6
+  chineseName: "\u65B0\u661F"
+  englishName: Nova
+  rarity: 4
+  profession: 2
   charPosition: 1
   camp: 4
   tags: 
@@ -72,16 +72,16 @@ MonoBehaviour:
   atkRange:
   - ooo
   talent:
-  - Field Medic
+  - Overdrive
   feature: Placeholder operator - see SETUP.md.
-  maxHp: 300
-  scoreModifier: 1.2
-  feverModifier: 1.2
+  maxHp: 275
+  scoreModifier: 1.1
+  feverModifier: 1.1
   passive:
-    name: Field Medic
-    description: The first Miss of a run does not break the combo.
-    icon: {fileID: 21300000, guid: a4f12814353a0f945a5141eaa855e835, type: 3}
-  image1: {fileID: 21300000, guid: e348b199fd543994fb121c681a5557fa, type: 3}
-  image2: {fileID: 21300000, guid: e348b199fd543994fb121c681a5557fa, type: 3}
-  image3: {fileID: 21300000, guid: a67b3afe217211644865255408503ab3, type: 3}
+    name: Overdrive
+    description: A Great has a chance to be counted as a Perfect.
+    icon: {fileID: 21300000, guid: d24cf011d2b297a4f858c9c4e46cbded, type: 3}
+  image1: {fileID: 21300000, guid: b6c819775d75c47488536b228af017b1, type: 3}
+  image2: {fileID: 21300000, guid: b6c819775d75c47488536b228af017b1, type: 3}
+  image3: {fileID: 21300000, guid: 956ebddc1f79b0742a087061abd2fe61, type: 3}
   skeleton: {fileID: 0}
