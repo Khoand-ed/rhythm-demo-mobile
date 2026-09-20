@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using Data.Mission;
 using Tools;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -240,6 +241,12 @@ void Update()
             if(SongFinished() && !resultsScreen.activeInHierarchy)
             {
                 resultsScreen.SetActive(true);
+
+                // 通关才算一次 / A run that ran out of HP is not a clear, so it does not feed the
+                // "clear any song" missions. The activeInHierarchy guard above already makes this
+                // fire once per run rather than once per frame, and Restart turns the screen back
+                // off, which is what lets a second run count again.
+                if (!runFailed) MissionManager.Inst().Notify(MissionGoal.PlaySong);
 
                 normalsText.text = "" + normalHits;
                 goodsText.text = goodHits.ToString();

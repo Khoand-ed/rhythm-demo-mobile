@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Data.Item;
+using Data.Mission;
 using Data.Player;
 using DG.Tweening;
 using Manager;
@@ -195,6 +196,10 @@ namespace UI.Sub {
                     if (buy_amount == 0) return;
                     ui.data.AddItem(data.GetSell().GetId(), data.GetSell().GetAmount() * buy_amount);
                     ui.data.TakeItem(data.GetPrice().GetId(), all_price_amount);
+                    // 一次结账算一次 / One checkout, one tick - not one per unit, so buying 99 of
+                    // something does not clear a "purchase 3 times" mission on its own. TakeItem
+                    // throws when the player cannot afford it, which stops the credit here too.
+                    MissionManager.Inst().Notify(MissionGoal.BuyShopItem);
                     CommonDialogUI.Message(CommonDialogUI.GroundType.WHITE, "Purchased: " + data.GetSell().GetItemMeta().GetName() + " x " + (data.GetSell().GetAmount() * buy_amount)).AddBackListener(Hide);
                     ui.UpdateView();
                 });

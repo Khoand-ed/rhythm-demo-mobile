@@ -33,13 +33,15 @@ MonoBehaviour:
   - id: 0
     amount: 5
   - id: 1
-    amount: 500
+    amount: 600
   - id: 2
-    amount: 1000
+    amount: 3500
   - id: 6
-    amount: 400
+    amount: 379
   - id: 7
     amount: 200
   - id: 8
     amount: 20
+  - id: 12
+    amount: 3
   permissions: []
