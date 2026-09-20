@@ -58,14 +58,23 @@ jobs:
             Library-editmode-
             Library-
 
+      # Pinned to v4.3.2, NOT @v4. Do not "upgrade" this to the floating tag.
+      #
+      # @v4 moved to v4.4.0 on 2026-09-09, a rewrite that shells out to game-ci/cli
+      # instead of doing the work itself, and that rewrite cannot activate a
+      # personal .ulf licence - it dies with
+      #   [Licensing::Client] Error: Code 400 (status: TimeStamp validation failed)
+      # v4.3.2 is the maintainers' backport of the older architecture, published
+      # the same day precisely so this path keeps working. If you see the log line
+      # "Downloading game-ci CLI", the pin has been lost and activation will fail.
+      #
       # unityVersion defaults to `auto`, which reads ProjectSettings/ProjectVersion.txt
-      # - 6000.5.1f1, published as unityci/editor:ubuntu-6000.5.1f1-base-3.
-      # projectPath defaults to the repository root, which is the project here.
+      # - 6000.5.1f1. projectPath defaults to the repository root, correct here.
       #
       # githubToken is omitted on purpose: passing it makes the action create a
       # Check Run, which needs `checks: write` and still fails on forks. Read the
       # results from the artifact instead.
-      - uses: game-ci/unity-test-runner@v4
+      - uses: game-ci/unity-test-runner@v4.3.2
         id: tests
         env:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
