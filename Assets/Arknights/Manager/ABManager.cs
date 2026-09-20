@@ -58,6 +58,30 @@ namespace Manager {
         }
 
         /// <summary>
+        /// 开局先清掉残留的AB包 / Drops any AssetBundle the native side is still holding.
+        ///
+        /// 域重载只清C#不清native / A domain reload - entering Play Mode, or any script recompile -
+        /// resets this manager's dictionary and its <see cref="single"/> field, but AssetBundles
+        /// live on the native side and survive it. The next LoadFromFile then fails with
+        /// "another AssetBundle with the same files is already loaded", returns null, and the
+        /// callers below dereference it. That is the NullReferenceException at LoadAssetBundle,
+        /// and it shows up as the whole front-end failing to boot.
+        ///
+        /// 在这里卸是安全的 / Unloading everything here is safe precisely because it runs the
+        /// moment this manager is constructed, when it knows about nothing: whatever is loaded
+        /// natively is by definition orphaned. Passing false keeps the objects those bundles
+        /// handed out alive, so anything already instantiated is untouched. In a player build
+        /// nothing is loaded at this point and it is a no-op.
+        ///
+        /// 找不回来所以只能卸 / Reusing the orphan instead of unloading it is not an option:
+        /// AssetBundle.name on the manifest bundle is the empty string, so there is nothing to
+        /// match it by.
+        /// </summary>
+        protected override void Initialization() {
+            AssetBundle.UnloadAllAssetBundles(false);
+        }
+
+        /// <summary>
         /// 加载AB包
         /// </summary>
         /// <returns></returns>
@@ -71,6 +95,17 @@ namespace Manager {
                     return null;
                 }
                 single = AssetBundle.LoadFromFile(ABPath + SingleABName);
+
+                //文件在但加载失败, 说明同一个包还被native持有着
+                //The file is there but the load failed, which means another copy of the same
+                //bundle is still held natively. Say so instead of letting the next line throw a
+                //NullReferenceException that explains nothing.
+                if (single == null) {
+                    Debug.LogError($"[ABManager] 无法加载总包 / Could not load the '{SingleABName}' " +
+                                   $"bundle at {ABPath}{SingleABName} even though the file exists. " +
+                                   "Another copy is still loaded natively - see Initialization().");
+                    return null;
+                }
             }
 
             //再判断构建清单是否加载过
