@@ -33,19 +33,31 @@ jobs:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
 
     steps:
-      # lfs: false for the same reason project-checks.yml gives. Every test here
-      # exercises Rhythm.Core - pure timing and scoring math, no texture - while
-      # the free LFS quota is 1 GiB/month against ~30 MB per fetch, about 34 runs,
-      # shared with every human `git lfs pull`. Revisit when a PlayMode test
-      # actually loads a scene.
-      #
-      # The cost: Unity logs an import error for each of the ~173 PNGs, which
-      # arrive as a few lines of pointer text. Noisy, but nothing under test
-      # touches a texture.
+      # Checkout skips LFS, and the next step fetches back only what the editor
+      # actually needs. The free LFS quota is 1 GiB/month shared with every human
+      # clone, and 23 of this repository's 31 MB of LFS is art and audio that no
+      # test reads - 18 MB of it is .wav.
       - uses: actions/checkout@v4
         with:
           lfs: false
           fetch-depth: 1
+
+      # Unity cannot compile at all without the LFS binaries. Assets/Plugins/
+      # DOTween/DOTween.dll and seven other assemblies are LFS objects, and a
+      # pointer file is not a managed assembly: the project dies with
+      #   error CS0234: The type or namespace name 'Core' does not exist in the
+      #   namespace 'DG.Tweening'
+      # and no test ever runs. Compilation is a precondition for the whole suite,
+      # regardless of how little of the project any single test touches.
+      #
+      # An exclude list rather than an include list on purpose: a binary type
+      # added later is then fetched by default instead of silently breaking the
+      # build. Only the known-heavy media is skipped, leaving ~8 MB per run.
+      #
+      # The skipped PNGs still arrive as pointer text, so Unity logs an import
+      # error for each. Noisy, harmless, expected.
+      - name: Fetch the LFS binaries the compiler needs
+        run: git lfs pull --exclude="*.png,*.jpg,*.wav,*.mp3,*.ttf"
 
       # Hashing Assets/** would invalidate this on every commit and is slow over
       # 92 MB of assets, so the key covers only what actually invalidates a
