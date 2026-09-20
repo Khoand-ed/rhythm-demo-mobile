@@ -32,6 +32,10 @@ namespace Data.Player {
                 if (data == null) continue;
                 if (data.GetName() == name && data.GetPassword() == password) {
                     playerData = data;
+                    //Resources 里的资产只是初始值, 存档盖在上面 / The seeded asset is only the
+                    //starting point; a save, once one exists, is authoritative over it.
+                    //No file yet means a first login, and Load leaves the seed alone.
+                    PlayerSave.Load(data);
                     data.ItemSort();
                     break;
                 }
@@ -46,6 +50,16 @@ namespace Data.Player {
             PlayerData playerData = ScriptableObject.CreateInstance<PlayerData>();
             playerData.Initialization(name, password);
             list.Add(playerData);
+        }
+
+        /// <summary>
+        /// 改完物品/理智后存档 / Persists the logged-in player. Call this after any change
+        /// that has to survive a restart - PlayerData is a read-only Resources asset on a
+        /// device, so an unsaved mutation is gone at the next launch.
+        /// </summary>
+        public void Save() {
+            if (playerData == null) return;
+            PlayerSave.Save(playerData);
         }
 
         public void Exit() {

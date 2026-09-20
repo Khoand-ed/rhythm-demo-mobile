@@ -73,6 +73,9 @@ namespace UI.Sub {
                     }
                     GameObject prefab = data.GetDungeonPrefab();
                     playerData.SetReason(playerData.GetReason() - data.GetReason());
+                    // 理智扣完就存 / Sanity is spent here, so it has to be written now - the
+                    // battle scene replaces this one and never comes back through Login.
+                    PlayerManager.Inst().Save();
                     // 防止点击两次
                     data = null;
                     UIManager.Inst().Hide("HomeUI", true);

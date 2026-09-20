@@ -42,6 +42,7 @@ namespace UI.Sub {
 
         public void GiveYs(int size) {
             data.AddItem(0, size);
+            PlayerManager.Inst().Save();
             UpdateView();
         }
 
@@ -195,6 +196,9 @@ namespace UI.Sub {
                     if (buy_amount == 0) return;
                     ui.data.AddItem(data.GetSell().GetId(), data.GetSell().GetAmount() * buy_amount);
                     ui.data.TakeItem(data.GetPrice().GetId(), all_price_amount);
+                    // 买完立刻存档 / Persist before the dialog: the purchase is spent currency,
+                    // and without this it is back in the bag at the next launch.
+                    PlayerManager.Inst().Save();
                     CommonDialogUI.Message(CommonDialogUI.GroundType.WHITE, "Purchased: " + data.GetSell().GetItemMeta().GetName() + " x " + (data.GetSell().GetAmount() * buy_amount)).AddBackListener(Hide);
                     ui.UpdateView();
                 });

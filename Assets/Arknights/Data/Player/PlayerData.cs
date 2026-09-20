@@ -73,6 +73,10 @@ namespace Data.Player {
         public void SetLevel(int value) => level = value;
         public void SetExp(int value) => exp = value;
         public void SetReason(int value) => reason = value;
+        // 读存档时整体替换物品列表 / Replaces the whole list, which is what loading a save
+        // needs: the seeded asset is only the starting point. Never null, so AddItem and
+        // ItemSort stay safe afterwards.
+        public void SetItems(List<ItemStack> value) => items = value ?? new List<ItemStack>();
         public void ResetSquad() => squad = new string[4];
 
         public void Initialization(string name,string password) {
