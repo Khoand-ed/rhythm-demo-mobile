@@ -23,6 +23,21 @@ MonoBehaviour:
     level: 0
     exp: 0
     trust: 0
+  - id: NOVA
+    elite: 0
+    level: 0
+    exp: 0
+    trust: 0
+  - id: ECHO
+    elite: 0
+    level: 0
+    exp: 0
+    trust: 0
+  - id: PULSE
+    elite: 0
+    level: 0
+    exp: 0
+    trust: 0
   squad:
   - 
   - 

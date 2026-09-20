@@ -122,7 +122,10 @@ namespace Arknights.EditorTools {
             BuildShopCatalogue();
             BuildShopUIPrefab();
             BuildCharSprites();
-            BuildCharMeta("AMIYA", "Amiya", "阿米娅", 5, CharProfession.SHU_SHI);
+            // 授予放在 BuildPlayerData 里 / Metas only here. The roster comes from
+            // PlayerData.Initialization, which BuildPlayerData runs further down; granting now
+            // would be thrown away when those two saves are recreated.
+            BuildOperatorMetas();
             BuildCharUIPrefab();
             BuildCharInfoUIPrefab();
             BuildCharPrefab();
@@ -137,6 +140,90 @@ namespace Arknights.EditorTools {
             Debug.Log("[Placeholders] Generated bootstrap assets into " + ResourcesRoot +
                       ". Press Play on Assets/Arknights/Scenes/StartMenu.unity. " +
                       "Log in with Saukiya / 123456.");
+        }
+
+        /// <summary>
+        /// 只生成角色内容 / Rebuilds the four playable operators and nothing else.
+        ///
+        /// 为什么不走完整 Generate / This exists because the full Generate Bootstrap Assets rebuilds
+        /// HomeUI.prefab from scratch, and that prefab carries three OpenUIButton components added
+        /// after the fact by SongSelectUISetup, DepotUISetup and MissionUISetup. A full regenerate
+        /// destroys all three silently, and the symptom - "the home tiles stopped working" - only
+        /// shows up days later. Use this narrow item for day-to-day character work.
+        ///
+        /// 真要跑了完整 Generate 就补这三个 / If a full Generate ever does run, the recovery is to
+        /// re-run Tools/Rhythm/Wire Song Flow, Arknights/Depot/Build Depot UI and
+        /// Arknights/Mission/Build Mission UI.
+        /// </summary>
+        [MenuItem("Arknights/Placeholders/Generate Rhythm Operators", false, 2)]
+        public static void GenerateOperators() {
+            BuildCharSprites();
+            BuildOperatorMetas();
+            GrantOperators();
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+
+            Debug.Log($"[Placeholders] Built {Operators.Length} operators into {MetaCharDir} " +
+                      $"with avatars, portraits and passive icons under {SpriteCharDir}, " +
+                      "and granted them to Saukiya and Test.\n" +
+                      "  HomeUI.prefab was NOT touched, so its three OpenUIButton hooks are intact.");
+        }
+
+        /// <summary>
+        /// 四个干员的元数据 / The four CharMeta assets plus the art each one needs.
+        ///
+        /// 和授予分开 / Kept separate from GrantOperators because the full Generate runs
+        /// BuildPlayerData afterwards, which recreates both saves from PlayerData.Initialization -
+        /// granting before that would simply be overwritten.
+        /// </summary>
+        private static void BuildOperatorMetas() {
+            for (int i = 0; i < Operators.Length; i++) {
+                OperatorSeed seed = Operators[i];
+                Sprite avatar = OperatorAvatar(seed, i);
+                Sprite portrait = OperatorPortrait(seed, i);
+                Sprite icon = PolygonSprite(SpriteCharDir + "/Passive", seed.Id, 96, 3 + i % 5, i * 41f);
+                BuildCharMeta(seed, avatar, portrait, icon);
+            }
+        }
+
+        /// <summary>
+        /// 把干员发给两个存档 / Adds every operator to both committed saves, in place.
+        ///
+        /// 原地打补丁而不是重建 / Patched rather than rebuilt: BuildPlayerData deletes and recreates
+        /// the asset, which would throw away whatever the player has been doing in the Editor.
+        /// GetCharList returns the live list and CharData(string) is public, so no SerializedObject
+        /// gymnastics are needed. The existence check makes re-running this a no-op.
+        /// </summary>
+        private static void GrantOperators() {
+            foreach (string user in new[] { "Saukiya", "Test" }) {
+                string path = UserDataDir + "/" + user + ".asset";
+                PlayerData data = AssetDatabase.LoadAssetAtPath<PlayerData>(path);
+
+                if (data == null) {
+                    Debug.LogWarning($"[Placeholders] No save at {path}; run Generate Bootstrap Assets first.");
+                    continue;
+                }
+
+                List<CharData> roster = data.GetCharList();
+                if (roster == null) {
+                    Debug.LogWarning($"[Placeholders] {user} has no charList to add to; regenerate that save.");
+                    continue;
+                }
+
+                int added = 0;
+                foreach (OperatorSeed seed in Operators) {
+                    if (data.GetCharData(seed.Id) != null) continue;
+                    roster.Add(new CharData(seed.Id));
+                    added++;
+                }
+
+                // SetDirty 单独不写盘 / SetDirty alone does not write the file; the caller's
+                // SaveAssets is what actually persists this.
+                if (added > 0) EditorUtility.SetDirty(data);
+                Debug.Log($"[Placeholders] {user}: {added} operator(s) added, roster now " +
+                          string.Join(", ", roster.ConvertAll(c => c.GetId()).ToArray()));
+            }
         }
 
         [MenuItem("Arknights/Placeholders/Delete Generated Assets", false, 1)]
@@ -795,8 +882,11 @@ namespace Arknights.EditorTools {
             Text maxReason = Label(sanityStrip, "maxReason", "0", 26, Color.white, new Vector2(74, 0));
             ((RectTransform)maxReason.transform).sizeDelta = new Vector2(120, 40);
 
+            // 故意不接 / Deliberately unwired. SquadUI was a tower-defense screen for filling a
+            // four-slot squad, and it never had a prefab, so the tile only ever logged a load
+            // error. Picking an operator now happens inside the song flow, on CharSelectUI.
             MenuTile(root, "SquadTile", "SQUAD", null,
-                new Vector2(245, 51), new Vector2(337, 130), 40, TileLight, TileInk, ui, "SquadUI");
+                new Vector2(245, 51), new Vector2(337, 130), 40, TileLight, TileInk, null, null);
             MenuTile(root, "OperatorsTile", "OPERATORS", "Roster Management",
                 new Vector2(643, 51), new Vector2(417, 130), 40, TileLight, TileInk, ui, "CharUI");
 
@@ -855,6 +945,52 @@ namespace Arknights.EditorTools {
             new Color(0.63f, 0.50f, 0.82f), // 4
             new Color(0.95f, 0.80f, 0.25f), // 5
             new Color(0.96f, 0.55f, 0.20f)  // 6
+        };
+
+        /// <summary>
+        /// 一个可玩干员的全部占位数据 / Everything one playable operator is seeded from.
+        ///
+        /// 音游数值来自 GDD / The rhythm numbers are the GDD's MVP table (1x5*, 2x4*, 1x3*), and the
+        /// passives are its Character-Driven Gameplay examples. The names are invented - the GDD
+        /// only ever says "Nhân vật A/B/C/D" - so change them here and nowhere else.
+        /// </summary>
+        private readonly struct OperatorSeed {
+            public readonly string Id;
+            public readonly string English;
+            public readonly string Chinese;
+            public readonly int Rarity;
+            public readonly CharProfession Profession;
+            public readonly int MaxHp;
+            public readonly float Score;
+            public readonly float Fever;
+            public readonly string PassiveName;
+            public readonly string PassiveText;
+
+            public OperatorSeed(string id, string english, string chinese, int rarity,
+                                CharProfession profession, int maxHp, float score, float fever,
+                                string passiveName, string passiveText) {
+                Id = id; English = english; Chinese = chinese; Rarity = rarity;
+                Profession = profession; MaxHp = maxHp; Score = score; Fever = fever;
+                PassiveName = passiveName; PassiveText = passiveText;
+            }
+        }
+
+        // AMIYA 保持第一个 / AMIYA stays, as the 5-star. Removing it would break
+        // PlayerData.Initialization, both committed saves, and the Lua roster; repurposing it
+        // costs nothing and lands exactly on the GDD's 1/2/1 rarity split.
+        private static readonly OperatorSeed[] Operators = {
+            new OperatorSeed("AMIYA", "Amiya", "阿米娅", 5, CharProfession.SHU_SHI,
+                300, 1.2f, 1.2f, "Field Medic",
+                "The first Miss of a run does not break the combo."),
+            new OperatorSeed("NOVA", "Nova", "新星", 4, CharProfession.JU_JI,
+                275, 1.1f, 1.1f, "Overdrive",
+                "A Great has a chance to be counted as a Perfect."),
+            new OperatorSeed("ECHO", "Echo", "回声", 4, CharProfession.YI_LIAO,
+                275, 1.1f, 1.1f, "Resonance",
+                "A high combo extends how long Fever lasts."),
+            new OperatorSeed("PULSE", "Pulse", "脉冲", 3, CharProfession.XIAN_FENG,
+                250, 1.0f, 1.0f, "Steady Beat",
+                "No special effect. A clean baseline to learn a chart on.")
         };
 
         /// <summary>
@@ -975,23 +1111,86 @@ namespace Arknights.EditorTools {
         private static Sprite PolygonSprite(string dir, string name, int size, int sides, float rotation) {
             Color[] pixels = new Color[size * size];
             float half = size * 0.5f;
-            float radius = half * 0.88f;
-            float offsetAngle = rotation * Mathf.Deg2Rad;
+            StampPolygon(pixels, size, size, new Vector2(half, half), half * 0.88f,
+                sides, rotation, Color.white);
+            return ImportSpriteAt(dir, name, pixels, size, size, Vector4.zero);
+        }
 
-            for (int y = 0; y < size; y++) {
-                for (int x = 0; x < size; x++) {
-                    Vector2 offset = new Vector2(x + 0.5f - half, y + 0.5f - half);
+        /// <summary>
+        /// 把一个正多边形盖到像素数组上 / Stamps a regular n-gon into an existing pixel buffer.
+        ///
+        /// 从 PolygonSprite 里抽出来 / Lifted out of PolygonSprite so the operator avatar and
+        /// portrait can draw the same silhouette over a gradient instead of onto an empty square.
+        /// </summary>
+        private static void StampPolygon(Color[] pixels, int width, int height, Vector2 centre,
+                                         float radius, int sides, float rotation, Color colour) {
+            float offsetAngle = rotation * Mathf.Deg2Rad;
+            // 正n边形: 极角折进一个扇区后, 边到中心的距离是 cos 关系
+            // Regular n-gon: fold the angle into one sector, where the edge sits at
+            // radius * cos(sector/2) / cos(foldedAngle).
+            float sector = Mathf.PI * 2f / sides;
+
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+                    Vector2 offset = new Vector2(x + 0.5f - centre.x, y + 0.5f - centre.y);
                     float angle = Mathf.Atan2(offset.y, offset.x) - offsetAngle;
-                    // 正n边形: 极角折进一个扇区后, 边到中心的距离是 cos 关系
-                    // Regular n-gon: fold the angle into one sector, where the edge sits at
-                    // radius * cos(sector/2) / cos(foldedAngle).
-                    float sector = Mathf.PI * 2f / sides;
                     float folded = Mathf.Repeat(angle, sector) - sector * 0.5f;
                     float edge = radius * Mathf.Cos(sector * 0.5f) / Mathf.Cos(folded);
-                    if (offset.magnitude <= edge) pixels[y * size + x] = Color.white;
+                    if (offset.magnitude <= edge) pixels[y * width + x] = colour;
                 }
             }
-            return ImportSpriteAt(dir, name, pixels, size, size, Vector4.zero);
+        }
+
+        /// <summary>
+        /// 干员头像 / The grid cell icon, written to Sprite/Char/Avatar/{id}.
+        ///
+        /// 不能放进 CardGround / Deliberately its own folder. CharManager's constructor scans
+        /// Sprite/Char/{Camp,CardGround,Elite,Profession,ProfessionSmall,Star} and every Add is
+        /// unguarded, so a file landing in CardGround whose name matches ^\d_.+ would throw on a
+        /// duplicate key before the game even starts. Avatar/Portrait/Passive are not scanned.
+        /// </summary>
+        private static Sprite OperatorAvatar(OperatorSeed seed, int index) {
+            const int size = 192;
+            Color tint = RarityColors[seed.Rarity - 1];
+            Color[] pixels = new Color[size * size];
+
+            for (int y = 0; y < size; y++) {
+                float t = y / (float)(size - 1);
+                Color row = Color.Lerp(tint * 0.25f, tint, t);
+                for (int x = 0; x < size; x++) pixels[y * size + x] = new Color(row.r, row.g, row.b, 1f);
+            }
+
+            // 从五边形起步 / Five sides upward, never three: a triangle silhouette next to the
+            // screen's own PLAY button reads as a second play button.
+            StampPolygon(pixels, size, size, new Vector2(size * 0.5f, size * 0.52f), size * 0.30f,
+                5 + index % 4, index * 29f, new Color(1f, 1f, 1f, 0.92f));
+
+            return ImportSpriteAt(SpriteCharDir + "/Avatar", seed.Id, pixels, size, size, Vector4.zero);
+        }
+
+        /// <summary>
+        /// 干员立绘 / The centre-panel portrait, written to Sprite/Char/Portrait/{id}.
+        ///
+        /// 底部压暗一条 / The darker band across the bottom third is what stops it reading as a
+        /// blown-up icon: it gives the silhouette something to stand on.
+        /// </summary>
+        private static Sprite OperatorPortrait(OperatorSeed seed, int index) {
+            const int width = 512;
+            const int height = 768;
+            Color tint = RarityColors[seed.Rarity - 1];
+            Color[] pixels = new Color[width * height];
+
+            for (int y = 0; y < height; y++) {
+                float t = y / (float)(height - 1);
+                Color row = Color.Lerp(tint * 0.18f, tint * 0.85f, t);
+                if (t < 0.28f) row *= 0.55f;
+                for (int x = 0; x < width; x++) pixels[y * width + x] = new Color(row.r, row.g, row.b, 1f);
+            }
+
+            StampPolygon(pixels, width, height, new Vector2(width * 0.5f, height * 0.58f), width * 0.34f,
+                5 + index % 4, index * 29f, new Color(1f, 1f, 1f, 0.90f));
+
+            return ImportSpriteAt(SpriteCharDir + "/Portrait", seed.Id, pixels, width, height, Vector4.zero);
         }
 
         private static void EliteBadge(string name, int level) {
@@ -1018,16 +1217,24 @@ namespace Arknights.EditorTools {
         /// atkRange 必须非空: OnEnable 会遍历它, 而 CreateInstance 就会触发一次 OnEnable
         /// atkRange must end up non-null - OnEnable walks it, and CreateInstance fires OnEnable.
         /// </summary>
-        private static void BuildCharMeta(string id, string english, string chinese, int rarity,
-                                          CharProfession profession) {
+        /// <summary>
+        /// 一个干员的元数据 / One operator's CharMeta, both stat blocks at once.
+        ///
+        /// 塔防那块必须继续写 / The elite/level attribute block below is not dead weight: it feeds
+        /// CharData.GetAttribute(), which CharInfoUI and the Lua roster both read. Skipping it for
+        /// the rhythm operators would have GetAttribute() index an empty array. The rhythm block is
+        /// what CharSelectUI shows; the tower-defense block is what the inherited screens show.
+        /// </summary>
+        private static void BuildCharMeta(OperatorSeed seed, Sprite avatar, Sprite portrait,
+                                          Sprite passiveIcon) {
             EnsureFolder(MetaCharDir);
             CharMeta meta = ScriptableObject.CreateInstance<CharMeta>();
 
             SerializedObject so = new SerializedObject(meta);
-            so.FindProperty("chineseName").stringValue = chinese;
-            so.FindProperty("englishName").stringValue = english;
-            so.FindProperty("rarity").intValue = rarity;
-            so.FindProperty("profession").enumValueIndex = (int)profession;
+            so.FindProperty("chineseName").stringValue = seed.Chinese;
+            so.FindProperty("englishName").stringValue = seed.English;
+            so.FindProperty("rarity").intValue = seed.Rarity;
+            so.FindProperty("profession").enumValueIndex = (int)seed.Profession;
             so.FindProperty("charPosition").enumValueIndex = (int)CharPosition.YUAN_CHENG;
             so.FindProperty("camp").enumValueIndex = (int)CharCamp.LDD;
             so.FindProperty("feature").stringValue = "Placeholder operator - see SETUP.md.";
@@ -1057,10 +1264,27 @@ namespace Arknights.EditorTools {
             so.FindProperty("tags").arraySize = 0;
             SerializedProperty talent = so.FindProperty("talent");
             talent.arraySize = 1;
-            talent.GetArrayElementAtIndex(0).stringValue = "First Aid Kit";
+            talent.GetArrayElementAtIndex(0).stringValue = seed.PassiveName;
+
+            // 音游数值 / The rhythm block - the one CharSelectUI reads.
+            so.FindProperty("maxHp").intValue = seed.MaxHp;
+            so.FindProperty("scoreModifier").floatValue = seed.Score;
+            so.FindProperty("feverModifier").floatValue = seed.Fever;
+
+            SerializedProperty passive = so.FindProperty("passive");
+            passive.FindPropertyRelative("name").stringValue = seed.PassiveName;
+            passive.FindPropertyRelative("description").stringValue = seed.PassiveText;
+            passive.FindPropertyRelative("icon").objectReferenceValue = passiveIcon;
+
+            // image2 也给图是顺手的好处 / Assigning image2 as well is a free win: the Lua roster in
+            // CharUI draws flat grey today because GetCharImage() returns null for every operator.
+            so.FindProperty("image1").objectReferenceValue = portrait;   // 立绘, centre panel
+            so.FindProperty("image2").objectReferenceValue = portrait;   // 卡贴, CharUI's cards
+            so.FindProperty("image3").objectReferenceValue = avatar;     // 头像, grid cell
+
             so.ApplyModifiedPropertiesWithoutUndo();
 
-            string path = MetaCharDir + "/" + id + ".asset";
+            string path = MetaCharDir + "/" + seed.Id + ".asset";
             AssetDatabase.DeleteAsset(path);
             AssetDatabase.CreateAsset(meta, path);
         }

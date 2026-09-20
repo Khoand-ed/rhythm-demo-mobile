@@ -80,8 +80,15 @@ namespace Data.Player {
             this.password = password;
             reason = GetMaxReason();
             
+            // 四个可玩干员 / The four playable operators, matching the GDD's MVP roster
+            // (1x5*, 2x4*, 1x3*). Their metadata lives under Resources/Meta/Char and is written by
+            // Arknights/Placeholders/Generate Rhythm Operators - keep the two lists in step, or
+            // the character select screen draws a cell with no meta behind it.
             charList = new List<CharData> {
-                new CharData("AMIYA")
+                new CharData("AMIYA"),
+                new CharData("NOVA"),
+                new CharData("ECHO"),
+                new CharData("PULSE")
             };
             ResetSquad();
             items = new List<ItemStack> {
