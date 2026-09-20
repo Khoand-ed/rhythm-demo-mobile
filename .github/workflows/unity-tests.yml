@@ -1,0 +1,104 @@
+name: unity-tests
+
+# Runs the EditMode tests over Rhythm.Core. Needs a Unity licence, so this
+# cannot run for pull requests from forks - GitHub withholds secrets from them.
+# See the `if:` guard on the job.
+#
+# Deliberately a separate workflow from project-checks.yml, which is the split
+# that file already describes: the Python checks need no licence and no secrets,
+# so they run on every PR including forks. This one cannot.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: unity-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  editmode:
+    name: EditMode tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    # The repository is public, so a fork's pull request gets no secrets and
+    # would fail at licence activation. Skip the job rather than leave a red
+    # check that means nothing.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+
+    steps:
+      # Checkout skips LFS, and the next step fetches back only what the editor
+      # actually needs. The free LFS quota is 1 GiB/month shared with every human
+      # clone, and 23 of this repository's 31 MB of LFS is art and audio that no
+      # test reads - 18 MB of it is .wav.
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+          fetch-depth: 1
+
+      # Unity cannot compile at all without the LFS binaries. Assets/Plugins/
+      # DOTween/DOTween.dll and seven other assemblies are LFS objects, and a
+      # pointer file is not a managed assembly: the project dies with
+      #   error CS0234: The type or namespace name 'Core' does not exist in the
+      #   namespace 'DG.Tweening'
+      # and no test ever runs. Compilation is a precondition for the whole suite,
+      # regardless of how little of the project any single test touches.
+      #
+      # An exclude list rather than an include list on purpose: a binary type
+      # added later is then fetched by default instead of silently breaking the
+      # build. Only the known-heavy media is skipped, leaving ~8 MB per run.
+      #
+      # The skipped PNGs still arrive as pointer text, so Unity logs an import
+      # error for each. Noisy, harmless, expected.
+      - name: Fetch the LFS binaries the compiler needs
+        run: git lfs pull --exclude="*.png,*.jpg,*.wav,*.mp3,*.ttf"
+
+      # Hashing Assets/** would invalidate this on every commit and is slow over
+      # 92 MB of assets, so the key covers only what actually invalidates a
+      # Library: the package lock, the editor version, and the asmdefs.
+      - uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-editmode-${{ hashFiles('Packages/packages-lock.json', 'ProjectSettings/ProjectVersion.txt') }}-${{ hashFiles('Assets/**/*.asmdef') }}
+          restore-keys: |
+            Library-editmode-
+            Library-
+
+      # Pinned to v4.3.2, NOT @v4. Do not "upgrade" this to the floating tag.
+      #
+      # @v4 moved to v4.4.0 on 2026-09-09, a rewrite that shells out to game-ci/cli
+      # instead of doing the work itself, and that rewrite cannot activate a
+      # personal .ulf licence - it dies with
+      #   [Licensing::Client] Error: Code 400 (status: TimeStamp validation failed)
+      # v4.3.2 is the maintainers' backport of the older architecture, published
+      # the same day precisely so this path keeps working. If you see the log line
+      # "Downloading game-ci CLI", the pin has been lost and activation will fail.
+      #
+      # unityVersion defaults to `auto`, which reads ProjectSettings/ProjectVersion.txt
+      # - 6000.5.1f1. projectPath defaults to the repository root, correct here.
+      #
+      # githubToken is omitted on purpose: passing it makes the action create a
+      # Check Run, which needs `checks: write` and still fails on forks. Read the
+      # results from the artifact instead.
+      - uses: game-ci/unity-test-runner@v4.3.2
+        id: tests
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          testMode: editmode
+          artifactsPath: editmode-artifacts
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: editmode-test-results
+          path: ${{ steps.tests.outputs.artifactsPath }}
+          retention-days: 14
