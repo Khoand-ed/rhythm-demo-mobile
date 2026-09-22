@@ -24,7 +24,6 @@ public class GameManager : MonoBehaviour
 
     public static GameManager instance;
 
-    public int currentScore;
     public int scorePerNote = 100;
     public int scorePerGoodNote = 125;
     public int scorePerPerfectNote = 150;
@@ -32,17 +31,7 @@ public class GameManager : MonoBehaviour
     public TextMeshProUGUI scoreText;
     public TextMeshProUGUI multiText;
 
-    public int currentMultiplier;
-    public int multiplierTracker;
     public int[] multiplierThresholds;
-
-    public int currentCombo;
-
-    public float totalNotes;
-    public float normalHits;
-    public float goodHits;
-    public float perfectHits;
-    public float missedHits;
 
     public GameObject resultsScreen;
     public TextMeshProUGUI percentHitText, normalsText, goodsText, perfectsText, missesText, rankText, finalScoreText;
@@ -86,14 +75,16 @@ public class GameManager : MonoBehaviour
     [Tooltip("Shown when HP runs out. The scene's existing FailedText fits.")]
     public GameObject failedText;
 
-    public int currentHp;
-    public float currentFever;
-    public bool feverActive;
-    public int maxCombo;
-    public bool fullCombo = true;
+    // Score, combo, the multiplier ladder, HP and the fever gauge, with the rules
+    // that move them. Lives in Rhythm.Core so those rules can be tested without a
+    // scene; what stays here is the tuning above, the labels and the gauges.
+    //
+    // Serialized so a run's counters are still readable in the Inspector while it
+    // plays. Reset() in Start is what keeps a value saved into the scene from
+    // leaking into the next run.
+    public RunState state = new RunState();
 
     private float feverEndsAtSongTime;
-    private bool runFailed;
 
     private readonly Dictionary<KeyCode, List<NoteObject>> activeNotesByKey = new Dictionary<KeyCode, List<NoteObject>>();
     private readonly Dictionary<KeyCode, float> hitZoneXByKey = new Dictionary<KeyCode, float>();
@@ -173,21 +164,16 @@ public class GameManager : MonoBehaviour
     {
         scoreText.text = "Score: 0";
         multiText.text = "0";
-        currentMultiplier = 1;
 
-        currentHp = health.maxHp;
-        currentFever = 0f;
-        feverActive = false;
-        fullCombo = true;
-        maxCombo = 0;
-        runFailed = false;
+        SyncTuning();
+        state.Reset();
 
         if (failedText != null) failedText.SetActive(false);
         PushGauges();
 
         if (useLegacyNoteHolders)
         {
-            totalNotes = FindObjectsByType<NoteObject>().Length;
+            state.totalNotes = FindObjectsByType<NoteObject>().Length;
         }
         else
         {
@@ -207,7 +193,7 @@ public class GameManager : MonoBehaviour
                                "or tick useLegacyNoteHolders to stay on the old system.");
             }
 
-            totalNotes = noteSpawner != null ? CountJudgements(noteSpawner.chart) : 0;
+            state.totalNotes = noteSpawner != null ? CountJudgements(noteSpawner.chart) : 0;
 
             ApplyChartToConductor();
         }
@@ -236,29 +222,26 @@ void Update()
                 // "clear any song" missions. The activeInHierarchy guard above already makes this
                 // fire once per run rather than once per frame, and Restart turns the screen back
                 // off, which is what lets a second run count again.
-                if (!runFailed) MissionManager.Inst().Notify(MissionGoal.PlaySong);
+                if (!state.failed) MissionManager.Inst().Notify(MissionGoal.PlaySong);
 
-                normalsText.text = "" + normalHits;
-                goodsText.text = goodHits.ToString();
-                perfectsText.text = perfectHits.ToString();
-                missesText.text = "" + missedHits;
+                normalsText.text = "" + state.normalHits;
+                goodsText.text = state.goodHits.ToString();
+                perfectsText.text = state.perfectHits.ToString();
+                missesText.text = "" + state.missedHits;
 
-                float totalHit = normalHits + goodHits + perfectHits;
-                float percentHit = totalNotes > 0f ? (totalHit / totalNotes) * 100f : 0f;
+                float percentHit = state.Accuracy;
 
                 percentHitText.text = percentHit.ToString("F1") + "%";
 
                 rankText.text = CalculateRank(percentHit);
 
-                finalScoreText.text = currentScore.ToString();
+                finalScoreText.text = state.score.ToString();
 
-                if (maxComboText != null) maxComboText.text = maxCombo.ToString();
+                if (maxComboText != null) maxComboText.text = state.maxCombo.ToString();
 
                 if (fullComboText != null)
                 {
-                    // A run that ran out of HP is never a full combo, whatever
-                    // the counters say about the notes that did get played.
-                    fullComboText.text = (fullCombo && !runFailed) ? "FULL COMBO" : "";
+                    fullComboText.text = state.IsFullCombo ? "FULL COMBO" : "";
                 }
             }
         }
@@ -305,7 +288,7 @@ void Update()
     // briefly false right after the song starts - only the legacy path can use it.
     private bool SongFinished()
     {
-        if (runFailed) return true;
+        if (state.failed) return true;
         if (useLegacyNoteHolders) return !theMusic.isPlaying;
 
         return Conductor.instance != null && Conductor.instance.IsFinished;
@@ -553,34 +536,20 @@ void Update()
     {
         Debug.Log("Hit On Time");
 
-        if (currentMultiplier - 1 < multiplierThresholds.Length)
-        {
-            multiplierTracker++;
+        state.NoteHit(baseScore);
 
-            if (multiplierThresholds[currentMultiplier - 1] <= multiplierTracker)
-            {
-                multiplierTracker = 0;
-                currentMultiplier++;
-            }
-        }
+        multiText.text = state.combo.ToString();
+        scoreText.text = "Score: " + state.score;
 
-        currentScore += baseScore * currentMultiplier * (feverActive ? fever.feverScoreMultiplier : 1);
-        currentCombo++;
-
-        if (currentCombo > maxCombo) maxCombo = currentCombo;
-
-        multiText.text = currentCombo.ToString();
-        scoreText.text = "Score: " + currentScore;
-
-        if (feedback != null) feedback.OnCombo(currentCombo);
+        if (feedback != null) feedback.OnCombo(state.combo);
     }
 
     // Awarded per 100ms of a held note's body. Deliberately does not touch
     // combo or the multiplier - the spec says only the head and tail do.
     public void HoldTick()
     {
-        currentScore += scorePerHoldTick * currentMultiplier * (feverActive ? fever.feverScoreMultiplier : 1);
-        scoreText.text = "Score: " + currentScore;
+        state.HoldTick(scorePerHoldTick);
+        scoreText.text = "Score: " + state.score;
     }
 
     // Releasing a hold early kills the rest of the note: the spec drops the
@@ -588,31 +557,27 @@ void Update()
     // still counts as a miss on the results screen, or accuracy would ignore it.
     public void HoldDropped()
     {
-        missedHits++;
-        currentMultiplier = 1;
-        multiplierTracker = 0;
-        currentCombo = 0;
-        fullCombo = false;
+        state.HoldDropped();
 
-        multiText.text = currentCombo.ToString();
+        multiText.text = state.combo.ToString();
     }
 
     public void NormalHit()
     {
         NoteHit(scorePerNote);
-        normalHits++;
+        state.normalHits++;
     }
 
     public void GoodHit()
     {
         NoteHit(scorePerGoodNote);
-        goodHits++;
+        state.goodHits++;
     }
 
     public void PerfectHit()
     {
         NoteHit(scorePerPerfectNote);
-        perfectHits++;
+        state.perfectHits++;
     }
 
     // Pausing is safe on the new path because nothing there uses WaitForSeconds
@@ -688,21 +653,8 @@ void Update()
         Conductor.instance.StopSong();
         startPlaying = false;
 
-        currentScore = 0;
-        currentCombo = 0;
-        currentMultiplier = 1;
-        multiplierTracker = 0;
-        normalHits = 0;
-        goodHits = 0;
-        perfectHits = 0;
-        missedHits = 0;
-
-        currentHp = health.maxHp;
-        currentFever = 0f;
-        feverActive = false;
-        fullCombo = true;
-        maxCombo = 0;
-        runFailed = false;
+        SyncTuning();
+        state.Reset();
 
         if (failedText != null) failedText.SetActive(false);
         PushGauges();
@@ -721,36 +673,26 @@ void Update()
 
     public void NoteMissed(NoteType type)
     {
-        currentMultiplier = 1;
-        multiplierTracker = 0;
-        currentCombo = 0;
-        fullCombo = false;
+        bool justFailed = state.NoteMissed(type);
 
-        multiText.text = currentCombo.ToString();
+        multiText.text = state.combo.ToString();
+        PushGauges();
 
-        // A hold missed at its head never gets to its tail either, and both
-        // count towards totalNotes.
-        missedHits += type == NoteType.Hold ? 2 : 1;
-
-        AddFever(-fever.missLoss);
-        Damage(health.DamageFor(type));
+        if (justFailed) FailRun();
     }
 
     public void Damage(int amount)
     {
-        if (runFailed) return;
+        bool justFailed = state.Damage(amount);
 
-        currentHp = Mathf.Max(0, currentHp - amount);
         PushGauges();
 
-        if (currentHp == 0) FailRun();
+        if (justFailed) FailRun();
     }
 
     public void Heal(int amount)
     {
-        if (runFailed) return;
-
-        currentHp = Mathf.Min(health.maxHp, currentHp + amount);
+        state.Heal(amount);
         PushGauges();
     }
 
@@ -758,8 +700,6 @@ void Update()
     // the results screen, so the summary is assembled in exactly one place.
     private void FailRun()
     {
-        runFailed = true;
-
         if (failedText != null) failedText.SetActive(true);
 
         if (!useLegacyNoteHolders && Conductor.instance != null)
@@ -774,25 +714,20 @@ void Update()
 
     private void AddFever(float amount)
     {
-        // While fever is burning, its own drain owns the gauge.
-        if (feverActive || Mathf.Approximately(amount, 0f))
-        {
-            PushGauges();
-            return;
-        }
-
-        currentFever = Mathf.Clamp(currentFever + amount, 0f, fever.maxFever);
-
-        if (currentFever >= fever.maxFever && fever.autoActivate) ActivateFever();
+        if (state.AddFever(amount)) BeginFeverWindow();
 
         PushGauges();
     }
 
     public void ActivateFever()
     {
-        if (feverActive || currentFever < fever.maxFever) return;
+        if (state.ActivateFever()) BeginFeverWindow();
+    }
 
-        feverActive = true;
+    // The deadline is the half RunState cannot own: it needs a clock, and this one
+    // has to be song time.
+    private void BeginFeverWindow()
+    {
         feverEndsAtSongTime = SongTimeNow() + fever.feverDuration;
     }
 
@@ -800,9 +735,9 @@ void Update()
     // cannot desync it - the same reason the note path avoids WaitForSeconds.
     private void UpdateFever()
     {
-        if (!feverActive)
+        if (!state.feverActive)
         {
-            if (!fever.autoActivate && currentFever >= fever.maxFever
+            if (!fever.autoActivate && state.feverGauge >= fever.maxFever
                 && Input.GetKeyDown(fever.manualActivateKey))
             {
                 ActivateFever();
@@ -811,17 +746,7 @@ void Update()
             return;
         }
 
-        float remaining = feverEndsAtSongTime - SongTimeNow();
-
-        if (remaining <= 0f)
-        {
-            feverActive = false;
-            currentFever = 0f;
-        }
-        else
-        {
-            currentFever = fever.maxFever * Mathf.Clamp01(remaining / Mathf.Max(0.0001f, fever.feverDuration));
-        }
+        state.TickFever(feverEndsAtSongTime - SongTimeNow());
 
         PushGauges();
     }
@@ -831,9 +756,22 @@ void Update()
         return Conductor.instance != null ? Conductor.instance.SongTime : 0f;
     }
 
+    // The tuning stays serialized on this component and the state object only
+    // borrows it, so a value edited in the Inspector still reaches the rules.
+    // Re-pointed on every reset rather than once at startup, because resizing an
+    // array in the Inspector hands back a new instance instead of mutating the
+    // old one - the state would otherwise keep grading against the array the
+    // scene had when it loaded.
+    private void SyncTuning()
+    {
+        state.health = health;
+        state.fever = fever;
+        state.multiplierThresholds = multiplierThresholds;
+    }
+
     private void PushGauges()
     {
-        if (hpBar != null) hpBar.SetValue(currentHp, health.maxHp);
-        if (feverBar != null) feverBar.SetValue(currentFever, fever.maxFever);
+        if (hpBar != null) hpBar.SetValue(state.hp, health.maxHp);
+        if (feverBar != null) feverBar.SetValue(state.feverGauge, fever.maxFever);
     }
 }
