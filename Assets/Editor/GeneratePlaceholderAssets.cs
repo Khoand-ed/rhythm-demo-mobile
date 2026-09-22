@@ -247,7 +247,25 @@ namespace Arknights.EditorTools {
             Camera cam = root.AddComponent<Camera>();
             cam.clearFlags = CameraClearFlags.SolidColor;
             cam.backgroundColor = Ink;
-            cam.orthographic = true;
+
+            // 必须是透视投影, 否则倾斜不产生任何透视 / Perspective, not orthographic, and this is
+            // the whole reason HomeUI's parallax can keystone at all. Under an orthographic
+            // projection a RectTransform rotated about X or Y only foreshortens - parallel edges
+            // stay parallel, the far edge never narrows - so the tilt is close to invisible.
+            //
+            // 静止时看不出区别 / At rest nothing changes: a Screen Space - Camera canvas is resized
+            // by Unity to fill the frustum at planeDistance either way, and every UI prefab in
+            // this project sits at z = 0, so nothing gains or loses size from depth. Only rotated
+            // content renders differently.
+            //
+            // 透视强度看视野角和矩形宽度 / Strength depends on the field of view AND on how far
+            // the rotated rect extends from its axis - planeDistance cancels out, but the rect's
+            // own size does not. An edge h canvas-units from the axis shifts by h*sin(θ), against
+            // a viewing distance of (canvasHeight/2)/tan(fov/2). At 45°, HomeUI's move2 group
+            // (1885 x 908) measures a 25.5% near/far size difference under a 9° yaw but only
+            // 11.5% under a 9° pitch, because it is twice as wide as it is tall.
+            cam.orthographic = false;
+            cam.fieldOfView = 45f;
 
             GameObject canvasGo = new GameObject("Canvas", typeof(RectTransform));
             canvasGo.transform.SetParent(root.transform, false);
