@@ -25,21 +25,80 @@ local loop_clip = Asset.Load("Audio/Music/Home", "m_sys_void_loop")
 --- anything past that pushes it off screen at full deflection. The depth comes
 --- from the two planes moving opposite ways - 32 out and 28 back is 60 units of
 --- relative travel, far more than the old version ever managed.
+---
+--- 已知: 20:9 屏幕边缘会露底 / Known limitation, and it predates this effect. move1 is a
+--- fixed 2400x1400 rect while the canvas is 1080*aspect wide, so the slack per side is
+--- (2400 - canvasWidth)/2: 240px at 16:9, 120px at 18:9 and exactly ZERO at 20:9. The
+--- 28 below then walks the backdrop 28px inside the frame on a 20:9 screen and the empty
+--- scene shows at the edge. Left alone on purpose - fixing it means resizing the rect in
+--- HomeUI.prefab, which is a separate change from the parallax.
 local MOVE1_X = -28
 local MOVE1_Y = 16
 local MOVE2_X = 32
 local MOVE2_Y = -26
 
---- 近景铺满屏幕, 倾斜要小 / The near group spans most of the screen, so its tilt
---- stays small: a few degrees there already swings the outermost tiles a long way.
-local MOVE2_TILT_X = 2.5
-local MOVE2_TILT_Y = -2.5
+--- 真正的透视倾斜 / A real perspective tilt, not a squash. The UI camera is a
+--- perspective camera now (Camera.prefab), so rotating this group about X or Y
+--- makes its far edge genuinely narrow: parallel edges converge the way a plane
+--- seen from an angle does. Under the orthographic camera this used to run on,
+--- the same rotation only foreshortened, which is why 2.5 degrees was invisible
+--- and why raising it would only ever have flattened the group.
+---
+--- 符号方向 / The signs put the corner the pointer is over NEAREST to the viewer,
+--- which is what looking at a plane from that corner actually does. Flipping them
+--- leans the plane away instead, and reads as the UI recoiling from the finger.
+--- Verified by projecting the corners through the real camera, not by eye.
+---
+--- 两轴不对称, 是故意的 / The two axes are deliberately NOT equal, for two separate
+--- reasons that happen to point the same way.
+---
+--- 一是几何 / First, geometry. move2 is 1885 wide by 908 tall, and a keystone scales
+--- with the half-extent perpendicular to the rotation axis. Measured near/far edge
+--- difference at the SAME angle: yaw 25.5% against pitch 11.5% at 9 degrees. Turning
+--- about the short axis simply has less to work with.
+---
+--- 二是灵敏度, 这才是主因 / Second, and this is what actually made the vertical feel
+--- heavy: `current` is normalised to the screen, so the pointer crosses the full
+--- height in 540px but needs 960px for the width. Vertical tilt therefore builds
+--- 1.78x faster per pixel of movement. 540/960 = 0.5625 is the ratio that equalises
+--- it, and -3 against 5 sits at 0.6 - close enough that both axes lean at roughly the
+--- same speed as the pointer travels. Keep that ratio if you retune: raising the
+--- vertical toward the horizontal is what made this feel heavy in the first place.
+---
+--- 别用 tan(fov/2)*sin(angle) 估这个数 / Do not estimate the percentage from
+--- tan(fov/2)*sin(angle) - that gives the figure for an edge one canvas half-HEIGHT
+--- out, which is not where move2's side edges are. Measure the rect's own corners.
+---
+--- 当前强度 / Measured at these values: horizontal 13.4%, vertical 3.7% near/far size
+--- difference - a 3.6 to 1 split. Tuned by hand in Play Mode with Arknights/Home/
+--- Parallax Tuner; the earlier 9 degrees read as too strong in practice.
+---
+--- 代价: 16:9 上贴边的 tile 会被切 / The cost, measured and accepted: at 16:9 the yaw
+--- pushes the edge tiles past the screen - DepotTile 47px, OperationTile 45,
+--- HeadhuntTile 41, OperatorsTile 35, AccentBottom 20 - but ONLY at 16:9 and ONLY at
+--- full corner deflection; 18:9 and 20:9 measure zero. The layout has no room to
+--- give: DepotTile sits ~34 units from move2's right edge and MOVE2_X already spends
+--- 32 of it, so the yaw gets about 2px, and each degree costs another ~11.5px. There
+--- is no safe angle here - even 2 degrees clips 24px. Lowering this only trades
+--- effect for clipping; the real fix is moving those tiles inward in HomeUI.prefab,
+--- a separate change. Re-measure these figures if the angles change again.
+local MOVE2_TILT_X = -3
+local MOVE2_TILT_Y = 5
+
+--- 远景不倾斜 / The far plane deliberately does NOT tilt. It carries the translation
+--- parallax and nothing else, so the backdrop stays a flat wall and the keystone is
+--- what separates the near group from it. Tilting it too was tried and reverted.
 
 --- 指针停一秒后归位 / Settle back to centre once the pointer has been still for a
 --- second, so a screen nobody is touching stops holding a tilt. On a phone that
 --- is the moment a finger lifts, where there is no pointer to follow at all.
+---
+--- 跟随速度也影响强度 / FOLLOW_SPEED is part of how strong this reads, not just how
+--- responsive it is: a slower lerp spends less time near full deflection, so the
+--- extremes are grazed rather than held. Halving it from 6 to 3 was tuned by hand
+--- alongside the angles and is why they could stay as high as they are.
 local IDLE_SECONDS = 1
-local FOLLOW_SPEED = 6
+local FOLLOW_SPEED = 3
 
 --- 移动多少才算动过(平方像素) / How far the pointer must travel to count as moving,
 --- squared, so a mouse jittering by a pixel still counts as still.
