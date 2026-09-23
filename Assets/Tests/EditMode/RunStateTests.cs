@@ -330,4 +330,71 @@ public class RunStateTests
         Assert.IsFalse(run.failed);
         Assert.AreEqual(0f, run.missedHits);
     }
+
+    // --- the operator's modifiers ---------------------------------------------
+
+    [Test]
+    public void ScoreModifier_DefaultsToNeutral()
+    {
+        // 没选角色也要能跑 / A run with no operator must score exactly as it did before
+        // operators existed, or opening the gameplay scene from the Editor changes meaning.
+        RunState run = NewRun(4);
+
+        Assert.AreEqual(1f, run.scoreModifier, "a fresh run must not scale score");
+        Assert.AreEqual(1f, run.feverModifier, "a fresh run must not scale fever");
+        Assert.AreEqual(100, run.ScoreFor(100));
+    }
+
+    [Test]
+    public void ScoreModifier_AppliesOverTheComboLadder()
+    {
+        // 倍率叠在阶梯之上, 不是取代它 / The operator widens what the chart already earns.
+        RunState plain = NewRun(2);
+        RunState boosted = NewRun(2);
+        boosted.scoreModifier = 1.2f;
+
+        Hit(plain, 2);
+        Hit(boosted, 2);
+
+        Assert.AreEqual(2, plain.multiplier, "precondition: the ladder climbed");
+        Assert.AreEqual(2, boosted.multiplier, "the modifier must not disturb the ladder");
+        Assert.AreEqual(plain.ScoreFor(100) * 1.2f, boosted.ScoreFor(100), 0.5f);
+    }
+
+    [Test]
+    public void ScoreModifier_RoundsRatherThanTruncates()
+    {
+        // 截断会悄悄吃掉一分 / 10 * 1.2 is 12, and integer truncation would make it 11 for
+        // most awards - a bias that is invisible per note and large over a chart.
+        RunState run = NewRun(4);
+        run.scoreModifier = 1.2f;
+
+        Assert.AreEqual(12, run.ScoreFor(10));
+    }
+
+    [Test]
+    public void FeverModifier_ScalesGainsOnly()
+    {
+        // 加成只作用于涨 / The GDD defines this as how fast the bar builds. Scaling the miss
+        // penalty too would make the fever specialist punished hardest for a miss.
+        RunState plain = NewRun(4);
+        RunState boosted = NewRun(4);
+        boosted.feverModifier = 1.5f;
+
+        plain.AddFever(10f);
+        boosted.AddFever(10f);
+
+        Assert.AreEqual(10f, plain.feverGauge, 0.001f);
+        Assert.AreEqual(15f, boosted.feverGauge, 0.001f, "a gain must scale with the modifier");
+
+        float plainBefore = plain.feverGauge;
+        float boostedBefore = boosted.feverGauge;
+
+        plain.AddFever(-4f);
+        boosted.AddFever(-4f);
+
+        Assert.AreEqual(4f, plainBefore - plain.feverGauge, 0.001f);
+        Assert.AreEqual(4f, boostedBefore - boosted.feverGauge, 0.001f,
+                        "a loss must cost the same whatever the modifier");
+    }
 }

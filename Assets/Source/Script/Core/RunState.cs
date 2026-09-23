@@ -20,6 +20,16 @@ public class RunState
     [System.NonSerialized] public FeverSettings fever;
     [System.NonSerialized] public int[] multiplierThresholds;
 
+    // 角色带来的两个倍率 / The operator's two multipliers, handed over the same way and for
+    // the same reason: CharMeta lives in the Arknights assembly, which Rhythm.Core cannot see
+    // and must not start seeing. The caller reads them off the operator and passes plain
+    // floats, so the rules stay testable without any of the front-end in scope.
+    //
+    // 默认 1 表示没选角色 / Both default to 1, which is exactly "no operator": opening the
+    // gameplay scene straight from the Editor scores the way it always did.
+    [System.NonSerialized] public float scoreModifier = 1f;
+    [System.NonSerialized] public float feverModifier = 1f;
+
     public int score;
     public int combo;
     public int maxCombo;
@@ -90,10 +100,21 @@ public class RunState
         missedHits = 0f;
     }
 
-    /// <summary>Score for one judgement at the current multiplier and fever state.</summary>
+    /// <summary>
+    /// Score for one judgement at the current multiplier and fever state, scaled by the
+    /// operator's score modifier.
+    ///
+    /// 角色倍率放在最后 / The operator's multiplier is applied last, over the combo ladder and
+    /// the fever bonus rather than instead of them, so picking a stronger operator widens the
+    /// gap the chart already earns instead of flattening it. Rounded rather than truncated:
+    /// at 1.2x a 10 point hit should read as 12, and integer truncation would quietly shave
+    /// a point off most awards.
+    /// </summary>
     public int ScoreFor(int baseScore)
     {
-        return baseScore * multiplier * (feverActive && fever != null ? fever.feverScoreMultiplier : 1);
+        int earned = baseScore * multiplier * (feverActive && fever != null ? fever.feverScoreMultiplier : 1);
+
+        return Mathf.RoundToInt(earned * scoreModifier);
     }
 
     public void NoteHit(int baseScore)
@@ -193,6 +214,11 @@ public class RunState
     {
         // While fever is burning, its own drain owns the gauge.
         if (feverActive || fever == null || Mathf.Approximately(amount, 0f)) return false;
+
+        // 只加成涨的那一边 / Gains only. The GDD defines this modifier as how fast the bar
+        // builds, so scaling the miss penalty by it too would punish the operator who is
+        // meant to be better at fever - the higher the modifier, the more a miss would cost.
+        if (amount > 0f) amount *= feverModifier;
 
         feverGauge = Mathf.Clamp(feverGauge + amount, 0f, fever.maxFever);
 

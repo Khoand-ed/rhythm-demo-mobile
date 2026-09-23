@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using Data.Char;
 using Data.Mission;
 using Tools;
 using UnityEngine;
@@ -84,6 +85,13 @@ public class GameManager : MonoBehaviour
     // leaking into the next run.
     public RunState state = new RunState();
 
+    // 开局抓一次, 之后一直用 / Captured once at the top of Start and kept, because
+    // SongSession.Clear() runs a few lines later and a retry goes through SyncTuning again
+    // with nothing left to read. Defaults of 1 mean "no operator", which is what opening
+    // this scene directly in the Editor gets.
+    private float operatorScoreModifier = 1f;
+    private float operatorFeverModifier = 1f;
+
     private float feverEndsAtSongTime;
 
     private readonly Dictionary<KeyCode, List<NoteObject>> activeNotesByKey = new Dictionary<KeyCode, List<NoteObject>>();
@@ -162,6 +170,10 @@ public class GameManager : MonoBehaviour
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
+        // 必须在 SongSession.Clear() 之前 / Before anything else, because the chart handover
+        // below clears SongSession and the operator would go with it.
+        CaptureOperator();
+
         scoreText.text = "Score: 0";
         multiText.text = "0";
 
@@ -767,6 +779,50 @@ void Update()
         state.health = health;
         state.fever = fever;
         state.multiplierThresholds = multiplierThresholds;
+
+        state.scoreModifier = operatorScoreModifier;
+        state.feverModifier = operatorFeverModifier;
+    }
+
+    /// <summary>
+    /// Reads the chosen operator's two rhythm modifiers off its metadata.
+    ///
+    /// 这里是两半相接的地方 / This is where the two halves of the project meet: CharMeta is an
+    /// Arknights type and RunState lives in Rhythm.Core, which cannot reference it. GameManager
+    /// is in the default assembly and can see both, so it reads the values here and hands
+    /// across plain floats.
+    ///
+    /// Guarded throughout - GetCharMeta() reaches Resources and can come back null or throw
+    /// for a save that names an operator whose asset is gone. A missing operator costs the
+    /// player their bonus, which is worth a warning; it must not cost them the run.
+    /// </summary>
+    private void CaptureOperator()
+    {
+        if (!SongSession.HasCharacter) return;
+
+        try
+        {
+            CharMeta meta = SongSession.Character.GetCharMeta();
+            if (meta == null)
+            {
+                Debug.LogWarning("[GameManager] The chosen operator has no metadata; " +
+                                 "playing without its modifiers.");
+                return;
+            }
+
+            // 0 说明这份 meta 是模板升级前生成的 / A zero means the asset predates the rhythm
+            // fields, not that the operator is meant to score nothing. Fall back to neutral.
+            float score = meta.GetScoreModifier();
+            float feverGain = meta.GetFeverModifier();
+
+            operatorScoreModifier = score > 0f ? score : 1f;
+            operatorFeverModifier = feverGain > 0f ? feverGain : 1f;
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogWarning("[GameManager] Could not read the operator's modifiers, " +
+                             "playing without them: " + e.Message);
+        }
     }
 
     private void PushGauges()
