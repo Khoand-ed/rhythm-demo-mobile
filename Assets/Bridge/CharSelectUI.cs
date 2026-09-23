@@ -192,15 +192,21 @@ public class CharSelectUI : UIBase
             feverValue.text = $"x{meta.GetFeverModifier():0.00}";
 
             // 只有一个被动, 没有占位槽 / Exactly one passive and no empty slot: the block is
-            // drawn when there is something in it and hidden when there is not.
-            CharPassive passive = meta.GetPassive();
-            if (passive != null && !passive.IsEmpty())
+            // drawn when there is something in it and hidden when there is not - line 175
+            // already turned it off for this repaint.
+            //
+            // 现在的 null 检查是真的 / The null check means something now. The passive used to
+            // be a [Serializable] class, which Unity always materialises - so it was never
+            // null and an IsEmpty() helper had to stand in for the question. As an asset
+            // reference, unassigned really is null.
+            PassiveSO passive = meta.GetPassive();
+            if (passive != null)
             {
                 skillBlock.SetActive(true);
-                skillIcon.sprite = passive.GetIcon();
+                skillIcon.sprite = passive.icon;
                 skillIcon.color = RarityTint(meta.GetRarity());
-                skillName.text = passive.GetName();
-                skillDescription.text = passive.GetDescription();
+                skillName.text = passive.passiveName;
+                skillDescription.text = passive.description;
             }
         }
         else

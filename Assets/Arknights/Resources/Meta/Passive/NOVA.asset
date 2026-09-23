@@ -1,0 +1,19 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cf11e21db72b16a489ba81422780935e, type: 3}
+  m_Name: NOVA
+  m_EditorClassIdentifier: Rhythm.Core::JudgeUpgradePassive
+  id: NOVA
+  passiveName: Overdrive
+  description: A Great has a chance to be counted as a Perfect.
+  icon: {fileID: 21300000, guid: d24cf011d2b297a4f858c9c4e46cbded, type: 3}
+  chance: 0.25

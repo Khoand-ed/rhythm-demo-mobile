@@ -77,10 +77,7 @@ MonoBehaviour:
   maxHp: 300
   scoreModifier: 1.2
   feverModifier: 1.2
-  passive:
-    name: Field Medic
-    description: The first Miss of a run does not break the combo.
-    icon: {fileID: 21300000, guid: a4f12814353a0f945a5141eaa855e835, type: 3}
+  passive: {fileID: 11400000, guid: ca5a2129060a04d4d92e81b5fc07ddc9, type: 2}
   image1: {fileID: 21300000, guid: e348b199fd543994fb121c681a5557fa, type: 3}
   image2: {fileID: 21300000, guid: e348b199fd543994fb121c681a5557fa, type: 3}
   image3: {fileID: 21300000, guid: a67b3afe217211644865255408503ab3, type: 3}

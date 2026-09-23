@@ -30,6 +30,18 @@ public class RunState
     [System.NonSerialized] public float scoreModifier = 1f;
     [System.NonSerialized] public float feverModifier = 1f;
 
+    // 角色的被动, 可以为空 / The operator's passive, or null for a run without one. Null is a
+    // supported state, not an error: opening the gameplay scene from the Editor has no
+    // operator, and every call site here checks.
+    [System.NonSerialized] public PassiveSO passive;
+
+    // 被动的每局状态 / Scratch space the passive needs but must not keep on itself. A
+    // PassiveSO is a shared asset, so a counter stored there would carry into the next run -
+    // and in the Editor, across leaving Play Mode entirely. What each field means is the
+    // passive's business; RunState only guarantees they are cleared for every run.
+    [System.NonSerialized] public int passiveCharges;
+    [System.NonSerialized] public float passiveTimer;
+
     public int score;
     public int combo;
     public int maxCombo;
@@ -98,6 +110,13 @@ public class RunState
         goodHits = 0f;
         perfectHits = 0f;
         missedHits = 0f;
+
+        passiveCharges = 0;
+        passiveTimer = 0f;
+
+        // 让被动自己填初值 / After the scratch is cleared, so a passive that seeds a charge
+        // count writes into a clean slate rather than onto the last run's leftovers.
+        if (passive != null) passive.BeginRun(this);
     }
 
     /// <summary>
@@ -167,7 +186,11 @@ public class RunState
     /// </summary>
     public bool NoteMissed(NoteType type)
     {
-        BreakCombo();
+        // 被动只挡断连 / A passive can spare the combo, nothing else. The miss is still
+        // counted, still costs HP and still ends the Full Combo - the player did miss, and
+        // hiding that would make the results screen lie.
+        if (passive != null && passive.AbsorbComboBreak(this)) fullCombo = false;
+        else BreakCombo();
 
         // A hold missed at its head never gets to its tail either, and both count
         // towards totalNotes.
@@ -237,6 +260,19 @@ public class RunState
 
         feverActive = true;
         return true;
+    }
+
+    /// <summary>
+    /// Advances anything the passive runs on a timer.
+    ///
+    /// 只在歌曲进行时调用 / Called only while the song is actually playing, with song-time
+    /// delta, so a regen passive cannot tick through the pause menu or the READY/GO run-in.
+    /// </summary>
+    public void TickPassive(float deltaSeconds)
+    {
+        if (passive == null || deltaSeconds <= 0f) return;
+
+        passive.Tick(deltaSeconds, this);
     }
 
     /// <summary>

@@ -97,8 +97,11 @@ public class GameManager : MonoBehaviour
     // this scene directly in the Editor gets.
     private float operatorScoreModifier = 1f;
     private float operatorFeverModifier = 1f;
+    private PassiveSO operatorPassive;
 
     private float feverEndsAtSongTime;
+
+    private float lastPassiveSongTime;
 
     private readonly Dictionary<KeyCode, List<NoteObject>> activeNotesByKey = new Dictionary<KeyCode, List<NoteObject>>();
     private readonly Dictionary<KeyCode, float> hitZoneXByKey = new Dictionary<KeyCode, float>();
@@ -233,6 +236,7 @@ void Update()
         {
             HandleNoteInput();
             UpdateFever();
+            UpdatePassive();
 
             if(SongFinished() && !resultsScreen.activeInHierarchy)
             {
@@ -437,6 +441,12 @@ void Update()
         // PeekJudgeable already filtered by MaxWindow, so a Miss here means the
         // press was out of range and should simply not consume the note.
         if (judgement == Judgement.Miss) return;
+
+        // 被动可以升级判定 / The operator's passive gets to rewrite what landed - deliberately
+        // after the line above, so no passive can turn a press that was out of range into a
+        // hit. Everything downstream (score, fever gain, the popup) reads the rewritten value,
+        // which is the point: a promoted Great must look and pay exactly like a Perfect.
+        if (state.passive != null) judgement = state.passive.Regrade(judgement, state);
 
         if (note.IsHold) note.BeginHold(songTime);
         else note.MarkHit();
@@ -748,7 +758,27 @@ void Update()
     // has to be song time.
     private void BeginFeverWindow()
     {
-        feverEndsAtSongTime = SongTimeNow() + fever.feverDuration;
+        // 开窗时结算一次加成 / The bonus is decided once, as the window opens, rather than
+        // re-read while fever burns. The deadline below is a fixed point in song time; letting
+        // a passive move it mid-fever would make the gauge drain against a target that keeps
+        // shifting.
+        float extra = state.passive != null ? state.passive.ExtraFeverSeconds(state) : 0f;
+
+        feverEndsAtSongTime = SongTimeNow() + fever.feverDuration + extra;
+    }
+
+    // 用歌曲时间的增量 / Song-time delta, not Time.deltaTime. A passive on a timer has to
+    // count the same clock the chart does, or it drifts - and it must not tick at all while
+    // the song is paused or still in the READY/GO run-in, which song time gives for free.
+    private void UpdatePassive()
+    {
+        float now = SongTimeNow();
+        float delta = now - lastPassiveSongTime;
+        lastPassiveSongTime = now;
+
+        // 负数说明刚 seek 过 / A negative delta means the song was just sought backwards, as a
+        // retry does. Skip that frame rather than paying out or rewinding a timer.
+        if (delta > 0f) state.TickPassive(delta);
     }
 
     // Fever runs on song time rather than Time.time, so pausing and restarting
@@ -811,6 +841,11 @@ void Update()
 
         state.scoreModifier = operatorScoreModifier;
         state.feverModifier = operatorFeverModifier;
+        state.passive = operatorPassive;
+
+        // 重置增量锚点 / Re-anchored here because SyncTuning runs on every reset, and a retry
+        // would otherwise hand the passive the whole of the previous run as one delta.
+        lastPassiveSongTime = 0f;
     }
 
     /// <summary>
@@ -846,6 +881,7 @@ void Update()
 
             operatorScoreModifier = score > 0f ? score : 1f;
             operatorFeverModifier = feverGain > 0f ? feverGain : 1f;
+            operatorPassive = meta.GetPassive();
         }
         catch (System.Exception e)
         {
