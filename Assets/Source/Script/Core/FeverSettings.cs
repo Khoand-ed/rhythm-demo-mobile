@@ -2,8 +2,10 @@ using UnityEngine;
 
 // Fever is not defined in the design doc, so every rule here is a dial rather
 // than a hardcoded choice. The defaults are playable, not authoritative.
-[System.Serializable]
-public class FeverSettings
+// 做成资产 / An asset, for the same reason as HealthSettings: tuning that lives in a scene
+// cannot be diffed, shared or swapped per difficulty.
+[CreateAssetMenu(menuName = "Rhythm/Fever Settings", fileName = "FeverSettings")]
+public class FeverSettings : ScriptableObject
 {
     public float maxFever = 100f;
 

@@ -20,6 +20,37 @@ public class RunState
     [System.NonSerialized] public FeverSettings fever;
     [System.NonSerialized] public int[] multiplierThresholds;
 
+    // 角色带来的两个倍率 / The operator's two multipliers, handed over the same way and for
+    // the same reason: CharMeta lives in the Arknights assembly, which Rhythm.Core cannot see
+    // and must not start seeing. The caller reads them off the operator and passes plain
+    // floats, so the rules stay testable without any of the front-end in scope.
+    //
+    // 默认 1 表示没选角色 / Both default to 1, which is exactly "no operator": opening the
+    // gameplay scene straight from the Editor scores the way it always did.
+    [System.NonSerialized] public float scoreModifier = 1f;
+    [System.NonSerialized] public float feverModifier = 1f;
+
+    // 角色的血量上限, 0 表示没有角色 / The operator's HP pool. Zero means no operator, or a
+    // CharMeta generated before the rhythm fields existed, and both fall back to the
+    // HealthSettings asset - see MaxHp.
+    //
+    // 覆盖而不是相加 / Replaces rather than adds to the tuning value, because the data is an
+    // absolute (300, 275, 250) rather than a bonus. That does shift balance: the damage
+    // numbers in HealthSettings were tuned against 100.
+    [System.NonSerialized] public int operatorMaxHp;
+
+    // 角色的被动, 可以为空 / The operator's passive, or null for a run without one. Null is a
+    // supported state, not an error: opening the gameplay scene from the Editor has no
+    // operator, and every call site here checks.
+    [System.NonSerialized] public PassiveSO passive;
+
+    // 被动的每局状态 / Scratch space the passive needs but must not keep on itself. A
+    // PassiveSO is a shared asset, so a counter stored there would carry into the next run -
+    // and in the Editor, across leaving Play Mode entirely. What each field means is the
+    // passive's business; RunState only guarantees they are cleared for every run.
+    [System.NonSerialized] public int passiveCharges;
+    [System.NonSerialized] public float passiveTimer;
+
     public int score;
     public int combo;
     public int maxCombo;
@@ -41,6 +72,24 @@ public class RunState
     public float goodHits;
     public float perfectHits;
     public float missedHits;
+
+    /// <summary>
+    /// 这一局的血量上限 / The HP ceiling for this run: the operator's if there is one, the
+    /// tuning asset's otherwise.
+    ///
+    /// 一个来源, 所有地方都读它 / Deliberately one property rather than the three separate
+    /// reads this used to be. Reset, Heal and the HP bar must agree on the ceiling, and they
+    /// only stay agreed if there is a single place that decides it.
+    /// </summary>
+    public int MaxHp
+    {
+        get
+        {
+            if (operatorMaxHp > 0) return operatorMaxHp;
+
+            return health != null ? health.maxHp : 0;
+        }
+    }
 
     /// <summary>
     /// Percentage of judgements landed. Hits over judgements rather than over
@@ -77,7 +126,7 @@ public class RunState
         multiplier = 1;
         multiplierTracker = 0;
 
-        hp = health != null ? health.maxHp : 0;
+        hp = MaxHp;
         feverGauge = 0f;
         feverActive = false;
 
@@ -88,12 +137,30 @@ public class RunState
         goodHits = 0f;
         perfectHits = 0f;
         missedHits = 0f;
+
+        passiveCharges = 0;
+        passiveTimer = 0f;
+
+        // 让被动自己填初值 / After the scratch is cleared, so a passive that seeds a charge
+        // count writes into a clean slate rather than onto the last run's leftovers.
+        if (passive != null) passive.BeginRun(this);
     }
 
-    /// <summary>Score for one judgement at the current multiplier and fever state.</summary>
+    /// <summary>
+    /// Score for one judgement at the current multiplier and fever state, scaled by the
+    /// operator's score modifier.
+    ///
+    /// 角色倍率放在最后 / The operator's multiplier is applied last, over the combo ladder and
+    /// the fever bonus rather than instead of them, so picking a stronger operator widens the
+    /// gap the chart already earns instead of flattening it. Rounded rather than truncated:
+    /// at 1.2x a 10 point hit should read as 12, and integer truncation would quietly shave
+    /// a point off most awards.
+    /// </summary>
     public int ScoreFor(int baseScore)
     {
-        return baseScore * multiplier * (feverActive && fever != null ? fever.feverScoreMultiplier : 1);
+        int earned = baseScore * multiplier * (feverActive && fever != null ? fever.feverScoreMultiplier : 1);
+
+        return Mathf.RoundToInt(earned * scoreModifier);
     }
 
     public void NoteHit(int baseScore)
@@ -146,7 +213,11 @@ public class RunState
     /// </summary>
     public bool NoteMissed(NoteType type)
     {
-        BreakCombo();
+        // 被动只挡断连 / A passive can spare the combo, nothing else. The miss is still
+        // counted, still costs HP and still ends the Full Combo - the player did miss, and
+        // hiding that would make the results screen lie.
+        if (passive != null && passive.AbsorbComboBreak(this)) fullCombo = false;
+        else BreakCombo();
 
         // A hold missed at its head never gets to its tail either, and both count
         // towards totalNotes.
@@ -182,7 +253,7 @@ public class RunState
     {
         if (failed) return;
 
-        hp = Mathf.Min(health != null ? health.maxHp : hp, hp + amount);
+        hp = Mathf.Min(MaxHp, hp + amount);
     }
 
     /// <summary>
@@ -193,6 +264,11 @@ public class RunState
     {
         // While fever is burning, its own drain owns the gauge.
         if (feverActive || fever == null || Mathf.Approximately(amount, 0f)) return false;
+
+        // 只加成涨的那一边 / Gains only. The GDD defines this modifier as how fast the bar
+        // builds, so scaling the miss penalty by it too would punish the operator who is
+        // meant to be better at fever - the higher the modifier, the more a miss would cost.
+        if (amount > 0f) amount *= feverModifier;
 
         feverGauge = Mathf.Clamp(feverGauge + amount, 0f, fever.maxFever);
 
@@ -211,6 +287,19 @@ public class RunState
 
         feverActive = true;
         return true;
+    }
+
+    /// <summary>
+    /// Advances anything the passive runs on a timer.
+    ///
+    /// 只在歌曲进行时调用 / Called only while the song is actually playing, with song-time
+    /// delta, so a regen passive cannot tick through the pause menu or the READY/GO run-in.
+    /// </summary>
+    public void TickPassive(float deltaSeconds)
+    {
+        if (passive == null || deltaSeconds <= 0f) return;
+
+        passive.Tick(deltaSeconds, this);
     }
 
     /// <summary>

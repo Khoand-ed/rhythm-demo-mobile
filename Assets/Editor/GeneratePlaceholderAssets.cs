@@ -183,7 +183,8 @@ namespace Arknights.EditorTools {
                 Sprite avatar = OperatorAvatar(seed, i);
                 Sprite portrait = OperatorPortrait(seed, i);
                 Sprite icon = PolygonSprite(SpriteCharDir + "/Passive", seed.Id, 96, 3 + i % 5, i * 41f);
-                BuildCharMeta(seed, avatar, portrait, icon);
+                PassiveSO passive = BuildPassive(seed, icon);
+                BuildCharMeta(seed, avatar, portrait, passive);
             }
         }
 
@@ -954,6 +955,7 @@ namespace Arknights.EditorTools {
         // ------------------------------------------------------------------ CharUI (Lua driven)
 
         private const string MetaCharDir = ResourcesRoot + "/Meta/Char";
+        private const string PassiveCharDir = ResourcesRoot + "/Meta/Passive";
         private const string SpriteCharDir = ResourcesRoot + "/Sprite/Char";
 
         private static readonly Color[] RarityColors = {
@@ -972,6 +974,15 @@ namespace Arknights.EditorTools {
         /// passives are its Character-Driven Gameplay examples. The names are invented - the GDD
         /// only ever says "Nhân vật A/B/C/D" - so change them here and nowhere else.
         /// </summary>
+        /// <summary>
+        /// 只给生成器用的映射 / Which PassiveSO subclass an operator gets. A switch on this is
+        /// fine because it lives in the generator: adding a passive to the game means adding a
+        /// subclass and an asset, and only seeding a NEW placeholder operator touches this.
+        /// The runtime never branches on a passive's kind - that is the whole point of the
+        /// subclasses.
+        /// </summary>
+        private enum PassiveKind { ComboShield, JudgeUpgrade, FeverExtend, Regen }
+
         private readonly struct OperatorSeed {
             public readonly string Id;
             public readonly string English;
@@ -983,13 +994,14 @@ namespace Arknights.EditorTools {
             public readonly float Fever;
             public readonly string PassiveName;
             public readonly string PassiveText;
+            public readonly PassiveKind Kind;
 
             public OperatorSeed(string id, string english, string chinese, int rarity,
                                 CharProfession profession, int maxHp, float score, float fever,
-                                string passiveName, string passiveText) {
+                                string passiveName, string passiveText, PassiveKind kind) {
                 Id = id; English = english; Chinese = chinese; Rarity = rarity;
                 Profession = profession; MaxHp = maxHp; Score = score; Fever = fever;
-                PassiveName = passiveName; PassiveText = passiveText;
+                PassiveName = passiveName; PassiveText = passiveText; Kind = kind;
             }
         }
 
@@ -999,16 +1011,23 @@ namespace Arknights.EditorTools {
         private static readonly OperatorSeed[] Operators = {
             new OperatorSeed("AMIYA", "Amiya", "阿米娅", 5, CharProfession.SHU_SHI,
                 300, 1.2f, 1.2f, "Field Medic",
-                "The first Miss of a run does not break the combo."),
+                "The first Miss of a run does not break the combo.",
+                PassiveKind.ComboShield),
             new OperatorSeed("NOVA", "Nova", "新星", 4, CharProfession.JU_JI,
                 275, 1.1f, 1.1f, "Overdrive",
-                "A Great has a chance to be counted as a Perfect."),
+                "A Great has a chance to be counted as a Perfect.",
+                PassiveKind.JudgeUpgrade),
             new OperatorSeed("ECHO", "Echo", "回声", 4, CharProfession.YI_LIAO,
                 275, 1.1f, 1.1f, "Resonance",
-                "A high combo extends how long Fever lasts."),
+                "A high combo extends how long Fever lasts.",
+                PassiveKind.FeverExtend),
+            // PULSE 原本没有效果 / PULSE used to read "no special effect". A baseline operator
+            // that changes nothing cannot demonstrate the Character-Driven Gameplay pillar,
+            // so it takes the GDD's regen instead.
             new OperatorSeed("PULSE", "Pulse", "脉冲", 3, CharProfession.XIAN_FENG,
                 250, 1.0f, 1.0f, "Steady Beat",
-                "No special effect. A clean baseline to learn a chart on.")
+                "Recovers a little HP at a steady interval.",
+                PassiveKind.Regen)
         };
 
         /// <summary>
@@ -1243,8 +1262,52 @@ namespace Arknights.EditorTools {
         /// the rhythm operators would have GetAttribute() index an empty array. The rhythm block is
         /// what CharSelectUI shows; the tower-defense block is what the inherited screens show.
         /// </summary>
+        /// <summary>
+        /// 造出这个干员的被动资产 / Creates the PassiveSO asset for one operator.
+        ///
+        /// 幂等 / Idempotent through DeleteAsset + CreateAsset at a fixed path, matching how
+        /// BuildCharMeta already handles re-runs: the GUID changes, but every reference to it
+        /// is rewritten in the same pass.
+        /// </summary>
+        private static PassiveSO BuildPassive(OperatorSeed seed, Sprite icon) {
+            EnsureFolder(PassiveCharDir);
+
+            PassiveSO asset;
+            switch (seed.Kind) {
+                case PassiveKind.ComboShield:
+                    asset = ScriptableObject.CreateInstance<ComboShieldPassive>();
+                    ((ComboShieldPassive)asset).charges = 1;
+                    break;
+                case PassiveKind.JudgeUpgrade:
+                    asset = ScriptableObject.CreateInstance<JudgeUpgradePassive>();
+                    ((JudgeUpgradePassive)asset).chance = 0.25f;
+                    break;
+                case PassiveKind.FeverExtend:
+                    asset = ScriptableObject.CreateInstance<FeverExtendPassive>();
+                    ((FeverExtendPassive)asset).comboThreshold = 50;
+                    ((FeverExtendPassive)asset).extraSeconds = 3f;
+                    break;
+                default:
+                    asset = ScriptableObject.CreateInstance<RegenPassive>();
+                    ((RegenPassive)asset).interval = 10f;
+                    ((RegenPassive)asset).amount = 5;
+                    break;
+            }
+
+            asset.id = seed.Id;
+            asset.passiveName = seed.PassiveName;
+            asset.description = seed.PassiveText;
+            asset.icon = icon;
+
+            string path = $"{PassiveCharDir}/{seed.Id}.asset";
+            AssetDatabase.DeleteAsset(path);
+            AssetDatabase.CreateAsset(asset, path);
+
+            return asset;
+        }
+
         private static void BuildCharMeta(OperatorSeed seed, Sprite avatar, Sprite portrait,
-                                          Sprite passiveIcon) {
+                                          PassiveSO passive) {
             EnsureFolder(MetaCharDir);
             CharMeta meta = ScriptableObject.CreateInstance<CharMeta>();
 
@@ -1289,10 +1352,10 @@ namespace Arknights.EditorTools {
             so.FindProperty("scoreModifier").floatValue = seed.Score;
             so.FindProperty("feverModifier").floatValue = seed.Fever;
 
-            SerializedProperty passive = so.FindProperty("passive");
-            passive.FindPropertyRelative("name").stringValue = seed.PassiveName;
-            passive.FindPropertyRelative("description").stringValue = seed.PassiveText;
-            passive.FindPropertyRelative("icon").objectReferenceValue = passiveIcon;
+            // 现在是资产引用 / An asset reference now, not three nested strings. The passive
+            // carries its own name, text and icon, so there is one copy of them rather than a
+            // display copy on the meta and a behaviour copy somewhere else to drift apart.
+            so.FindProperty("passive").objectReferenceValue = passive;
 
             // image2 也给图是顺手的好处 / Assigning image2 as well is a free win: the Lua roster in
             // CharUI draws flat grey today because GetCharImage() returns null for every operator.

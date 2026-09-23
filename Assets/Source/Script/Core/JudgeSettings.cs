@@ -3,8 +3,11 @@ using UnityEngine;
 // Every timing window in one place. Replaces the old per-lane hitWindow, which
 // was derived from collider geometry and so differed between lanes for no
 // gameplay reason - timing is a property of the note type, not of the lane.
-[System.Serializable]
-public class JudgeSettings
+// 做成资产 / An asset. Timing windows are the tuning most worth reviewing as a diff and the
+// most likely to want a per-difficulty variant, so they have the least business being buried
+// inside a scene file.
+[CreateAssetMenu(menuName = "Rhythm/Judge Settings", fileName = "JudgeSettings")]
+public class JudgeSettings : ScriptableObject
 {
     [Tooltip("Tap and Twin, seconds. Perfect 50ms / Great 100ms / Hit 200ms.")]
     public float tapPerfect = 0.05f;

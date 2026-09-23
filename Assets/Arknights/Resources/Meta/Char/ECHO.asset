@@ -77,10 +77,7 @@ MonoBehaviour:
   maxHp: 275
   scoreModifier: 1.1
   feverModifier: 1.1
-  passive:
-    name: Resonance
-    description: A high combo extends how long Fever lasts.
-    icon: {fileID: 21300000, guid: 26dc2beda2a9f4e468beb5b94630a536, type: 3}
+  passive: {fileID: 11400000, guid: 78a339399fe59634eb600a8bb7c9fcd1, type: 2}
   image1: {fileID: 21300000, guid: d87178ed7dec0784b80745dcb671d1d8, type: 3}
   image2: {fileID: 21300000, guid: d87178ed7dec0784b80745dcb671d1d8, type: 3}
   image3: {fileID: 21300000, guid: 7814dfb26f658f74ba7f05552c2d7b48, type: 3}

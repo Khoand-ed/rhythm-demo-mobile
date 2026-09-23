@@ -77,10 +77,7 @@ MonoBehaviour:
   maxHp: 275
   scoreModifier: 1.1
   feverModifier: 1.1
-  passive:
-    name: Overdrive
-    description: A Great has a chance to be counted as a Perfect.
-    icon: {fileID: 21300000, guid: d24cf011d2b297a4f858c9c4e46cbded, type: 3}
+  passive: {fileID: 11400000, guid: 27c50e43df3fbd646b8b7fb298441215, type: 2}
   image1: {fileID: 21300000, guid: b6c819775d75c47488536b228af017b1, type: 3}
   image2: {fileID: 21300000, guid: b6c819775d75c47488536b228af017b1, type: 3}
   image3: {fileID: 21300000, guid: 956ebddc1f79b0742a087061abd2fe61, type: 3}
