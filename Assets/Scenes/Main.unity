@@ -1112,21 +1112,12 @@ MonoBehaviour:
   startOnFirstInput: 0
   theBsRight: {fileID: 62031982}
   theBsLeft: {fileID: 408901649}
-  currentScore: 0
   scorePerNote: 100
   scorePerGoodNote: 125
   scorePerPerfectNote: 150
   scoreText: {fileID: 1682405057}
   multiText: {fileID: 2100546154}
-  currentMultiplier: 1
-  multiplierTracker: 0
   multiplierThresholds: 040000000800000010000000
-  currentCombo: 0
-  totalNotes: 0
-  normalHits: 0
-  goodHits: 0
-  perfectHits: 0
-  missedHits: 0
   resultsScreen: {fileID: 766832845}
   percentHitText: {fileID: 1903861625}
   normalsText: {fileID: 1991264649}
@@ -1144,38 +1135,31 @@ MonoBehaviour:
   goodEffect: {fileID: 3364674698484490490, guid: 57b8637ab2945d041ade395147b3c79d, type: 3}
   perfectEffect: {fileID: 7212143303192852354, guid: 605f01615bfa54d49b7688f1863db1b1, type: 3}
   feedback: {fileID: 348329763}
-  judge:
-    tapPerfect: 0.05
-    tapGreat: 0.1
-    tapHit: 0.2
-    holdPerfect: 0.06
-    holdGreat: 0.16
-  health:
-    maxHp: 100
-    tapMissDamage: 10
-    holdMissDamage: 15
-    twinMissDamage: 10
-  fever:
-    maxFever: 100
-    perfectGain: 3
-    greatGain: 2
-    hitGain: 1
-    missLoss: 10
-    autoActivate: 1
-    manualActivateKey: 32
-    feverDuration: 8
-    feverScoreMultiplier: 2
+  judge: {fileID: 11400000, guid: 22f96ced1cb6d7248a1b3144b326f86a, type: 2}
+  health: {fileID: 11400000, guid: 14e7b238c82e812449792530ccf32d18, type: 2}
+  fever: {fileID: 11400000, guid: fdab5439ad9b65844be3a09d6bf2f5bc, type: 2}
   scorePerHoldTick: 10
   holdTickInterval: 0.1
   touchZone: {fileID: 0}
   hpBar: {fileID: 1841494673}
   feverBar: {fileID: 154700152}
   failedText: {fileID: 663368006}
-  currentHp: 0
-  currentFever: 0
-  feverActive: 0
-  maxCombo: 0
-  fullCombo: 1
+  state:
+    score: 0
+    combo: 0
+    maxCombo: 0
+    multiplier: 1
+    multiplierTracker: 0
+    hp: 0
+    feverGauge: 0
+    feverActive: 0
+    fullCombo: 1
+    failed: 0
+    totalNotes: 0
+    normalHits: 0
+    goodHits: 0
+    perfectHits: 0
+    missedHits: 0
 --- !u!4 &275295387
 Transform:
   m_ObjectHideFlags: 0

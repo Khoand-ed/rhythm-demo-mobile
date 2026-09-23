@@ -57,9 +57,15 @@ public class GameManager : MonoBehaviour
              "left empty, hits fall back to the three effect prefabs above.")]
     public HitFeedback feedback;
 
-    public JudgeSettings judge = new JudgeSettings();
-    public HealthSettings health = new HealthSettings();
-    public FeverSettings fever = new FeverSettings();
+    // 三份调参资产 / The three tuning assets. Assign them here; Tools/Rhythm/Create Tuning
+    // Assets makes them at their default values if they do not exist yet.
+    //
+    // 不再内嵌 / Deliberately references rather than inline instances: as inline fields these
+    // values were serialized into Main.unity, where a balance change was invisible in review
+    // and could not be shared between scenes or varied per difficulty.
+    public JudgeSettings judge;
+    public HealthSettings health;
+    public FeverSettings fever;
 
     [Tooltip("Points per 100ms of a held note's body. Awards no combo.")]
     public int scorePerHoldTick = 10;
@@ -118,6 +124,8 @@ public class GameManager : MonoBehaviour
         }
 
         if (touchZone == null) touchZone = FindAnyObjectByType<TouchInputZone>();
+
+        RequireTuning();
 
         ApplyNoteSystemMode();
     }
@@ -774,6 +782,27 @@ void Update()
     // array in the Inspector hands back a new instance instead of mutating the
     // old one - the state would otherwise keep grading against the array the
     // scene had when it loaded.
+    /// <summary>
+    /// 少一份资产就说清楚 / Names any missing tuning asset once, loudly, instead of letting it
+    /// surface later as a NullReferenceException from somewhere in the scoring path.
+    ///
+    /// Does not substitute defaults: a run graded against silently invented windows looks like
+    /// it worked and is worse than one that refuses to start.
+    /// </summary>
+    private void RequireTuning()
+    {
+        string missing = "";
+        if (judge == null) missing += " judge";
+        if (health == null) missing += " health";
+        if (fever == null) missing += " fever";
+
+        if (missing.Length == 0) return;
+
+        Debug.LogError("[GameManager] Missing tuning asset(s):" + missing +
+                       ". Run Tools/Rhythm/Create Tuning Assets, then assign them on this " +
+                       "component. Gameplay will not grade correctly until then.", this);
+    }
+
     private void SyncTuning()
     {
         state.health = health;
@@ -825,9 +854,12 @@ void Update()
         }
     }
 
+    // 资产缺失时不要每帧抛异常 / Guarded on the assets, not just the bars. RequireTuning has
+    // already said what is missing; this runs every frame and would otherwise bury that one
+    // useful error under a wall of identical NullReferenceExceptions.
     private void PushGauges()
     {
-        if (hpBar != null) hpBar.SetValue(state.hp, health.maxHp);
-        if (feverBar != null) feverBar.SetValue(state.feverGauge, fever.maxFever);
+        if (hpBar != null && health != null) hpBar.SetValue(state.hp, health.maxHp);
+        if (feverBar != null && fever != null) feverBar.SetValue(state.feverGauge, fever.maxFever);
     }
 }

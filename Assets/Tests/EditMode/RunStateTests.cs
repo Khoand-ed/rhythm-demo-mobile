@@ -1,4 +1,5 @@
 using NUnit.Framework;
+using UnityEngine;
 
 // The scoring rules, pinned. Everything here used to live inside GameManager and
 // could only be checked by playing the game; the point of moving it into
@@ -14,8 +15,8 @@ public class RunStateTests
     {
         RunState run = new RunState
         {
-            health = new HealthSettings(),
-            fever = new FeverSettings(),
+            health = ScriptableObject.CreateInstance<HealthSettings>(),
+            fever = ScriptableObject.CreateInstance<FeverSettings>(),
             multiplierThresholds = thresholds
         };
 

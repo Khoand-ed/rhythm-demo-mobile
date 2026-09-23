@@ -15,7 +15,7 @@ public class JudgeSettingsTests
     [SetUp]
     public void SetUp()
     {
-        judge = new JudgeSettings();
+        judge = ScriptableObject.CreateInstance<JudgeSettings>();
     }
 
     // Grade compares with <=, so a delta sitting exactly on a window edge belongs
@@ -100,7 +100,7 @@ public class HealthSettingsTests
     [Test]
     public void DamageFor_MapsEveryNoteType()
     {
-        HealthSettings health = new HealthSettings();
+        HealthSettings health = ScriptableObject.CreateInstance<HealthSettings>();
 
         Assert.AreEqual(health.holdMissDamage, health.DamageFor(NoteType.Hold));
         Assert.AreEqual(health.twinMissDamage, health.DamageFor(NoteType.Twin));
@@ -115,7 +115,7 @@ public class FeverSettingsTests
     [Test]
     public void GainFor_MapsEveryJudgement()
     {
-        FeverSettings fever = new FeverSettings();
+        FeverSettings fever = ScriptableObject.CreateInstance<FeverSettings>();
 
         Assert.AreEqual(fever.perfectGain, fever.GainFor(Judgement.Perfect), 1e-6f);
         Assert.AreEqual(fever.greatGain, fever.GainFor(Judgement.Great), 1e-6f);
@@ -126,7 +126,7 @@ public class FeverSettingsTests
     [Test]
     public void GainFor_Miss_IsZero()
     {
-        Assert.AreEqual(0f, new FeverSettings().GainFor(Judgement.Miss), 1e-6f);
+        Assert.AreEqual(0f, ScriptableObject.CreateInstance<FeverSettings>().GainFor(Judgement.Miss), 1e-6f);
     }
 }
 
