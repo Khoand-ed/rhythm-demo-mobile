@@ -97,6 +97,7 @@ public class GameManager : MonoBehaviour
     // this scene directly in the Editor gets.
     private float operatorScoreModifier = 1f;
     private float operatorFeverModifier = 1f;
+    private int operatorMaxHp;
     private PassiveSO operatorPassive;
 
     private float feverEndsAtSongTime;
@@ -842,6 +843,7 @@ void Update()
         state.scoreModifier = operatorScoreModifier;
         state.feverModifier = operatorFeverModifier;
         state.passive = operatorPassive;
+        state.operatorMaxHp = operatorMaxHp;
 
         // 重置增量锚点 / Re-anchored here because SyncTuning runs on every reset, and a retry
         // would otherwise hand the passive the whole of the previous run as one delta.
@@ -882,6 +884,11 @@ void Update()
             operatorScoreModifier = score > 0f ? score : 1f;
             operatorFeverModifier = feverGain > 0f ? feverGain : 1f;
             operatorPassive = meta.GetPassive();
+
+            // 0 就退回 HealthSettings / Zero falls back to the tuning asset, same as the two
+            // modifiers above: a meta predating the rhythm fields is missing data, not an
+            // operator meant to start on no HP at all.
+            operatorMaxHp = Mathf.Max(0, meta.GetMaxHp());
         }
         catch (System.Exception e)
         {
@@ -895,7 +902,9 @@ void Update()
     // useful error under a wall of identical NullReferenceExceptions.
     private void PushGauges()
     {
-        if (hpBar != null && health != null) hpBar.SetValue(state.hp, health.maxHp);
+        // 条要读同一个上限 / The bar reads RunState's ceiling, not the asset's: with an
+        // operator on 300 HP, scaling against the asset's 100 would peg it past full all run.
+        if (hpBar != null && state.MaxHp > 0) hpBar.SetValue(state.hp, state.MaxHp);
         if (feverBar != null && fever != null) feverBar.SetValue(state.feverGauge, fever.maxFever);
     }
 }

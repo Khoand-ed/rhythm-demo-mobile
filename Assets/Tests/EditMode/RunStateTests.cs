@@ -398,4 +398,55 @@ public class RunStateTests
         Assert.AreEqual(4f, boostedBefore - boosted.feverGauge, 0.001f,
                         "a loss must cost the same whatever the modifier");
     }
+
+    // --- the operator's HP pool -----------------------------------------------
+
+    [Test]
+    public void MaxHp_FallsBackToTheTuningAssetWithNoOperator()
+    {
+        RunState run = NewRun(4);
+
+        Assert.AreEqual(run.health.maxHp, run.MaxHp, "no operator means the asset decides");
+        Assert.AreEqual(run.health.maxHp, run.hp, "and a run starts full on that");
+    }
+
+    [Test]
+    public void MaxHp_TakesTheOperatorsPoolWhenThereIsOne()
+    {
+        RunState run = NewRun(4);
+        run.operatorMaxHp = 300;
+        run.Reset();
+
+        Assert.AreEqual(300, run.MaxHp);
+        Assert.AreEqual(300, run.hp, "the run starts full on the operator's pool, not the asset's");
+    }
+
+    [Test]
+    public void MaxHp_ZeroMeansMissingDataNotAnEmptyBar()
+    {
+        // 老的 meta 没有这个字段 / A CharMeta generated before the rhythm fields exist reads 0.
+        // Treating that as a real ceiling would start the run already dead.
+        RunState run = NewRun(4);
+        run.operatorMaxHp = 0;
+        run.Reset();
+
+        Assert.AreEqual(run.health.maxHp, run.MaxHp);
+        Assert.Greater(run.hp, 0);
+    }
+
+    [Test]
+    public void Heal_ClampsToTheOperatorsCeilingNotTheAssets()
+    {
+        // 治疗和上限必须用同一个数 / Heal and Reset have to agree on the ceiling, or an operator
+        // above the asset's value would be capped back down the first time anything healed.
+        RunState run = NewRun(4);
+        run.operatorMaxHp = 300;
+        run.Reset();
+
+        run.Damage(40);
+        Assert.AreEqual(260, run.hp, "precondition");
+
+        run.Heal(999);
+        Assert.AreEqual(300, run.hp, "healing must fill to the operator's pool");
+    }
 }

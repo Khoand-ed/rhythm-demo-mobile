@@ -30,6 +30,15 @@ public class RunState
     [System.NonSerialized] public float scoreModifier = 1f;
     [System.NonSerialized] public float feverModifier = 1f;
 
+    // 角色的血量上限, 0 表示没有角色 / The operator's HP pool. Zero means no operator, or a
+    // CharMeta generated before the rhythm fields existed, and both fall back to the
+    // HealthSettings asset - see MaxHp.
+    //
+    // 覆盖而不是相加 / Replaces rather than adds to the tuning value, because the data is an
+    // absolute (300, 275, 250) rather than a bonus. That does shift balance: the damage
+    // numbers in HealthSettings were tuned against 100.
+    [System.NonSerialized] public int operatorMaxHp;
+
     // 角色的被动, 可以为空 / The operator's passive, or null for a run without one. Null is a
     // supported state, not an error: opening the gameplay scene from the Editor has no
     // operator, and every call site here checks.
@@ -63,6 +72,24 @@ public class RunState
     public float goodHits;
     public float perfectHits;
     public float missedHits;
+
+    /// <summary>
+    /// 这一局的血量上限 / The HP ceiling for this run: the operator's if there is one, the
+    /// tuning asset's otherwise.
+    ///
+    /// 一个来源, 所有地方都读它 / Deliberately one property rather than the three separate
+    /// reads this used to be. Reset, Heal and the HP bar must agree on the ceiling, and they
+    /// only stay agreed if there is a single place that decides it.
+    /// </summary>
+    public int MaxHp
+    {
+        get
+        {
+            if (operatorMaxHp > 0) return operatorMaxHp;
+
+            return health != null ? health.maxHp : 0;
+        }
+    }
 
     /// <summary>
     /// Percentage of judgements landed. Hits over judgements rather than over
@@ -99,7 +126,7 @@ public class RunState
         multiplier = 1;
         multiplierTracker = 0;
 
-        hp = health != null ? health.maxHp : 0;
+        hp = MaxHp;
         feverGauge = 0f;
         feverActive = false;
 
@@ -226,7 +253,7 @@ public class RunState
     {
         if (failed) return;
 
-        hp = Mathf.Min(health != null ? health.maxHp : hp, hp + amount);
+        hp = Mathf.Min(MaxHp, hp + amount);
     }
 
     /// <summary>
