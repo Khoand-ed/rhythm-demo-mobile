@@ -124,3 +124,35 @@ InitTestScene*.unity*
 [Dd]esktop.ini.meta
 .DS_Store
 .DS_Store.meta
+
+# ---------------------------------------------------------------------------
+# Backend (server/) - not part of the Unity template above.
+#
+# Deliberately below the template rather than edited into it: the header says
+# this file is re-synced from github/gitignore, and anything changed up there
+# would be lost on the next sync.
+
+# .NET build output. The template's /[Oo]bj/ and /[Bb]uild/ carry a leading
+# slash, so they are root-anchored and do not cover the per-project ones that
+# every .NET project creates underneath server/.
+/server/**/[Bb]in/
+/server/**/[Oo]bj/
+
+# Re-include the backend's project files. The template ignores *.csproj, *.sln
+# and *.slnx because Unity regenerates its own - but the backend's are
+# hand-written source. Without these three lines git silently drops them and a
+# fresh clone gets a solution that cannot build.
+!/server/**/*.csproj
+!/server/**/*.sln
+!/server/**/*.slnx
+!/server/**/*.props
+!/server/**/*.targets
+
+# Local-only configuration. The development connection string lives here, so
+# this must never be committed. appsettings.json itself is source and is kept.
+/server/**/appsettings.*.Local.json
+/server/**/secrets.json
+
+# Python bytecode cache from the ci/ checks. Regenerated on every run.
+__pycache__/
+*.pyc

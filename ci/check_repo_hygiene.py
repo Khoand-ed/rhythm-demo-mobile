@@ -30,6 +30,21 @@ SHOULD_NOT_BE_TRACKED = [
     "*.csproj", "*.unityproj", "*.sln", "*.slnx", "*.suo", "*.user", "*.userprefs",
     "*.pidb", "*.booproj", "*.svd", "*.pdb", "*.mdb", "*.opendb", "*.VC.db",
     "*.apk", "*.aab", "*.unitypackage", "*.app",
+    "server/*/[Bb]in/*", "server/*/[Oo]bj/*",
+]
+
+# The backend's project files are the exception to the *.csproj / *.sln rules
+# above. Those rules exist because Unity regenerates its own and they should
+# never be tracked - but the ones under server/ are hand-written source and
+# have to be. Without this the first backend commit fails the check, because
+# the scan below also matches patterns against a path's basename.
+#
+# fnmatch's * crosses / (unlike a shell glob), so one pattern covers any depth
+# underneath server/. Actual build output there is still caught by the two
+# server/ patterns added above.
+STRAY_EXEMPT = [
+    "server/*.csproj", "server/*.sln", "server/*.slnx",
+    "server/*.props", "server/*.targets",
 ]
 
 CONFLICT_RE = re.compile(rb"^(<<<<<<< |>>>>>>> |=======$)", re.MULTILINE)
@@ -89,6 +104,7 @@ def main():
         path for path in paths
         if any(fnmatch.fnmatch(path, pattern) or fnmatch.fnmatch(path.split("/")[-1], pattern)
                for pattern in SHOULD_NOT_BE_TRACKED)
+        and not any(fnmatch.fnmatch(path, pattern) for pattern in STRAY_EXEMPT)
     )
 
     if stray:
