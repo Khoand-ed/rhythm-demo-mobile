@@ -14,12 +14,27 @@ on:
   pull_request:
   workflow_dispatch:
 
+  # Everything this job needs from outside can rot while nobody pushes: the
+  # personal .ulf licence held in secrets, the unityci/editor image tag, the
+  # pinned action itself. On push and pull_request alone, the first sign of that
+  # is a red check on the morning someone needs to merge. A weekly run turns it
+  # into a notification on a quiet Monday instead.
+  #
+  # 02:00 UTC Monday. GitHub disables scheduled workflows on a public repository
+  # after 60 days with no commits, which costs nothing while this one is active.
+  schedule:
+    - cron: '0 2 * * 1'
+
 concurrency:
   group: unity-tests-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: read
+
+  # Only so the test runner can publish its results as a check run. See
+  # githubToken on the runner step below.
+  checks: write
 
 jobs:
   editmode:
@@ -83,9 +98,18 @@ jobs:
       # unityVersion defaults to `auto`, which reads ProjectSettings/ProjectVersion.txt
       # - 6000.5.1f1. projectPath defaults to the repository root, correct here.
       #
-      # githubToken is omitted on purpose: passing it makes the action create a
-      # Check Run, which needs `checks: write` and still fails on forks. Read the
-      # results from the artifact instead.
+      # githubToken publishes the run's pass and fail counts as a check run on the
+      # pull request, so a failure can be read where it happened instead of by
+      # downloading a 1.2 MB artifact and opening the NUnit XML.
+      #
+      # It was left out when this workflow was written, on the grounds that the
+      # action's check-run call fails on a pull request from a fork. The `if:`
+      # guard above now skips the entire job on those, so that path is
+      # unreachable and the objection no longer holds.
+      #
+      # The check run it creates is its own context, separate from this job's
+      # "EditMode tests" check, and is not in branch protection's required list:
+      # it reports, it does not gate.
       - uses: game-ci/unity-test-runner@v4.3.2
         id: tests
         env:
@@ -95,6 +119,8 @@ jobs:
         with:
           testMode: editmode
           artifactsPath: editmode-artifacts
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
+          checkName: EditMode test results
 
       - uses: actions/upload-artifact@v4
         if: always()
