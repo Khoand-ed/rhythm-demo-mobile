@@ -1,4 +1,5 @@
 using NUnit.Framework;
+using UnityEngine;
 
 // The scoring rules, pinned. Everything here used to live inside GameManager and
 // could only be checked by playing the game; the point of moving it into
@@ -14,8 +15,8 @@ public class RunStateTests
     {
         RunState run = new RunState
         {
-            health = new HealthSettings(),
-            fever = new FeverSettings(),
+            health = ScriptableObject.CreateInstance<HealthSettings>(),
+            fever = ScriptableObject.CreateInstance<FeverSettings>(),
             multiplierThresholds = thresholds
         };
 
@@ -329,5 +330,123 @@ public class RunStateTests
         Assert.IsTrue(run.fullCombo);
         Assert.IsFalse(run.failed);
         Assert.AreEqual(0f, run.missedHits);
+    }
+
+    // --- the operator's modifiers ---------------------------------------------
+
+    [Test]
+    public void ScoreModifier_DefaultsToNeutral()
+    {
+        // 没选角色也要能跑 / A run with no operator must score exactly as it did before
+        // operators existed, or opening the gameplay scene from the Editor changes meaning.
+        RunState run = NewRun(4);
+
+        Assert.AreEqual(1f, run.scoreModifier, "a fresh run must not scale score");
+        Assert.AreEqual(1f, run.feverModifier, "a fresh run must not scale fever");
+        Assert.AreEqual(100, run.ScoreFor(100));
+    }
+
+    [Test]
+    public void ScoreModifier_AppliesOverTheComboLadder()
+    {
+        // 倍率叠在阶梯之上, 不是取代它 / The operator widens what the chart already earns.
+        RunState plain = NewRun(2);
+        RunState boosted = NewRun(2);
+        boosted.scoreModifier = 1.2f;
+
+        Hit(plain, 2);
+        Hit(boosted, 2);
+
+        Assert.AreEqual(2, plain.multiplier, "precondition: the ladder climbed");
+        Assert.AreEqual(2, boosted.multiplier, "the modifier must not disturb the ladder");
+        Assert.AreEqual(plain.ScoreFor(100) * 1.2f, boosted.ScoreFor(100), 0.5f);
+    }
+
+    [Test]
+    public void ScoreModifier_RoundsRatherThanTruncates()
+    {
+        // 截断会悄悄吃掉一分 / 10 * 1.2 is 12, and integer truncation would make it 11 for
+        // most awards - a bias that is invisible per note and large over a chart.
+        RunState run = NewRun(4);
+        run.scoreModifier = 1.2f;
+
+        Assert.AreEqual(12, run.ScoreFor(10));
+    }
+
+    [Test]
+    public void FeverModifier_ScalesGainsOnly()
+    {
+        // 加成只作用于涨 / The GDD defines this as how fast the bar builds. Scaling the miss
+        // penalty too would make the fever specialist punished hardest for a miss.
+        RunState plain = NewRun(4);
+        RunState boosted = NewRun(4);
+        boosted.feverModifier = 1.5f;
+
+        plain.AddFever(10f);
+        boosted.AddFever(10f);
+
+        Assert.AreEqual(10f, plain.feverGauge, 0.001f);
+        Assert.AreEqual(15f, boosted.feverGauge, 0.001f, "a gain must scale with the modifier");
+
+        float plainBefore = plain.feverGauge;
+        float boostedBefore = boosted.feverGauge;
+
+        plain.AddFever(-4f);
+        boosted.AddFever(-4f);
+
+        Assert.AreEqual(4f, plainBefore - plain.feverGauge, 0.001f);
+        Assert.AreEqual(4f, boostedBefore - boosted.feverGauge, 0.001f,
+                        "a loss must cost the same whatever the modifier");
+    }
+
+    // --- the operator's HP pool -----------------------------------------------
+
+    [Test]
+    public void MaxHp_FallsBackToTheTuningAssetWithNoOperator()
+    {
+        RunState run = NewRun(4);
+
+        Assert.AreEqual(run.health.maxHp, run.MaxHp, "no operator means the asset decides");
+        Assert.AreEqual(run.health.maxHp, run.hp, "and a run starts full on that");
+    }
+
+    [Test]
+    public void MaxHp_TakesTheOperatorsPoolWhenThereIsOne()
+    {
+        RunState run = NewRun(4);
+        run.operatorMaxHp = 300;
+        run.Reset();
+
+        Assert.AreEqual(300, run.MaxHp);
+        Assert.AreEqual(300, run.hp, "the run starts full on the operator's pool, not the asset's");
+    }
+
+    [Test]
+    public void MaxHp_ZeroMeansMissingDataNotAnEmptyBar()
+    {
+        // 老的 meta 没有这个字段 / A CharMeta generated before the rhythm fields exist reads 0.
+        // Treating that as a real ceiling would start the run already dead.
+        RunState run = NewRun(4);
+        run.operatorMaxHp = 0;
+        run.Reset();
+
+        Assert.AreEqual(run.health.maxHp, run.MaxHp);
+        Assert.Greater(run.hp, 0);
+    }
+
+    [Test]
+    public void Heal_ClampsToTheOperatorsCeilingNotTheAssets()
+    {
+        // 治疗和上限必须用同一个数 / Heal and Reset have to agree on the ceiling, or an operator
+        // above the asset's value would be capped back down the first time anything healed.
+        RunState run = NewRun(4);
+        run.operatorMaxHp = 300;
+        run.Reset();
+
+        run.Damage(40);
+        Assert.AreEqual(260, run.hp, "precondition");
+
+        run.Heal(999);
+        Assert.AreEqual(300, run.hp, "healing must fill to the operator's pool");
     }
 }

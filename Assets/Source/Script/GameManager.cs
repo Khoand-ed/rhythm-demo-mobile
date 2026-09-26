@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using Data.Char;
 using Data.Mission;
 using Tools;
 using UnityEngine;
@@ -56,9 +57,15 @@ public class GameManager : MonoBehaviour
              "left empty, hits fall back to the three effect prefabs above.")]
     public HitFeedback feedback;
 
-    public JudgeSettings judge = new JudgeSettings();
-    public HealthSettings health = new HealthSettings();
-    public FeverSettings fever = new FeverSettings();
+    // 三份调参资产 / The three tuning assets. Assign them here; Tools/Rhythm/Create Tuning
+    // Assets makes them at their default values if they do not exist yet.
+    //
+    // 不再内嵌 / Deliberately references rather than inline instances: as inline fields these
+    // values were serialized into Main.unity, where a balance change was invisible in review
+    // and could not be shared between scenes or varied per difficulty.
+    public JudgeSettings judge;
+    public HealthSettings health;
+    public FeverSettings fever;
 
     [Tooltip("Points per 100ms of a held note's body. Awards no combo.")]
     public int scorePerHoldTick = 10;
@@ -84,7 +91,18 @@ public class GameManager : MonoBehaviour
     // leaking into the next run.
     public RunState state = new RunState();
 
+    // 开局抓一次, 之后一直用 / Captured once at the top of Start and kept, because
+    // SongSession.Clear() runs a few lines later and a retry goes through SyncTuning again
+    // with nothing left to read. Defaults of 1 mean "no operator", which is what opening
+    // this scene directly in the Editor gets.
+    private float operatorScoreModifier = 1f;
+    private float operatorFeverModifier = 1f;
+    private int operatorMaxHp;
+    private PassiveSO operatorPassive;
+
     private float feverEndsAtSongTime;
+
+    private float lastPassiveSongTime;
 
     private readonly Dictionary<KeyCode, List<NoteObject>> activeNotesByKey = new Dictionary<KeyCode, List<NoteObject>>();
     private readonly Dictionary<KeyCode, float> hitZoneXByKey = new Dictionary<KeyCode, float>();
@@ -110,6 +128,8 @@ public class GameManager : MonoBehaviour
         }
 
         if (touchZone == null) touchZone = FindAnyObjectByType<TouchInputZone>();
+
+        RequireTuning();
 
         ApplyNoteSystemMode();
     }
@@ -162,6 +182,10 @@ public class GameManager : MonoBehaviour
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
+        // 必须在 SongSession.Clear() 之前 / Before anything else, because the chart handover
+        // below clears SongSession and the operator would go with it.
+        CaptureOperator();
+
         scoreText.text = "Score: 0";
         multiText.text = "0";
 
@@ -213,6 +237,7 @@ void Update()
         {
             HandleNoteInput();
             UpdateFever();
+            UpdatePassive();
 
             if(SongFinished() && !resultsScreen.activeInHierarchy)
             {
@@ -417,6 +442,12 @@ void Update()
         // PeekJudgeable already filtered by MaxWindow, so a Miss here means the
         // press was out of range and should simply not consume the note.
         if (judgement == Judgement.Miss) return;
+
+        // 被动可以升级判定 / The operator's passive gets to rewrite what landed - deliberately
+        // after the line above, so no passive can turn a press that was out of range into a
+        // hit. Everything downstream (score, fever gain, the popup) reads the rewritten value,
+        // which is the point: a promoted Great must look and pay exactly like a Perfect.
+        if (state.passive != null) judgement = state.passive.Regrade(judgement, state);
 
         if (note.IsHold) note.BeginHold(songTime);
         else note.MarkHit();
@@ -728,7 +759,27 @@ void Update()
     // has to be song time.
     private void BeginFeverWindow()
     {
-        feverEndsAtSongTime = SongTimeNow() + fever.feverDuration;
+        // 开窗时结算一次加成 / The bonus is decided once, as the window opens, rather than
+        // re-read while fever burns. The deadline below is a fixed point in song time; letting
+        // a passive move it mid-fever would make the gauge drain against a target that keeps
+        // shifting.
+        float extra = state.passive != null ? state.passive.ExtraFeverSeconds(state) : 0f;
+
+        feverEndsAtSongTime = SongTimeNow() + fever.feverDuration + extra;
+    }
+
+    // 用歌曲时间的增量 / Song-time delta, not Time.deltaTime. A passive on a timer has to
+    // count the same clock the chart does, or it drifts - and it must not tick at all while
+    // the song is paused or still in the READY/GO run-in, which song time gives for free.
+    private void UpdatePassive()
+    {
+        float now = SongTimeNow();
+        float delta = now - lastPassiveSongTime;
+        lastPassiveSongTime = now;
+
+        // 负数说明刚 seek 过 / A negative delta means the song was just sought backwards, as a
+        // retry does. Skip that frame rather than paying out or rewinding a timer.
+        if (delta > 0f) state.TickPassive(delta);
     }
 
     // Fever runs on song time rather than Time.time, so pausing and restarting
@@ -762,16 +813,98 @@ void Update()
     // array in the Inspector hands back a new instance instead of mutating the
     // old one - the state would otherwise keep grading against the array the
     // scene had when it loaded.
+    /// <summary>
+    /// 少一份资产就说清楚 / Names any missing tuning asset once, loudly, instead of letting it
+    /// surface later as a NullReferenceException from somewhere in the scoring path.
+    ///
+    /// Does not substitute defaults: a run graded against silently invented windows looks like
+    /// it worked and is worse than one that refuses to start.
+    /// </summary>
+    private void RequireTuning()
+    {
+        string missing = "";
+        if (judge == null) missing += " judge";
+        if (health == null) missing += " health";
+        if (fever == null) missing += " fever";
+
+        if (missing.Length == 0) return;
+
+        Debug.LogError("[GameManager] Missing tuning asset(s):" + missing +
+                       ". Run Tools/Rhythm/Create Tuning Assets, then assign them on this " +
+                       "component. Gameplay will not grade correctly until then.", this);
+    }
+
     private void SyncTuning()
     {
         state.health = health;
         state.fever = fever;
         state.multiplierThresholds = multiplierThresholds;
+
+        state.scoreModifier = operatorScoreModifier;
+        state.feverModifier = operatorFeverModifier;
+        state.passive = operatorPassive;
+        state.operatorMaxHp = operatorMaxHp;
+
+        // 重置增量锚点 / Re-anchored here because SyncTuning runs on every reset, and a retry
+        // would otherwise hand the passive the whole of the previous run as one delta.
+        lastPassiveSongTime = 0f;
     }
 
+    /// <summary>
+    /// Reads the chosen operator's two rhythm modifiers off its metadata.
+    ///
+    /// 这里是两半相接的地方 / This is where the two halves of the project meet: CharMeta is an
+    /// Arknights type and RunState lives in Rhythm.Core, which cannot reference it. GameManager
+    /// is in the default assembly and can see both, so it reads the values here and hands
+    /// across plain floats.
+    ///
+    /// Guarded throughout - GetCharMeta() reaches Resources and can come back null or throw
+    /// for a save that names an operator whose asset is gone. A missing operator costs the
+    /// player their bonus, which is worth a warning; it must not cost them the run.
+    /// </summary>
+    private void CaptureOperator()
+    {
+        if (!SongSession.HasCharacter) return;
+
+        try
+        {
+            CharMeta meta = SongSession.Character.GetCharMeta();
+            if (meta == null)
+            {
+                Debug.LogWarning("[GameManager] The chosen operator has no metadata; " +
+                                 "playing without its modifiers.");
+                return;
+            }
+
+            // 0 说明这份 meta 是模板升级前生成的 / A zero means the asset predates the rhythm
+            // fields, not that the operator is meant to score nothing. Fall back to neutral.
+            float score = meta.GetScoreModifier();
+            float feverGain = meta.GetFeverModifier();
+
+            operatorScoreModifier = score > 0f ? score : 1f;
+            operatorFeverModifier = feverGain > 0f ? feverGain : 1f;
+            operatorPassive = meta.GetPassive();
+
+            // 0 就退回 HealthSettings / Zero falls back to the tuning asset, same as the two
+            // modifiers above: a meta predating the rhythm fields is missing data, not an
+            // operator meant to start on no HP at all.
+            operatorMaxHp = Mathf.Max(0, meta.GetMaxHp());
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogWarning("[GameManager] Could not read the operator's modifiers, " +
+                             "playing without them: " + e.Message);
+        }
+    }
+
+    // 资产缺失时不要每帧抛异常 / Guarded on the assets, not just the bars. RequireTuning has
+    // already said what is missing; this runs every frame and would otherwise bury that one
+    // useful error under a wall of identical NullReferenceExceptions.
     private void PushGauges()
     {
-        if (hpBar != null) hpBar.SetValue(state.hp, health.maxHp);
-        if (feverBar != null) feverBar.SetValue(state.feverGauge, fever.maxFever);
+        // 条要读同一个上限 / The bar reads RunState's ceiling, not the asset's: with an
+        // operator on 300 HP, scaling against the asset's 100 would peg it past full all run.
+        if (hpBar != null && state.MaxHp > 0) hpBar.SetValue(state.hp, state.MaxHp);
+        if (feverBar != null && fever != null) feverBar.SetValue(state.feverGauge, fever.maxFever);
     }
 }

@@ -67,7 +67,7 @@ namespace Data.Char {
         private float feverModifier;
 
         [Header("被动"),SerializeField]
-        private CharPassive passive;
+        private PassiveSO passive;
 
         [Header("立绘"),SerializeField]
         private Sprite image1;
@@ -98,7 +98,7 @@ namespace Data.Char {
         public int GetMaxHp() => maxHp;
         public float GetScoreModifier() => scoreModifier;
         public float GetFeverModifier() => feverModifier;
-        public CharPassive GetPassive() => passive;
+        public PassiveSO GetPassive() => passive;
         public Sprite GetImage() => image1;
         public Sprite GetCharImage() => image2;
         public Sprite GetAvatar() => image3;

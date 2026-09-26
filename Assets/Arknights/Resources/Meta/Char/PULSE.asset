@@ -77,10 +77,7 @@ MonoBehaviour:
   maxHp: 250
   scoreModifier: 1
   feverModifier: 1
-  passive:
-    name: Steady Beat
-    description: No special effect. A clean baseline to learn a chart on.
-    icon: {fileID: 21300000, guid: db150a71189dae7499b16acf14c9bc1f, type: 3}
+  passive: {fileID: 11400000, guid: f3fe143bb77a03942a9b313af0cd29db, type: 2}
   image1: {fileID: 21300000, guid: 0bb6328759833394a97a589b81a3f4a7, type: 3}
   image2: {fileID: 21300000, guid: 0bb6328759833394a97a589b81a3f4a7, type: 3}
   image3: {fileID: 21300000, guid: 58bf11daa154fa34a8ba31d065b4a0f8, type: 3}
