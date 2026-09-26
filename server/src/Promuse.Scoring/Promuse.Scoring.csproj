@@ -1,0 +1,69 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The game's scoring rules, compiled for the server.
+    =================================================
+
+    Nothing in this project is written here except the Unity shim. The rules
+    themselves are LINKED from Assets/Source/Script/Core by relative path, so
+    the server grades a run with the same source the device runs. Copying them
+    would work exactly once: the first time someone retunes a passive and only
+    the client changes, replay validation starts rejecting honest players.
+
+    That relative path is also the whole reason the backend lives inside this
+    repository instead of beside it.
+  -->
+
+  <PropertyGroup>
+    <!--
+      Off for this project only. The linked files predate nullable reference
+      types, and annotating them would mean editing game code to please the
+      server - backwards, and a merge conflict on every Unity-side change.
+    -->
+    <Nullable>disable</Nullable>
+
+    <!--
+      Off for this project, and load-bearing rather than cosmetic. Implicit
+      usings inject `global using System;`, which would put System.Random and
+      UnityEngine.Random in scope together - and `Random.value` in
+      JudgeUpgradePassive then fails to compile as an ambiguous reference.
+      Unity has no implicit usings either, so this simply matches how the linked
+      files are compiled on the other side.
+    -->
+    <ImplicitUsings>disable</ImplicitUsings>
+
+    <!--
+      The linked sources are game code and are reviewed on the Unity side. They
+      raise Unity-flavoured warnings here that nobody should act on, and burying
+      the server's own warnings underneath them helps no one.
+    -->
+    <NoWarn>$(NoWarn);CS0649;CS0169;CS1591</NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!-- server/src/Promuse.Scoring/ -> repository root -> Assets/... -->
+    <UnityCoreDir>$(MSBuildThisFileDirectory)..\..\..\Assets\Source\Script\Core\</UnityCoreDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      A glob rather than a list, so a passive added in Unity is picked up here
+      without anyone remembering to. That cuts both ways on purpose: a new file
+      in Core that needs something the shim does not have will break THIS build,
+      which is the earliest possible warning that engine-coupled code has crept
+      into what is supposed to be pure logic.
+
+      SongChart is the one deliberate exclusion. It is a ScriptableObject
+      wrapping an AudioClip and a Sprite - assets the server has no use for -
+      and the chart data reaches the server as the JSON under Assets/Beatmaps/,
+      which BeatmapJson already treats as the source of truth.
+    -->
+    <Compile Include="$(UnityCoreDir)*.cs"
+             Exclude="$(UnityCoreDir)SongChart.cs"
+             Link="Linked\%(Filename)%(Extension)" />
+
+    <Compile Include="$(UnityCoreDir)Passives\*.cs"
+             Link="Linked\Passives\%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

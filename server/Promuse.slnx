@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Promuse.Api/Promuse.Api.csproj" />
+    <Project Path="src/Promuse.Persistence/Promuse.Persistence.csproj" />
+    <Project Path="src/Promuse.Scoring/Promuse.Scoring.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Promuse.Scoring.Tests/Promuse.Scoring.Tests.csproj" />
+  </Folder>
+</Solution>
