@@ -124,3 +124,13 @@ InitTestScene*.unity*
 [Dd]esktop.ini.meta
 .DS_Store
 .DS_Store.meta
+
+# Local env for docker-compose. Copy from server/env.example.
+/server/.env
+
+# Python bytecode. The ci/ check scripts run straight from the repo, so CPython
+# drops its cache beside them the first time anyone runs them locally or in a
+# hook. check_repo_hygiene.py only scans tracked paths, so it cannot be the
+# thing that catches this - it has to be ignored here instead.
+__pycache__/
+*.py[cod]
