@@ -33,6 +33,20 @@ namespace Data.Char {
             this.id = id;
         }
 
+        /// <summary>
+        /// 服务端说了算 / Builds one from what the server holds. The only way
+        /// progression is set from outside this class: there are deliberately no
+        /// setters for elite, level, exp or trust, because nothing on the device
+        /// is allowed to decide them.
+        /// </summary>
+        public CharData(string id, int elite, int level, int exp, int trust) {
+            this.id = id;
+            this.elite = elite;
+            this.level = level;
+            this.exp = exp;
+            this.trust = trust;
+        }
+
         public string GetId() => id;
         public int GetElite() => elite;
         public int GetLevel() => level;

@@ -20,6 +20,7 @@ other way: predefined assemblies auto-reference every asmdef, never the reverse.
 |---|---|---|
 | `Arknights` (asmdef) | `Assets/Arknights/` — UI, data, managers, Lua | DOTween, Spine, XLua, TMP, uGUI |
 | `Rhythm.Core` (asmdef) | `Assets/Source/Script/Core/` — judging, health, fever, chart data | UnityEngine only |
+| `Promuse.Net` (asmdef) | `Assets/Promuse.Net/` — wire contracts, HTTP transport, token store | UnityEngine, Newtonsoft |
 | `Assembly-CSharp` (default) | `Assets/Source/Script/`, `Assets/Bridge/` | **everything above** |
 | `Assembly-CSharp-Editor` (default) | `Assets/Editor/` | everything above |
 
@@ -29,6 +30,14 @@ Consequences that come up constantly:
   `UIBase` and the rhythm core's `SongChart` can only live in the default assembly.
   Do not move those files into `Assets/Arknights/` — they will stop compiling.
 - **New code that spans both halves goes in `Assets/Bridge/`.**
+- **`Assets/Promuse.Net/` is the only thing that talks to the backend.** Its
+  `Contracts/` folder is linked *out* to `server/src/Promuse.Contracts` the way
+  `Rhythm.Core` is linked out to `Promuse.Scoring` - one definition of the wire
+  format, compiled by Unity and by .NET. Those files must stay **C# 9**: Unity 6
+  compiles at that level, so no `required`, no file-scoped namespaces, no
+  collection expressions. `UnityCompat/IsExternalInit.cs` is what makes `record`
+  compile at all and is deliberately outside `Contracts/`, because net10.0
+  already has that type.
 - `Assets/Source/Script/Core/` was split out so tests can reference it. Keep it
   dependency-free: `UnityEngine` and nothing from the default assembly.
 - Gameplay scripts under `Assets/Source/Script/` carry **no namespace**. Match that.

@@ -98,6 +98,50 @@ namespace Data.Player {
             };
             permissions = new List<string>();
         }
+
+        /// <summary>
+        /// 服务端状态覆盖本地 / Overwrites everything from what the server holds.
+        ///
+        /// 这是唯一的写入口 / After this exists, the server is the source of truth
+        /// and this object is a view of it. Nothing here merges: a field the
+        /// server did not send is not a field the client gets to keep an opinion
+        /// about, and a merge would be exactly how a stale device resurrects
+        /// spent currency.
+        ///
+        /// Stamina takes the server's computed <c>Current</c>, not the stored
+        /// value - the server works out what the bar reads now from the moment it
+        /// was last true, because the only thing that knows time has passed on a
+        /// phone is the phone.
+        /// </summary>
+        public void ApplyServerState(Promuse.Contracts.Players.PlayerState state) {
+            name = state.DisplayName;
+            level = state.Level;
+            exp = state.Exp;
+            reason = state.Stamina.Current;
+
+            charList = new List<CharData>();
+            foreach (Promuse.Contracts.Players.CharacterState character in state.Characters) {
+                charList.Add(new CharData(
+                    character.CharacterId, character.Elite, character.Level, character.Exp, character.Trust));
+            }
+
+            ResetSquad();
+            for (int slot = 0; slot < squad.Length && slot < state.Squad.Count; slot++) {
+                squad[slot] = state.Squad[slot];
+            }
+
+            desktopChar = state.DesktopCharacterId;
+
+            items = new List<ItemStack>();
+            foreach (Promuse.Contracts.Players.ItemStack stack in state.Inventory) {
+                items.Add(new ItemStack(stack.ItemId, stack.Amount));
+            }
+            ItemSort();
+
+            // 服务端还没有权限系统 / The server has no permission concept yet, so
+            // this is emptied rather than left holding whatever was here before.
+            permissions = new List<string>();
+        }
         
         // 最大经验值
         public static int GetMaxExp(int level) {
