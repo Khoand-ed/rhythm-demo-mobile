@@ -9,6 +9,8 @@ using Newtonsoft.Json.Serialization;
 using Promuse.Contracts;
 using Promuse.Contracts.Auth;
 using Promuse.Contracts.Players;
+using Promuse.Contracts.Runs;
+using Promuse.Contracts.Shop;
 using UnityEngine;
 using UnityEngine.Networking;
 
@@ -154,6 +156,51 @@ namespace Promuse.Net
         }
 
         private static string ETagFor(PlayerState state) => "W/\"" + state.StateVersion + "\"";
+
+        // ----------------------------------------------------------------- shop
+
+        public Task<ApiResult<ShopCatalog>> GetShopCatalogAsync() =>
+            SendAsync<ShopCatalog>(UnityWebRequest.kHttpVerbGET, "/v1/shop/offers",
+                body: null, authenticate: true);
+
+        /// <summary>
+        /// 只说买什么, 不说多少钱 / Names an offer and a quantity. It cannot name a
+        /// price, and it cannot name the balance it expects afterwards - both were
+        /// the client's arithmetic before the server took the catalogue over.
+        /// </summary>
+        public async Task<ApiResult<PurchaseResult>> PurchaseAsync(Guid offerId, int quantity)
+        {
+            ApiResult<PurchaseResult> result = await SendAsync<PurchaseResult>(
+                UnityWebRequest.kHttpVerbPOST, "/v1/shop/purchases",
+                new PurchaseRequest(offerId, quantity),
+                authenticate: true,
+                idempotencyKey: Guid.NewGuid().ToString());
+
+            // A purchase changes the save, so the version in hand is stale the
+            // moment it succeeds.
+            if (result.IsSuccess) _playerETag = ETagFor(result.Value!.Player);
+
+            return result;
+        }
+
+        // ----------------------------------------------------------------- runs
+
+        /// <summary>
+        /// Opens an attempt at a chart: the server charges the stamina and hands
+        /// back the seed this run must be played with.
+        /// </summary>
+        public async Task<ApiResult<RunTicket>> StartRunAsync(string stageId)
+        {
+            ApiResult<RunTicket> result = await SendAsync<RunTicket>(
+                UnityWebRequest.kHttpVerbPOST, "/v1/runs",
+                new StartRunRequest(stageId),
+                authenticate: true,
+                idempotencyKey: Guid.NewGuid().ToString());
+
+            if (result.IsSuccess) _playerETag = ETagFor(result.Value!.Player);
+
+            return result;
+        }
 
         // ------------------------------------------------------------ transport
 

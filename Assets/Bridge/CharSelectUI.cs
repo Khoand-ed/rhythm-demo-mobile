@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using Data.Char;
 using Data.Player;
+using Promuse.Contracts.Runs;
+using Promuse.Net;
 using DG.Tweening;
 using Manager;
 using Tools;
@@ -264,8 +266,44 @@ public class CharSelectUI : UIBase
 
         leaving = true;
 
-        SongSession.Set(chart);
-        SongSession.SetCharacter(selected);
+        StartRunAsync(chart, selected);
+    }
+
+    /// <summary>
+    /// 服务端先开局 / The server opens the run before anything else happens: it
+    /// charges the stage's stamina and issues the seed this attempt must be
+    /// played with. Entering the song first and telling the server afterwards
+    /// would mean a player who closes the app mid-song played for free.
+    ///
+    /// 参数传进来 / The chart and the operator are passed in rather than read off
+    /// the instance, because this screen destroys itself partway through and the
+    /// continuation would otherwise be touching a dead object.
+    /// </summary>
+    private async void StartRunAsync(SongChart starting, CharData operatorChosen)
+    {
+        ApiResult<RunTicket> ticket =
+            await PlayerManager.Inst().Api.StartRunAsync(starting.stageId);
+
+        if (!ticket.IsSuccess)
+        {
+            // 放开按钮 / Let them try again. INSUFFICIENT_STAMINA is an ordinary
+            // answer here, not a fault, and the player has to be able to back out
+            // and come back later.
+            leaving = false;
+
+            CommonDialogUI.Message(CommonDialogUI.GroundType.BLACK, ticket.Message);
+            return;
+        }
+
+        PlayerData player = PlayerManager.Inst().Get();
+        if (player != null) player.ApplyServerState(ticket.Value.Player);
+
+        SongSession.Set(starting);
+        SongSession.SetCharacter(operatorChosen);
+
+        // Carried for Phase 4: a submitted result has to name the run it belongs
+        // to, and have been played against the sequence the server issued.
+        SongSession.SetRun(ticket.Value.RunId, ticket.Value.Seed);
 
         // SoundManager is DontDestroyOnLoad, so the front-end's music would keep
         // playing underneath the song. HomeUI starts it again on the way back,
@@ -285,8 +323,7 @@ public class CharSelectUI : UIBase
         //
         // 这个闭包不碰实例成员 / The lambda touches no instance member, so destroying
         // this screen while it is pending is safe.
-        SongChart starting = chart;
-        string operatorId = selected.GetId();
+        string operatorId = operatorChosen.GetId();
 
         Delay.add(() =>
         {

@@ -72,7 +72,19 @@ namespace UI.Sub {
                         return;
                     }
                     GameObject prefab = data.GetDungeonPrefab();
-                    playerData.SetReason(playerData.GetReason() - data.GetReason());
+
+                    // 不在本地扣理智 / No local deduction any more. Stamina belongs
+                    // to the server, which charges it when a run is opened - see
+                    // CharSelectUI. Taking it here as well would make the bar drop
+                    // and then snap back on the next read, which reads as a bug
+                    // even though nothing was actually lost.
+                    //
+                    // 这个界面本来就没通 / This screen cannot start anything as it
+                    // stands: DungeonMeta declares the data it needs and the
+                    // project contains no DungeonMeta asset, so GetDungeonPrefab
+                    // returns null. Wiring it to /v1/runs would mean inventing the
+                    // content first. The affordability check above is left because
+                    // it only reads.
                     // 防止点击两次
                     data = null;
                     UIManager.Inst().Hide("HomeUI", true);

@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using Data.Item;
+using Promuse.Contracts.Shop;
+using Promuse.Net;
 using Data.Mission;
 using Data.Player;
 using DG.Tweening;
@@ -53,6 +55,27 @@ namespace UI.Sub {
             SoundManager.Inst().PlayMusic(clip, false, () => {
                 SoundManager.Inst().PlayMusic(loop_clip, true);
             });
+
+            LoadShelfAsync();
+        }
+
+        /// <summary>
+        /// 标签页不能 await / The tabs are wired straight to ShowPriceItem through
+        /// a UnityEvent in the prefab, so they cannot await anything. The fetch
+        /// happens once here and the tab handler reads what is already in memory.
+        ///
+        /// 6 是第一个分区 / Every offer is priced in 6 (Orirock), which is the
+        /// first tab, so that is the shelf drawn on opening.
+        /// </summary>
+        private async void LoadShelfAsync() {
+            ApiResult<ShopCatalog> result = await ShopManager.Inst().LoadAsync();
+
+            if (!result.IsSuccess) {
+                CommonDialogUI.Message(CommonDialogUI.GroundType.BLACK, result.Message);
+                return;
+            }
+
+            ShowPriceItem(6);
         }
 
         public override void Hide(bool destroy = false) {
@@ -147,8 +170,48 @@ namespace UI.Sub {
             private Image img_all_price_icon;
             private Text txt_all_price_amount;
 
+            private Button buyButton;
+
             private int buy_amount;
             private int all_price_amount;
+
+            /// <summary>
+            /// 服务端收钱 / The server takes the payment and answers with what the
+            /// bag became. The client no longer adds the goods and subtracts the
+            /// price itself - it asks, and applies what comes back.
+            /// </summary>
+            private async void BuyAsync() {
+                // 防重复提交 / A second press while the first is in flight is a
+                // second purchase. The idempotency key would not stop that: two
+                // presses are two different requests, not a retry of one.
+                buyButton.interactable = false;
+
+                ApiResult<PurchaseResult> result = await PlayerManager.Inst().Api
+                    .PurchaseAsync(data.GetOfferId(), buy_amount);
+
+                buyButton.interactable = true;
+
+                if (!result.IsSuccess) {
+                    // INSUFFICIENT_FUNDS reads as "not enough to pay for that",
+                    // which is the server's wording and already what a player
+                    // needs to be told.
+                    CommonDialogUI.Message(CommonDialogUI.GroundType.BLACK, result.Message);
+                    return;
+                }
+
+                // 一次结账算一次 / One checkout, one tick - not one per unit, so
+                // buying 99 of something does not clear a "purchase 3 times"
+                // mission on its own.
+                MissionManager.Inst().Notify(MissionGoal.BuyShopItem);
+
+                ui.data.ApplyServerState(result.Value.Player);
+
+                CommonDialogUI.Message(CommonDialogUI.GroundType.WHITE,
+                    "Purchased: " + data.GetSell().GetItemMeta().GetName()
+                    + " x " + result.Value.Granted.Amount).AddBackListener(Hide);
+
+                ui.UpdateView();
+            }
 
             private void SetBuyAmount(int value) {
                 buy_amount = value;
@@ -191,17 +254,12 @@ namespace UI.Sub {
                     // 最多数量事件
                     SetBuyAmount(Math.Min(ui.data.GetItemAmount(data.GetPrice().GetId()) / data.GetPrice().GetAmount(), 99));
                 });
-                transform.GetComponent<Button>("BuyButton").onClick.AddListener(() => {
+                buyButton = transform.GetComponent<Button>("BuyButton");
+                buyButton.onClick.AddListener(() => {
                     // 购买事件
                     if (buy_amount == 0) return;
-                    ui.data.AddItem(data.GetSell().GetId(), data.GetSell().GetAmount() * buy_amount);
-                    ui.data.TakeItem(data.GetPrice().GetId(), all_price_amount);
-                    // 一次结账算一次 / One checkout, one tick - not one per unit, so buying 99 of
-                    // something does not clear a "purchase 3 times" mission on its own. TakeItem
-                    // throws when the player cannot afford it, which stops the credit here too.
-                    MissionManager.Inst().Notify(MissionGoal.BuyShopItem);
-                    CommonDialogUI.Message(CommonDialogUI.GroundType.WHITE, "Purchased: " + data.GetSell().GetItemMeta().GetName() + " x " + (data.GetSell().GetAmount() * buy_amount)).AddBackListener(Hide);
-                    ui.UpdateView();
+
+                    BuyAsync();
                 });
             }
 

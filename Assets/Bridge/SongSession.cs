@@ -19,6 +19,24 @@ public static class SongSession
 
     public static CharData Character { get; private set; }
 
+    /// <summary>
+    /// 这一局的身份 / The run the server opened for this attempt, and the seed it
+    /// issued. Empty when gameplay was entered straight from the Editor without
+    /// going through the song select, which is a supported way to work.
+    ///
+    /// The seed is here because JudgeUpgradePassive rolls per judgement: a result
+    /// the server can re-simulate has to have been played against the sequence
+    /// the server knows. Nothing reads it yet - Phase 4 does.
+    /// </summary>
+    public static System.Guid RunId { get; private set; }
+
+    public static long Seed { get; private set; }
+
+    public static bool HasRun
+    {
+        get { return RunId != System.Guid.Empty; }
+    }
+
     public static bool HasChart
     {
         get { return Chart != null; }
@@ -39,6 +57,13 @@ public static class SongSession
         Character = character;
     }
 
+    /// <summary>Written once, by whatever opened the run against the server.</summary>
+    public static void SetRun(System.Guid runId, long seed)
+    {
+        RunId = runId;
+        Seed = seed;
+    }
+
     // Cleared once gameplay has taken the chart, so opening the gameplay scene
     // directly in the Editor still falls back to whatever the scene has wired.
     //
@@ -52,5 +77,7 @@ public static class SongSession
     {
         Chart = null;
         Character = null;
+        RunId = System.Guid.Empty;
+        Seed = 0;
     }
 }
