@@ -1,0 +1,37 @@
+<Project>
+
+  <!--
+    Settings every backend project inherits. Kept here rather than repeated in
+    each .csproj so that a framework bump is one edit and cannot half-land.
+
+    Scoped to server/ by where this file sits: MSBuild walks up from a project
+    directory and stops at the first Directory.Build.props it finds, so nothing
+    under Assets/ is touched. Unity has its own build and must stay that way.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <!--
+      On by default, and Promuse.Scoring turns it back off for itself. The
+      linked Unity sources predate nullable reference types and annotating them
+      would mean editing game code to satisfy the server - exactly backwards.
+    -->
+    <Nullable>enable</Nullable>
+
+    <!--
+      Warnings stay warnings. Not a style preference: the linked Unity files use
+      Unity's own naming (lowercase public fields, `name`), which trips analyzer
+      rules the game has no reason to care about. Failing the server build over
+      them would push people to edit the shared source, which is the one thing
+      that must not happen casually.
+    -->
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+</Project>

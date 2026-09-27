@@ -1,0 +1,799 @@
+openapi: 3.1.0
+
+info:
+  title: Promuse Backend API
+  version: 1.0.0-draft.1
+  summary: Authentication and player state for the Promuse mobile rhythm game.
+  description: |
+    Contract for **Phase 1 (authentication)** and **Phase 2 (player state)**. Written
+    before any implementation so the client and the server are built against the same
+    agreement, rather than the client being written against whatever the server
+    happened to return.
+
+    Economy mutations (shop, gacha, mission claims) are deliberately absent. They are
+    Phase 3 and every one of them is server-authoritative, so they get their own
+    endpoints rather than being folded into a player-state write. The only writes here
+    are the two fields the client legitimately owns: the squad and the desktop
+    character.
+
+    ## Where the data comes from
+
+    The shapes below mirror `Assets/Arknights/Data/Player/PlayerData.cs`, which is what
+    the game holds today as a ScriptableObject that nothing ever writes back. Field
+    names are anglicised where the original is Chinese: `reason` (理智) is `stamina`
+    here, because "reason" reads as a cause rather than a resource in English.
+
+    ## Conventions that apply to every operation
+
+    - **Versioning.** The major version is in the path (`/v1/...`). A breaking change
+      opens `/v2` and both run side by side; a mobile client that has not updated must
+      keep working, because a store rollout is neither instant nor reversible
+      per-device.
+    - **Errors** are RFC 9457 Problem Details (`application/problem+json`), never a
+      bare string. `code` is the machine-readable discriminator the client switches on;
+      `title` and `detail` are for humans and may be reworded without a version bump.
+    - **Idempotency.** Every unsafe operation that creates or consumes something takes
+      an `Idempotency-Key`. A mobile client on a train loses its response, not its
+      request: without this, a retried sign-up creates a second account. The server
+      stores the key with the response for 24 hours and replays it verbatim.
+    - **Optimistic concurrency.** `GET /v1/players/me` returns an `ETag`; writes take
+      `If-Match` and answer `412` when the state moved underneath. This is what stops
+      two devices silently overwriting one another, and it is why `stateVersion` is in
+      the body as well - the client shows the conflict, it does not resolve it alone.
+    - **Time.** Every response carries `serverTime`, and every deadline the game
+      enforces (stamina regeneration, daily reset) is computed from it. The device
+      clock is attacker-controlled and is never an input.
+    - **Rate limits** answer `429` with `Retry-After`. The client honours it rather
+      than retrying on a schedule of its own.
+
+tags:
+  - name: auth
+    description: |
+      Sign-in, token rotation and account linking. Phase 1.
+
+      The game opens straight into play with a guest session; credentials are attached
+      later through `/v1/auth/link`. A rhythm game that demands a sign-up before the
+      first note loses players at the only screen they have not yet enjoyed.
+  - name: players
+    description: Player state - the save that `PlayerData` never had. Phase 2.
+
+servers:
+  - url: http://localhost:8080
+    description: Local development.
+  - url: https://staging.api.promuse.example
+    description: Staging.
+  - url: https://api.promuse.example
+    description: Production.
+
+security:
+  - bearerAuth: []
+
+paths:
+  /v1/auth/guest:
+    post:
+      tags: [auth]
+      operationId: signInAsGuest
+      summary: Open a session for a device with no account yet.
+      description: |
+        The first call for a given `deviceId` creates a player; later calls return the
+        same one. Idempotent by `deviceId` as well as by `Idempotency-Key`, because a
+        reinstall replays this with a fresh key against the same device.
+
+        A guest session is a real session: it can play, save and appear on a
+        leaderboard. What it cannot do is survive losing the device, which is what
+        `/v1/auth/link` is for.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GuestSignInRequest'
+      responses:
+        '200':
+          description: Known device, session reopened.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSession'
+        '201':
+          description: New player created for this device.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSession'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/auth/register:
+    post:
+      tags: [auth]
+      operationId: register
+      summary: Create an account with a username and password.
+      description: |
+        Replaces `PlayerManager.Register`, which held new accounts in a `List` in
+        memory and lost them when the app closed.
+
+        The password is hashed with Argon2id server-side and is never stored, logged or
+        returned. `409` when the username is taken - the case
+        `PlayerManager.Register` threw an exception for.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Account created and signed in.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSession'
+        '409':
+          description: That username is already taken.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              example:
+                type: https://api.promuse.example/problems/username-taken
+                title: Username already taken
+                status: 409
+                code: USERNAME_TAKEN
+                detail: That username is already taken.
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/auth/login:
+    post:
+      tags: [auth]
+      operationId: login
+      summary: Sign in with a username and password.
+      description: |
+        Replaces the plaintext comparison in `PlayerManager.Login`, which read two
+        seeded `ScriptableObject`s out of `Resources/Data/User`.
+
+        A wrong username and a wrong password return the identical `401` and the
+        identical `code`. Distinguishing them tells an attacker which usernames exist.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Signed in.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSession'
+        '401':
+          description: Wrong username or password - deliberately indistinguishable.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              example:
+                type: https://api.promuse.example/problems/invalid-credentials
+                title: Invalid credentials
+                status: 401
+                code: INVALID_CREDENTIALS
+                detail: Incorrect username or password. Please try again.
+        '423':
+          description: Locked after repeated failures. `Retry-After` says for how long.
+          headers:
+            Retry-After:
+              $ref: '#/components/headers/RetryAfter'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/auth/link:
+    post:
+      tags: [auth]
+      operationId: linkCredentials
+      summary: Attach a username and password to the signed-in guest account.
+      description: |
+        Keeps the player id, the level, the inventory and the leaderboard history the
+        guest session already earned. This is an upgrade, not a fresh start - losing
+        progress at this step is the reason players refuse to sign up at all.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '200':
+          description: Credentials attached. Existing tokens stay valid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSession'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: This account is not a guest, or the username is taken.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/auth/refresh:
+    post:
+      tags: [auth]
+      operationId: refreshTokens
+      summary: Exchange a refresh token for a new pair.
+      description: |
+        Rotation: the presented refresh token is revoked and a new one issued, so a
+        stolen token is usable at most once.
+
+        **Reuse detection.** A refresh token presented twice means one of the two
+        holders is an attacker, and the server cannot tell which. The whole token
+        family is revoked and both are forced to sign in again - `401` with
+        `REFRESH_TOKEN_REUSED`. The client treats that as a hard sign-out and must not
+        retry.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: New token pair. The presented refresh token is now dead.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPair'
+        '401':
+          description: Expired, revoked, or replayed.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/auth/logout:
+    post:
+      tags: [auth]
+      operationId: logout
+      summary: Revoke the current refresh token.
+      description: |
+        The access token is not revoked - it is a short-lived JWT and is allowed to
+        expire on its own. Revoking it would mean a blocklist checked on every request,
+        trading a stateless hot path for a few minutes of exposure that the short
+        lifetime already bounds.
+
+        Replaces `PlayerManager.Exit`, which set a field to null.
+      responses:
+        '204':
+          description: Signed out. Safe to call twice.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/players/me:
+    get:
+      tags: [players]
+      operationId: getMyPlayerState
+      summary: The whole save for the signed-in player.
+      description: |
+        One call, everything the Home screen binds to. Returns an `ETag`; hold it and
+        send it back as `If-Match` on any write.
+
+        `stamina.current` is **computed at read time** from the stored value and the
+        timestamp of the last change - it is not a number ticking down in a row
+        somewhere. That is what makes changing the device clock useless, and it is why
+        `PlayerData.GetMaxReason` has to live on the server too.
+      parameters:
+        - $ref: '#/components/parameters/IfNoneMatch'
+      responses:
+        '200':
+          description: Current state.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlayerState'
+        '304':
+          description: Unchanged since the `If-None-Match` value.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/players/me/squad:
+    put:
+      tags: [players]
+      operationId: setSquad
+      summary: Set the four squad slots.
+      description: |
+        Exactly four entries, `null` for an empty slot - the shape
+        `PlayerData.GetSquad()` normalises to. The server rejects a character the
+        player does not own, and the same character in two slots at once.
+
+        One of only two writes in Phase 2: the squad is a preference, so the client may
+        state it outright. Anything that grants or spends belongs to Phase 3.
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SquadRequest'
+      responses:
+        '200':
+          description: Saved. Returns the whole state so the client never guesses.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlayerState'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/players/me/desktop-character:
+    put:
+      tags: [players]
+      operationId: setDesktopCharacter
+      summary: Set the character shown on the Home screen.
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DesktopCharacterRequest'
+      responses:
+        '200':
+          description: Saved.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlayerState'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Short-lived access token from any `/v1/auth/*` sign-in. Carries the player id
+        and nothing the client is trusted to assert - no level, no balances. Anything
+        the server needs in order to decide is read server-side, or it is not a
+        decision the server is actually making.
+
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: |
+        Client-generated UUID, stable across retries of the *same* logical request and
+        different for a new one. The server stores it against the response for 24 hours
+        and replays that response rather than acting twice.
+
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      schema:
+        type: string
+      description: |
+        The `ETag` from the last `GET /v1/players/me`. A mismatch is `412`; absent is
+        `428`. Required rather than optional on purpose - an optional precondition is
+        one the client forgets, and the bug surfaces as a player losing progress on
+        their second device.
+
+    IfNoneMatch:
+      name: If-None-Match
+      in: header
+      required: false
+      schema:
+        type: string
+      description: Answer `304` if the state still matches this ETag.
+
+  headers:
+    ETag:
+      schema:
+        type: string
+      description: Opaque version of the player state. Send back as `If-Match`.
+    RetryAfter:
+      schema:
+        type: integer
+      description: Seconds to wait before retrying.
+
+  responses:
+    BadRequest:
+      description: Malformed request.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+
+    Unauthorized:
+      description: Missing, expired or invalid access token.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+
+    ValidationFailed:
+      description: Well-formed but semantically wrong. `errors` names the fields.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: https://api.promuse.example/problems/validation-failed
+            title: Validation failed
+            status: 422
+            code: VALIDATION_FAILED
+            errors:
+              squad:
+                - AMIYA appears in slot 0 and slot 2.
+
+    PreconditionFailed:
+      description: |
+        The state changed since the ETag was issued - another device wrote first. The
+        client re-reads and shows the conflict; it does not merge silently.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+
+    PreconditionRequired:
+      description: The write needs an `If-Match` and did not carry one.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+
+    TooManyRequests:
+      description: Rate limited.
+      headers:
+        Retry-After:
+          $ref: '#/components/headers/RetryAfter'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+
+    InternalError:
+      description: |
+        Unexpected server fault. `traceId` correlates with the server log; nothing
+        about the internals is ever exposed in `detail`.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+
+  schemas:
+
+    Problem:
+      type: object
+      description: RFC 9457 Problem Details.
+      required: [type, title, status, code]
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+        code:
+          type: string
+          description: |
+            Stable machine-readable discriminator. The client switches on this, never
+            on `title` or `detail`, which are free to be reworded or localised.
+          examples: [USERNAME_TAKEN, INVALID_CREDENTIALS, STATE_CONFLICT]
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+        traceId:
+          type: string
+
+    GuestSignInRequest:
+      type: object
+      required: [deviceId]
+      properties:
+        deviceId:
+          type: string
+          minLength: 8
+          maxLength: 128
+          description: |
+            Stable per install. Identifies the device, and is **not** a credential - it
+            is guessable, so it grants a guest session and nothing an account holds.
+
+    RegisterRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 24
+          pattern: '^[A-Za-z0-9_]+$'
+        password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 128
+          description: |
+            Sent over TLS, hashed with Argon2id on arrival, never stored in the clear,
+            never logged, never echoed back in any response.
+        deviceId:
+          type: string
+          description: Optional. Links this device to the new account at creation.
+
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+          format: password
+
+    RefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+
+    TokenPair:
+      type: object
+      required: [accessToken, tokenType, expiresIn, refreshToken, refreshExpiresIn]
+      properties:
+        accessToken:
+          type: string
+        tokenType:
+          type: string
+          const: Bearer
+        expiresIn:
+          type: integer
+          description: Seconds. Short by design - revocation leans on this.
+          examples: [900]
+        refreshToken:
+          type: string
+        refreshExpiresIn:
+          type: integer
+          examples: [2592000]
+
+    AuthSession:
+      type: object
+      required: [playerId, isGuest, tokens, serverTime]
+      properties:
+        playerId:
+          type: string
+          format: uuid
+        isGuest:
+          type: boolean
+          description: True until `/v1/auth/link` attaches credentials.
+        tokens:
+          $ref: '#/components/schemas/TokenPair'
+        serverTime:
+          $ref: '#/components/schemas/ServerTime'
+
+    ServerTime:
+      type: string
+      format: date-time
+      description: |
+        Authoritative clock. Every deadline the game enforces is derived from this, so
+        that changing the device clock changes nothing.
+
+    PlayerState:
+      type: object
+      required:
+        - playerId
+        - displayName
+        - level
+        - exp
+        - expToNextLevel
+        - stamina
+        - characters
+        - squad
+        - inventory
+        - stateVersion
+        - serverTime
+      properties:
+        playerId:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        level:
+          type: integer
+          minimum: 1
+          maximum: 120
+          description: Cap matches `PlayerData.GetMaxLevel()`.
+        exp:
+          type: integer
+          minimum: 0
+        expToNextLevel:
+          type: integer
+          description: |
+            From `PlayerData.GetMaxExp(level)`. Computed server-side and sent, rather
+            than recomputed by the client, so retuning the curve needs no app update
+            and the two can never disagree.
+        stamina:
+          $ref: '#/components/schemas/Stamina'
+        characters:
+          type: array
+          items:
+            $ref: '#/components/schemas/CharacterState'
+        squad:
+          $ref: '#/components/schemas/Squad'
+        desktopCharacterId:
+          type: [string, 'null']
+        inventory:
+          type: array
+          items:
+            $ref: '#/components/schemas/ItemStack'
+        stateVersion:
+          type: integer
+          description: |
+            Increments on every accepted write. The same value the `ETag` encodes,
+            surfaced in the body so a conflict can be explained to the player rather
+            than only handled by the transport.
+        serverTime:
+          $ref: '#/components/schemas/ServerTime'
+
+    Stamina:
+      type: object
+      description: |
+        `PlayerData.reason` (理智). Regenerates with wall-clock time, so the server owns
+        it outright.
+      required: [current, max]
+      properties:
+        current:
+          type: integer
+          minimum: 0
+        max:
+          type: integer
+          description: From `PlayerData.GetMaxReason(level)`.
+        nextPointAt:
+          type: [string, 'null']
+          format: date-time
+          description: When the next point lands. Null at full.
+        fullAt:
+          type: [string, 'null']
+          format: date-time
+
+    CharacterState:
+      type: object
+      description: Mirrors `Data.Char.CharData`.
+      required: [characterId, elite, level, exp, trust]
+      properties:
+        characterId:
+          type: string
+          examples: [AMIYA, NOVA, ECHO, PULSE]
+          description: |
+            Matches the ids under `Resources/Meta/Char`. Only the player's progression
+            lives here - artwork, rarity and stats stay client-side content, so a
+            balance change is a content update and not a database migration.
+        elite:
+          type: integer
+          minimum: 0
+        level:
+          type: integer
+          minimum: 1
+        exp:
+          type: integer
+          minimum: 0
+        trust:
+          type: integer
+          minimum: 0
+
+    Squad:
+      type: array
+      minItems: 4
+      maxItems: 4
+      description: |
+        Always four entries, `null` for empty - the shape `PlayerData.GetSquad()`
+        normalises to. Fixed length rather than a list of filled slots, because the
+        slot position is meaningful.
+      items:
+        type: [string, 'null']
+
+    ItemStack:
+      type: object
+      description: Mirrors `Data.Item.ItemStack`.
+      required: [itemId, amount]
+      properties:
+        itemId:
+          type: integer
+          description: Ids from `Resources/Meta/Item` - 1 Orundum, 2 LMD, 6 Orirock.
+        amount:
+          type: integer
+          minimum: 1
+
+    SquadRequest:
+      type: object
+      required: [squad]
+      properties:
+        squad:
+          $ref: '#/components/schemas/Squad'
+
+    DesktopCharacterRequest:
+      type: object
+      required: [characterId]
+      properties:
+        characterId:
+          type: [string, 'null']
+          description: Null clears it. Must be a character the player owns.

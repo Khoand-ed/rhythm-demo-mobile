@@ -1,0 +1,56 @@
+# Local development dependencies for the Promuse backend.
+#
+# Only the database lives here. The API runs from the SDK on the host during
+# development (dotnet watch), so that a rebuild is a keystroke rather than an
+# image build - containerising the API belongs with the deploy pipeline, not
+# with the inner loop.
+#
+#   docker compose -f server/docker-compose.yml up -d
+#   docker compose -f server/docker-compose.yml down        # keeps the data
+#   docker compose -f server/docker-compose.yml down -v     # drops it
+#
+# Copy server/env.example to server/.env first. The .env is gitignored: it is
+# the file that grows a real password the moment this points at anything but a
+# laptop.
+
+name: promuse-dev
+
+services:
+  postgres:
+    # Pinned to a minor line rather than :latest. A database that silently
+    # major-upgrades under a running project is a bad afternoon - the data
+    # directory format changes and the old volume will not mount.
+    image: postgres:17.6-alpine
+    container_name: promuse-postgres
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-promuse}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-promuse_dev_only}
+      POSTGRES_DB: ${POSTGRES_DB:-promuse}
+      # Deterministic collation. Left to the host locale, an index built on one
+      # machine can sort differently on another, and text comparisons stop
+      # agreeing between a developer's laptop and CI.
+      POSTGRES_INITDB_ARGS: "--locale=C --encoding=UTF8"
+
+    ports:
+      # Bound to loopback on purpose. Without the 127.0.0.1 prefix Docker
+      # publishes on every interface, and on a laptop that means the database
+      # is reachable from the coffee shop's wifi.
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+    healthcheck:
+      # depends_on with service_healthy waits on this, so the API never opens a
+      # connection against a server that is still running its init scripts.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-promuse} -d ${POSTGRES_DB:-promuse}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  postgres-data:
+    name: promuse-postgres-data

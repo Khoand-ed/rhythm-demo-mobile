@@ -156,3 +156,10 @@ InitTestScene*.unity*
 # Python bytecode cache from the ci/ checks. Regenerated on every run.
 __pycache__/
 *.pyc
+
+# Test results and coverage from `dotnet test --results-directory`. Written by
+# backend-checks.yml and by anyone running that command locally. The root-level
+# one is there too because the results directory is relative to the working
+# directory, so running it from the repository root puts it elsewhere.
+/server/artifacts/
+/artifacts/

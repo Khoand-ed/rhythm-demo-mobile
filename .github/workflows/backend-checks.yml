@@ -1,0 +1,214 @@
+name: backend-checks
+
+# Builds and tests the .NET backend under server/.
+#
+# Needs no Unity licence and no secrets, so like project-checks.yml this runs on
+# every pull request including ones from forks. That is the same split those two
+# workflows already describe, applied to the third thing in this repository.
+
+on:
+  push:
+    branches: [main]
+    paths: &backend-paths
+      - 'server/**'
+
+      # 最不明显的一行 / The least obvious line in this file, and the one most
+      # likely to be "tidied" away.
+      #
+      # Promuse.Scoring does not copy the game's scoring rules, it COMPILES them
+      # by reference: see the Compile glob in Promuse.Scoring.csproj. A change to
+      # RunState.cs or to a passive is therefore a change to the server, and
+      # without this path the build that would have caught it never runs - the
+      # failure would surface much later as the server and the client quietly
+      # disagreeing about a score.
+      - 'Assets/Source/Script/Core/**'
+
+      - '.github/workflows/backend-checks.yml'
+
+  pull_request:
+    paths: *backend-paths
+
+  workflow_dispatch:
+
+  # Same reasoning as unity-tests.yml, different things to rot: the setup-dotnet
+  # action, the NuGet feed, the postgres image tag, and the SDK patch line that
+  # 10.0.x floats onto. A weekly run turns "red on the morning someone needs to
+  # merge" into a notification on a quiet Monday.
+  #
+  # 03:00 rather than 02:00 so it does not start alongside unity-tests.
+  schedule:
+    - cron: '0 3 * * 1'
+
+concurrency:
+  group: backend-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Build and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      # lfs: false for the reason project-checks.yml gives at length - the free
+      # LFS bandwidth is shared with every human clone. Nothing here reads a
+      # binary: the linked game sources are .cs, which .gitattributes leaves as
+      # text.
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+          fetch-depth: 1
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          # Floats on the patch line rather than pinning 10.0.401. A backend has
+          # none of the reproducibility constraints the Unity editor version has,
+          # and the weekly run above is what catches a bad patch early.
+          dotnet-version: '10.0.x'
+
+      # Keyed on the project files rather than a lock file: the repository does
+      # not use packages.lock.json, so this is what actually changes when a
+      # dependency does.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('server/**/*.csproj', 'server/dotnet-tools.json') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Restore
+        run: dotnet restore server/Promuse.slnx
+
+      # No -warnaserror, deliberately. Directory.Build.props leaves warnings as
+      # warnings because the linked Unity sources use Unity's own conventions,
+      # and failing the server build over one would push somebody to edit game
+      # code to satisfy the server. The build is at zero warnings today, so a new
+      # one is still visible in this log.
+      - name: Build
+        run: dotnet build server/Promuse.slnx --no-restore --configuration Release
+
+      # These run the game's own RunState, linked from Assets/Source/Script/Core.
+      # A failure here does not mean the server is broken - it means a scoring
+      # rule moved and the two sides would have started disagreeing silently.
+      - name: Test
+        run: >-
+          dotnet test server/Promuse.slnx
+          --no-build
+          --configuration Release
+          --logger "trx;LogFileName=results.trx"
+          --results-directory server/artifacts/test-results
+          --collect:"XPlat Code Coverage"
+
+      # Under server/ rather than the repository root so that everything the
+      # backend generates stays in one place, and one .gitignore rule covers a
+      # developer running this exact command locally.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-test-results
+          path: server/artifacts/test-results
+          retention-days: 14
+
+  migrations:
+    name: Migrations apply to a real database
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    # A separate job rather than more steps on the one above. Unit tests need no
+    # database and should not wait on one starting, and when this goes red the
+    # failure is already attributed: the schema, not the code.
+    services:
+      postgres:
+        # Same minor line as server/docker-compose.yml. Different versions here
+        # and locally is how a migration passes CI and fails on a developer's
+        # machine.
+        image: postgres:17.6-alpine
+        env:
+          POSTGRES_USER: promuse
+          POSTGRES_PASSWORD: ci_only_throwaway
+          POSTGRES_DB: promuse
+        options: >-
+          --health-cmd "pg_isready -U promuse -d promuse"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+        ports:
+          - 5432:5432
+
+    env:
+      # Environment configuration outranks appsettings in ASP.NET Core's default
+      # order, so this wins over the development connection string in the repo
+      # without that file needing a CI-specific variant.
+      ConnectionStrings__Promuse: 'Host=localhost;Port=5432;Database=promuse;Username=promuse;Password=ci_only_throwaway'
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+          fetch-depth: 1
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('server/**/*.csproj', 'server/dotnet-tools.json') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      # 两个 job 两台机器 / Jobs run on separate runners with separate file
+      # systems, so the restore in build-and-test does not carry over here. The
+      # cache above brings back the downloaded packages but NOT
+      # obj/project.assets.json, which lives in the working tree and is what
+      # `dotnet ef` actually needs - without this it fails with NETSDK1004
+      # before it ever reaches the model.
+      - name: Restore
+        run: dotnet restore server/Promuse.slnx
+
+      # Explicit, so that a compile error is reported as a build failure rather
+      # than buried in `dotnet ef` output. The ef commands below reuse this.
+      - name: Build
+        run: dotnet build server/Promuse.slnx --no-restore
+
+      # dotnet-ef is a local tool pinned in server/dotnet-tools.json, so CI runs
+      # the same version a developer does instead of whatever is newest.
+      - name: Restore tools
+        working-directory: server
+        run: dotnet tool restore
+
+      # 这个检查才是重点 / The check worth having.
+      #
+      # Catches the commit that edits an entity and forgets `migrations add`.
+      # Without it that lands green, and the mismatch is only discovered when a
+      # deploy applies a schema the code no longer expects.
+      - name: Model has no un-migrated changes
+        working-directory: server
+        run: >-
+          dotnet dotnet-ef migrations has-pending-model-changes
+          -p src/Promuse.Persistence
+          -s src/Promuse.Api
+
+      # Applied against a real Postgres, not a mock. A migration that compiles is
+      # not a migration that runs: the filtered unique indexes on accounts are
+      # raw SQL and only a real server can say whether they are valid.
+      - name: Apply migrations
+        working-directory: server
+        run: >-
+          dotnet dotnet-ef database update
+          -p src/Promuse.Persistence
+          -s src/Promuse.Api
+
+      # Re-applying must be a no-op. This is what a redeploy does, and a
+      # migration that is not idempotent fails the second time in production
+      # rather than here.
+      - name: Re-applying is a no-op
+        working-directory: server
+        run: >-
+          dotnet dotnet-ef database update
+          -p src/Promuse.Persistence
+          -s src/Promuse.Api
