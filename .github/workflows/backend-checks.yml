@@ -161,6 +161,20 @@ jobs:
           restore-keys: |
             nuget-${{ runner.os }}-
 
+      # 两个 job 两台机器 / Jobs run on separate runners with separate file
+      # systems, so the restore in build-and-test does not carry over here. The
+      # cache above brings back the downloaded packages but NOT
+      # obj/project.assets.json, which lives in the working tree and is what
+      # `dotnet ef` actually needs - without this it fails with NETSDK1004
+      # before it ever reaches the model.
+      - name: Restore
+        run: dotnet restore server/Promuse.slnx
+
+      # Explicit, so that a compile error is reported as a build failure rather
+      # than buried in `dotnet ef` output. The ef commands below reuse this.
+      - name: Build
+        run: dotnet build server/Promuse.slnx --no-restore
+
       # dotnet-ef is a local tool pinned in server/dotnet-tools.json, so CI runs
       # the same version a developer does instead of whatever is newest.
       - name: Restore tools
