@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Promuse Backend API
-  version: 1.0.0-draft.2
+  version: 1.0.0-draft.3
   summary: Authentication and player state for the Promuse mobile rhythm game.
   description: |
     Contract for **Phase 1 (authentication)** and **Phase 2 (player state)**. Written
@@ -56,6 +56,12 @@ tags:
       first note loses players at the only screen they have not yet enjoyed.
   - name: players
     description: Player state - the save that `PlayerData` never had. Phase 2.
+  - name: shop
+    description: |
+      The economy, with the server holding the prices. Phase 3.
+  - name: runs
+    description: |
+      One attempt at a song. Phase 3 opens it; Phase 4 closes it with a result.
 
 servers:
   - url: http://localhost:8080
@@ -430,6 +436,139 @@ paths:
           $ref: '#/components/responses/ValidationFailed'
         '428':
           $ref: '#/components/responses/PreconditionRequired'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/shop/offers:
+    get:
+      tags: [shop]
+      operationId: getShopOffers
+      summary: What the shop is selling, and what it costs.
+      description: |
+        The catalogue and its prices come from the server. The client used to read
+        both out of `ShopItemDataList.asset` and do the arithmetic itself, which meant
+        the amount a player paid was a number their own device chose.
+
+        Ordered and stable, so the shop does not reshuffle itself between visits. A
+        price change is an UPDATE rather than a store release.
+      responses:
+        '200':
+          description: The offers currently on sale.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShopCatalog'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/shop/purchases:
+    post:
+      tags: [shop]
+      operationId: purchase
+      summary: Buy an offer.
+      description: |
+        The request names an offer and a quantity. It cannot name a price and it
+        cannot name a resulting balance - both were the client's arithmetic before
+        this existed.
+
+        全有或全无 / The debit, the credit, the ledger row and the state version move
+        together or not at all. A crash between the debit and the credit would
+        otherwise take a player's currency and give them nothing.
+
+        Returns the whole player, the way the Phase 2 writes do, so the client never
+        has to work out what its inventory became.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PurchaseRequest'
+      responses:
+        '201':
+          description: Bought.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurchaseResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: No such offer, or it is no longer on sale.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: |
+            `INSUFFICIENT_FUNDS`, or `IDEMPOTENCY_KEY_CONFLICT`. 409 rather than 422
+            for the balance: the request was well formed and the rule it broke is
+            about state. Retrying it unchanged after earning more can succeed, which
+            is what a conflict means.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/runs:
+    post:
+      tags: [runs]
+      operationId: startRun
+      summary: Open an attempt at a song.
+      description: |
+        Charges the stage's stamina and issues the run's seed.
+
+        不是"扣理智" / Deliberately a lifecycle rather than a debit. The far end of
+        this is a submitted result, and a result can only be trusted if the server
+        already knows a run was opened, on which chart, what it cost, and with which
+        random sequence. An endpoint that only spent stamina would have to be
+        redesigned into this the moment scores arrive.
+
+        The cost lives on the server. It had no home before: `DungeonMeta` declares a
+        `reason` field but no DungeonMeta asset exists in the project, so
+        SelectDungeonUI was spending a number that came from nowhere.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartRunRequest'
+      responses:
+        '201':
+          description: The run is open. Play.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunTicket'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Unknown chart, or not in rotation.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: |
+            `INSUFFICIENT_STAMINA`, or `STATE_CONFLICT` when two starts raced for the
+            last of the bar.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -826,3 +965,102 @@ components:
         characterId:
           type: [string, 'null']
           description: Null clears it. Must be a character the player owns.
+
+    ShopOffer:
+      type: object
+      required: [offerId, sellItemId, sellAmount, priceItemId, priceAmount]
+      properties:
+        offerId:
+          type: string
+          format: uuid
+        sellItemId:
+          type: integer
+          description: What the player receives. An id from Resources/Meta/Item.
+        sellAmount:
+          type: integer
+          minimum: 1
+        priceItemId:
+          type: integer
+          description: What they pay with. Every offer today is priced in 6, Orirock.
+        priceAmount:
+          type: integer
+          minimum: 1
+
+    ShopCatalog:
+      type: object
+      required: [offers, serverTime]
+      properties:
+        offers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ShopOffer'
+        serverTime:
+          $ref: '#/components/schemas/ServerTime'
+
+    PurchaseRequest:
+      type: object
+      required: [offerId, quantity]
+      properties:
+        offerId:
+          type: string
+          format: uuid
+        quantity:
+          type: integer
+          minimum: 1
+          maximum: 99
+          description: |
+            How many of the offer, in one checkout. The cap matches the client's own.
+            No total price is sent: a total the client computed is a total the client
+            can choose.
+
+    PurchaseResult:
+      type: object
+      required: [purchaseId, granted, charged, player]
+      properties:
+        purchaseId:
+          type: string
+          format: uuid
+          description: The ledger row, so a player can be told where their currency went.
+        granted:
+          $ref: '#/components/schemas/ItemStack'
+        charged:
+          $ref: '#/components/schemas/ItemStack'
+        player:
+          $ref: '#/components/schemas/PlayerState'
+
+    StartRunRequest:
+      type: object
+      required: [stageId]
+      properties:
+        stageId:
+          type: string
+          maxLength: 64
+          description: The chart being attempted, from `SongChart.stageId`.
+
+    RunTicket:
+      type: object
+      required: [runId, stageId, seed, staminaSpent, player, serverTime]
+      properties:
+        runId:
+          type: string
+          format: uuid
+        stageId:
+          type: string
+        seed:
+          type: integer
+          format: int64
+          description: |
+            服务端发, 从不接收 / Issued by the server and never accepted from the
+            client. JudgeUpgradePassive rolls `Random.value` per judgement, so the
+            scoring rules are not deterministic and the server cannot re-simulate a
+            run without knowing the sequence. If the client chose this number it
+            would simply re-roll until the draw was favourable.
+
+            The client seeds its own generator from this before the first note.
+        staminaSpent:
+          type: integer
+          minimum: 0
+        player:
+          $ref: '#/components/schemas/PlayerState'
+        serverTime:
+          $ref: '#/components/schemas/ServerTime'

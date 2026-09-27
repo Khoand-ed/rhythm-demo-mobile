@@ -83,6 +83,21 @@ namespace Promuse.Contracts
         /// <summary>A write arrived without the If-Match it requires.</summary>
         public const string PreconditionRequired = "PRECONDITION_REQUIRED";
 
+        /// <summary>The offer is unknown or has been retired from the shop.</summary>
+        public const string OfferNotFound = "OFFER_NOT_FOUND";
+
+        /// <summary>
+        /// The player cannot afford the purchase. Distinct from a validation
+        /// failure: the request was perfectly well formed, the balance was not.
+        /// </summary>
+        public const string InsufficientFunds = "INSUFFICIENT_FUNDS";
+
+        /// <summary>Not enough stamina to start the run.</summary>
+        public const string InsufficientStamina = "INSUFFICIENT_STAMINA";
+
+        /// <summary>The chart is unknown, or is not in rotation.</summary>
+        public const string StageNotFound = "STAGE_NOT_FOUND";
+
         public const string RateLimited = "RATE_LIMITED";
         public const string InternalError = "INTERNAL_ERROR";
     }
