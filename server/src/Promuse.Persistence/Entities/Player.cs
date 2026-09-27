@@ -46,4 +46,11 @@ public class Player
     public DateTimeOffset CreatedAt { get; set; }
 
     public DateTimeOffset UpdatedAt { get; set; }
+
+    public ICollection<PlayerCharacter> Characters { get; set; } = [];
+
+    public ICollection<PlayerItem> Items { get; set; } = [];
+
+    /// <summary>Always four rows. See <see cref="SquadSlot"/>.</summary>
+    public ICollection<SquadSlot> Squad { get; set; } = [];
 }
