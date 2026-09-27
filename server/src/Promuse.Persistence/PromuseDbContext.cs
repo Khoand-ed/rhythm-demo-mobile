@@ -24,6 +24,29 @@ public class PromuseDbContext(DbContextOptions<PromuseDbContext> options) : DbCo
 
     public DbSet<SquadSlot> SquadSlots => Set<SquadSlot>();
 
+    public DbSet<ShopOffer> ShopOffers => Set<ShopOffer>();
+
+    public DbSet<Purchase> Purchases => Set<Purchase>();
+
+    public DbSet<Run> Runs => Set<Run>();
+
+    public DbSet<Stage> Stages => Set<Stage>();
+
+    /// <summary>
+    /// Readable, stable ids for the seeded catalogue - obviously seed data at a
+    /// glance in psql, and identical on every machine.
+    /// </summary>
+    private static ShopOffer Offer(int n, (int Id, int Amount) sell, (int Id, int Amount) price) => new()
+    {
+        Id = new Guid($"11111111-0000-0000-0000-{n:D12}"),
+        SellItemId = sell.Id,
+        SellAmount = sell.Amount,
+        PriceItemId = price.Id,
+        PriceAmount = price.Amount,
+        IsActive = true,
+        SortOrder = n,
+    };
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -118,6 +141,89 @@ public class PromuseDbContext(DbContextOptions<PromuseDbContext> options) : DbCo
             entity.HasOne(s => s.Player)
                   .WithMany(p => p.Squad)
                   .HasForeignKey(s => s.AccountId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Stage>(entity =>
+        {
+            entity.ToTable("stages");
+            entity.HasKey(st => st.StageId);
+            entity.Property(st => st.StageId).HasMaxLength(64);
+
+            entity.ToTable(t => t.HasCheckConstraint(
+                "ck_stages_cost_not_negative", "stamina_cost >= 0"));
+
+            // 项目里真实存在的三张谱 / The three charts that actually exist in
+            // Assets/Beatmaps. The costs are new numbers - nothing in the project
+            // ever set one - chosen so a full level-1 bar of 82 is roughly ten
+            // attempts, and the hard chart costs double.
+            entity.HasData(
+                new Stage { StageId = "stage_001", StaminaCost = 6 },
+                new Stage { StageId = "stage_AIW", StaminaCost = 6 },
+                new Stage { StageId = "stage_AIW_hard", StaminaCost = 12 });
+        });
+
+        modelBuilder.Entity<ShopOffer>(entity =>
+        {
+            entity.ToTable("shop_offers");
+            entity.HasKey(o => o.Id);
+            entity.HasIndex(o => o.SortOrder);
+
+            entity.ToTable(t => t.HasCheckConstraint(
+                "ck_shop_offers_amounts_positive", "sell_amount > 0 AND price_amount > 0"));
+
+            // 和客户端的 ShopItemDataList 一致 / The same six offers the client
+            // currently reads out of ShopItemDataList.asset, seeded so the shop
+            // looks identical the moment it starts being served from here.
+            //
+            // 固定 GUID / Fixed ids rather than generated ones, because HasData
+            // goes into the migration: a new Guid on every scaffold would produce
+            // a migration that deletes and recreates the catalogue each time.
+            entity.HasData(
+                Offer(1, sell: (10, 1), price: (6, 240)),
+                Offer(2, sell: (2, 4000), price: (6, 10)),
+                Offer(3, sell: (11, 1), price: (6, 10)),
+                Offer(4, sell: (1, 100), price: (6, 40)),
+                Offer(5, sell: (12, 1), price: (6, 8)),
+                Offer(6, sell: (13, 1), price: (6, 12)));
+        });
+
+        modelBuilder.Entity<Purchase>(entity =>
+        {
+            entity.ToTable("purchases");
+            entity.HasKey(p => p.Id);
+
+            // The ledger is read "what did this player buy, most recent first".
+            entity.HasIndex(p => new { p.AccountId, p.CreatedAt });
+
+            entity.ToTable(t => t.HasCheckConstraint(
+                "ck_purchases_quantity_positive", "quantity > 0"));
+
+            entity.HasOne(p => p.Player)
+                  .WithMany()
+                  .HasForeignKey(p => p.AccountId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            // 不是 Cascade / Restrict, not Cascade: retiring an offer must not
+            // delete the record of what people paid for it. IsActive is how an
+            // offer leaves the shop.
+            entity.HasOne(p => p.Offer)
+                  .WithMany()
+                  .HasForeignKey(p => p.ShopOfferId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Run>(entity =>
+        {
+            entity.ToTable("runs");
+            entity.HasKey(r => r.Id);
+
+            entity.Property(r => r.StageId).HasMaxLength(64).IsRequired();
+            entity.HasIndex(r => new { r.AccountId, r.StartedAt });
+
+            entity.HasOne(r => r.Player)
+                  .WithMany()
+                  .HasForeignKey(r => r.AccountId)
                   .OnDelete(DeleteBehavior.Cascade);
         });
 
