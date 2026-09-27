@@ -1,14 +1,43 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    The wire types, and nothing else. No EF, no ASP.NET, no scoring - so that
-    what crosses the network is described in one place a reader can hold in their
-    head, and so a Unity client could eventually compile these same files the way
-    Promuse.Scoring compiles the game's rules.
+    The wire types, LINKED from Assets/Promuse.Net/Contracts rather than owned
+    here.
+    ==========================================================================
 
-    Every type here has a counterpart in server/contracts/openapi.yaml. When the
-    two disagree the contract wins: it is the agreement, this is an
-    implementation of it.
+    The same trick Promuse.Scoring uses on the game's scoring rules, pointed the
+    other way: Unity cannot compile anything outside Assets/, so the files live
+    there and this project reaches in. One definition of what crosses the
+    network, compiled by the server and by the client, which means renaming a
+    field breaks both builds in the same moment instead of only one - and a
+    client that quietly stops matching the server is the failure this exists to
+    prevent.
+
+    The cost is paid in syntax. Unity 6 compiles at C# 9, so those files use
+    block namespaces, no `required`, and no collection expressions, even though
+    this project alone would take all three. That is a deliberate trade and not
+    an oversight; raising Unity's language level through csc.rsp was considered
+    and rejected as unsupported, with IL2CPP on Android as the thing at risk.
+
+    UnityCompat/ is NOT linked. It declares IsExternalInit so `record` compiles
+    under .NET Standard 2.1, and net10.0 already has that type - linking it would
+    be a duplicate definition rather than a shim.
   -->
+
+  <PropertyGroup>
+    <!-- server/src/Promuse.Contracts/ -> repository root -> Assets/... -->
+    <UnityContractsDir>$(MSBuildThisFileDirectory)..\..\..\Assets\Promuse.Net\Contracts\</UnityContractsDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      A glob, so a contract added on the Unity side is compiled here without
+      anyone remembering to. That cuts both ways on purpose: a file that needs
+      something only Unity has will break THIS build, which is the earliest
+      warning that engine-coupled code has reached what is meant to be a
+      description of the wire.
+    -->
+    <Compile Include="$(UnityContractsDir)*.cs" Link="Linked\%(Filename)%(Extension)" />
+  </ItemGroup>
 
 </Project>

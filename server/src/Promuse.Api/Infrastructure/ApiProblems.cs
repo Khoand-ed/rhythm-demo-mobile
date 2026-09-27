@@ -26,16 +26,15 @@ public static class ApiProblems
         string title,
         string? detail = null,
         IReadOnlyDictionary<string, string[]>? errors = null,
-        string? traceId = null) => new()
-        {
-            Type = TypeBase + Slug(code),
-            Title = title,
-            Status = status,
-            Code = code,
-            Detail = detail,
-            Errors = errors,
-            TraceId = traceId,
-        };
+        string? traceId = null) =>
+        new(
+            Type: TypeBase + Slug(code),
+            Title: title,
+            Status: status,
+            Code: code,
+            Detail: detail,
+            Errors: errors,
+            TraceId: traceId);
 
     public static IResult ToResult(this ApiProblem problem) =>
         Results.Json(problem, statusCode: problem.Status, contentType: "application/problem+json");
