@@ -53,9 +53,33 @@ XLua, Spine and DOTween under `Assets/Plugins/`.
    building: `ABManager` compiles per platform, so on Windows it looks for an
    AssetBundle named `Win` inside `StreamingAssets/`, while on Android it looks
    for `Android` in `persistentDataPath`. Android is the project's target.
-3. Open `Assets/Arknights/Scenes/StartMenu.unity` and press Play.
-4. Log in with **`Saukiya` / `123456`** (or `Test` / `123456`). These are seeded
-   local accounts in `Assets/Arknights/Resources/Data/User/`, not real credentials.
+3. **Start the backend.** The game no longer has an offline login - accounts live
+   on the server, and without it the login screen will say it cannot connect.
+
+   ```bash
+   docker compose -f server/docker-compose.yml up -d
+   ```
+
+   ```bash
+   dotnet run --project server/src/Promuse.Api --urls http://127.0.0.1:5199
+   ```
+
+   On Windows there may be two `dotnet.exe`: the one under `Program Files` is
+   runtime-only, so if you get `No .NET SDKs were found`, put
+   `%LOCALAPPDATA%\Microsoft\dotnet` first on `PATH`.
+
+4. Open `Assets/Arknights/Scenes/StartMenu.unity` and press Play.
+5. **Register an account** on the login screen. Username 3-24 characters, letters,
+   digits and underscore; password 8-128.
+
+   The seeded `Saukiya` / `Test` assets under
+   `Assets/Arknights/Resources/Data/User/` are no longer used for anything -
+   nothing loads them, and the plaintext password they carry authenticates
+   nothing.
+
+   `127.0.0.1` is the development machine. A build running on a phone needs the
+   machine's LAN address instead - see `PromuseConfig` in
+   `Assets/Promuse.Net/PromuseApi.cs`.
 
 ### Four red errors on boot are expected
 

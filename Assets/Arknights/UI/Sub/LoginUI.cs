@@ -1,5 +1,6 @@
 ﻿using System;
 using Data.Player;
+using Promuse.Net;
 using DG.Tweening;
 using Manager;
 using Tools;
@@ -105,12 +106,21 @@ namespace UI.Sub {
                 });
             });
             
-            login_enter.onClick.AddListener(() => {
+            login_enter.onClick.AddListener(async () => {
                 string userName = login_userName.text;
                 string password = login_password.text;
-                PlayerData playerData = PlayerManager.Inst().Login(userName,password);
-                if (playerData == null) {
-                    CommonDialogUI.Message(CommonDialogUI.GroundType.BLACK, "Incorrect username or password. Please try again.");
+
+                // 防重复提交 / Login is not idempotent - a second press while the
+                // first is in flight is a second sign-in, and on a slow
+                // connection that is easy to do by accident.
+                login_enter.interactable = false;
+                ApiResult<PlayerData> result = await PlayerManager.Inst().LoginAsync(userName, password);
+                login_enter.interactable = true;
+
+                if (!result.IsSuccess) {
+                    // 服务端的措辞 / The server's own wording, including for a
+                    // failure that never reached it. One dialog, whatever broke.
+                    CommonDialogUI.Message(CommonDialogUI.GroundType.BLACK, result.Message);
                     return;
                 }
                 // 登陆界面消失
@@ -155,13 +165,21 @@ namespace UI.Sub {
                 });
             });
             
-            register_enter.onClick.AddListener(() => {
+            register_enter.onClick.AddListener(async () => {
                 string userName = register_userName.text;
                 string password = register_password.text;
                 string rePassword = register_rePassword.text;
 
-                if (userName.Length < 3) {
-                    CommonDialogUI.Message(CommonDialogUI.GroundType.BLACK, "Username must be at least 3 characters.");
+                // 和服务端一致 / These mirror the server's rules exactly. They
+                // are a convenience, not the authority: the server validates
+                // again and its 422 is what decides. Where the two disagreed the
+                // player got a rejection whose reason the client had just told
+                // them was fine - the client used to allow a six-character
+                // password the server refuses at eight.
+                if (userName.Length < 3 || userName.Length > 24
+                    || !System.Text.RegularExpressions.Regex.IsMatch(userName, "^[A-Za-z0-9_]+$")) {
+                    CommonDialogUI.Message(CommonDialogUI.GroundType.BLACK,
+                        "Username must be <color=#00B0FF>3-24</color> characters - letters, numbers and underscore only.");
                     return;
                 }
 
@@ -170,8 +188,8 @@ namespace UI.Sub {
                     return;
                 }
 
-                if (password.Length < 6 || password.Length > 18) {
-                    CommonDialogUI.Message(CommonDialogUI.GroundType.BLACK, "Password must be <color=#00B0FF>6-18</color> characters - letters, numbers or symbols (!#$%&*,.:;^`~)");
+                if (password.Length < 8 || password.Length > 128) {
+                    CommonDialogUI.Message(CommonDialogUI.GroundType.BLACK, "Password must be <color=#00B0FF>8-128</color> characters.");
                     return;
                 }
 
@@ -180,13 +198,15 @@ namespace UI.Sub {
                     return;
                 }
 
-                try {
-                    PlayerManager.Inst().Register(userName, password);
-                }
-                catch (Exception e) {
-                    CommonDialogUI.Message(CommonDialogUI.GroundType.BLACK, e.Message);
+                register_enter.interactable = false;
+                ApiResult<PlayerData> result = await PlayerManager.Inst().RegisterAsync(userName, password);
+                register_enter.interactable = true;
+
+                if (!result.IsSuccess) {
+                    CommonDialogUI.Message(CommonDialogUI.GroundType.BLACK, result.Message);
                     return;
                 }
+
                 
                 CommonDialogUI.Message(CommonDialogUI.GroundType.WHITE, "Registration successful.")
                     .AddBackListener(() => {
