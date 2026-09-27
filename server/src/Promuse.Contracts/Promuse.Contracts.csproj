@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The wire types, and nothing else. No EF, no ASP.NET, no scoring - so that
+    what crosses the network is described in one place a reader can hold in their
+    head, and so a Unity client could eventually compile these same files the way
+    Promuse.Scoring compiles the game's rules.
+
+    Every type here has a counterpart in server/contracts/openapi.yaml. When the
+    two disagree the contract wins: it is the agreement, this is an
+    implementation of it.
+  -->
+
+</Project>

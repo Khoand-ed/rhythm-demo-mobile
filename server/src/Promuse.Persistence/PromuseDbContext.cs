@@ -14,6 +14,10 @@ public class PromuseDbContext(DbContextOptions<PromuseDbContext> options) : DbCo
 
     public DbSet<Player> Players => Set<Player>();
 
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+
+    public DbSet<IdempotencyRecord> IdempotencyRecords => Set<IdempotencyRecord>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -59,6 +63,49 @@ public class PromuseDbContext(DbContextOptions<PromuseDbContext> options) : DbCo
             // what the contract's 412 is made of. Doing it by hand in each
             // handler would mean one forgotten check is one silent data loss.
             entity.Property(p => p.StateVersion).IsConcurrencyToken();
+        });
+
+        modelBuilder.Entity<RefreshToken>(entity =>
+        {
+            entity.ToTable("refresh_tokens");
+            entity.HasKey(t => t.Id);
+
+            // SHA-256 hex is exactly 64 characters. Unique because presenting a
+            // token is a lookup by this column, and two rows sharing one would
+            // make that lookup ambiguous at the worst possible moment.
+            entity.Property(t => t.TokenHash).HasMaxLength(64).IsRequired();
+            entity.HasIndex(t => t.TokenHash).IsUnique();
+
+            // Revoking a family is a range update over this column, which is the
+            // hot path of the reuse response - it runs while an attacker and a
+            // real player are both mid-request.
+            entity.HasIndex(t => t.FamilyId);
+
+            entity.HasOne(t => t.Account)
+                  .WithMany()
+                  .HasForeignKey(t => t.AccountId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<IdempotencyRecord>(entity =>
+        {
+            entity.ToTable("idempotency_records");
+            entity.HasKey(r => r.Id);
+
+            entity.Property(r => r.Key).HasMaxLength(128).IsRequired();
+            entity.Property(r => r.Endpoint).HasMaxLength(128).IsRequired();
+            entity.Property(r => r.RequestHash).HasMaxLength(64).IsRequired();
+            entity.Property(r => r.ResponseBody).IsRequired();
+
+            // 这个唯一键就是幂等本身 / This unique index IS the idempotency
+            // guarantee. Two concurrent retries both read nothing and both
+            // proceed; the database refuses the second insert, and that refusal
+            // is the only thing standing between the player and two accounts.
+            // A check in application code cannot do this.
+            entity.HasIndex(r => new { r.Key, r.Endpoint }).IsUnique();
+
+            // For the sweep that deletes expired records.
+            entity.HasIndex(r => r.ExpiresAt);
         });
     }
 }

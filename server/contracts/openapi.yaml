@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Promuse Backend API
-  version: 1.0.0-draft.1
+  version: 1.0.0-draft.2
   summary: Authentication and player state for the Promuse mobile rhythm game.
   description: |
     Contract for **Phase 1 (authentication)** and **Phase 2 (player state)**. Written
@@ -289,19 +289,40 @@ paths:
     post:
       tags: [auth]
       operationId: logout
-      summary: Revoke the current refresh token.
+      summary: End the session a refresh token belongs to.
       description: |
+        Takes the refresh token rather than reading the bearer, and needs no access
+        token at all. **This differs from draft.1 of this contract**, which secured the
+        endpoint with the bearer and passed no body - and so named no token to revoke.
+        Implementing it surfaced the gap: the access token identifies the account, not
+        which of that account's devices is signing out.
+
+        Presenting a refresh token is itself proof of holding the session, so requiring
+        the bearer as well would only mean a client whose access token had expired could
+        not sign out without refreshing first.
+
+        Revokes the whole token family, which is what a session is on one device. The
+        player's other devices each have a family of their own and stay signed in.
+
         The access token is not revoked - it is a short-lived JWT and is allowed to
         expire on its own. Revoking it would mean a blocklist checked on every request,
         trading a stateless hot path for a few minutes of exposure that the short
         lifetime already bounds.
 
         Replaces `PlayerManager.Exit`, which set a field to null.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
       responses:
         '204':
-          description: Signed out. Safe to call twice.
-        '401':
-          $ref: '#/components/responses/Unauthorized'
+          description: |
+            Signed out. Answered for an unknown or already-revoked token too: reporting
+            the difference would make this a way to test whether a stolen string is
+            still live, and there is nothing a caller could do with the distinction.
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -437,6 +458,14 @@ components:
         Client-generated UUID, stable across retries of the *same* logical request and
         different for a new one. The server stores it against the response for 24 hours
         and replays that response rather than acting twice.
+
+        The same key with a *different* body answers 409 with code
+        IDEMPOTENCY_KEY_CONFLICT - that is not a retry, and replying with the first
+        response would answer a question that was not asked. A missing key answers 400.
+
+        The guarantee is a unique index on (key, endpoint), not a lookup: two
+        concurrent retries both read nothing and both proceed, and the database is what
+        refuses the second write.
 
     IfMatch:
       name: If-Match

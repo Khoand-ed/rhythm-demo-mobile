@@ -90,9 +90,17 @@ jobs:
       - name: Build
         run: dotnet build server/Promuse.slnx --no-restore --configuration Release
 
-      # These run the game's own RunState, linked from Assets/Source/Script/Core.
-      # A failure here does not mean the server is broken - it means a scoring
-      # rule moved and the two sides would have started disagreeing silently.
+      # Two suites in one run.
+      #
+      # Promuse.Scoring.Tests runs the game's own RunState, linked from
+      # Assets/Source/Script/Core. A failure there does not mean the server is
+      # broken - it means a scoring rule moved and the two sides would have
+      # started disagreeing silently.
+      #
+      # 需要 Docker / Promuse.Api.Tests starts its own Postgres through
+      # Testcontainers, so this step needs a working Docker daemon. GitHub's
+      # ubuntu runners provide one; a self-hosted runner without it would fail
+      # here rather than in the migrations job below.
       - name: Test
         run: >-
           dotnet test server/Promuse.slnx
