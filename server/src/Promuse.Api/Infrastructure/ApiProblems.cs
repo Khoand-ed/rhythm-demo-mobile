@@ -91,6 +91,14 @@ public static class ApiProblems
         Create(409, ErrorCodes.IdempotencyKeyConflict, "Idempotency key reused with a different request",
             "This Idempotency-Key was already used for a different request body.");
 
+    public static ApiProblem StateConflict(int currentVersion) =>
+        Create(412, ErrorCodes.StateConflict, "State has moved on",
+            $"Another device wrote first. Re-read the player state and try again; it is now at version {currentVersion}.");
+
+    public static ApiProblem PreconditionRequired() =>
+        Create(428, ErrorCodes.PreconditionRequired, "If-Match is required",
+            "This write needs the ETag from the last read, so two devices cannot overwrite one another.");
+
     public static ApiProblem RateLimited() =>
         Create(429, ErrorCodes.RateLimited, "Too many requests",
             "Slow down and retry after the interval in the Retry-After header.");

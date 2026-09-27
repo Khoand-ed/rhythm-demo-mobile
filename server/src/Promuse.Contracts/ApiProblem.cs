@@ -73,6 +73,15 @@ public static class ErrorCodes
     /// </summary>
     public const string IdempotencyKeyConflict = "IDEMPOTENCY_KEY_CONFLICT";
 
+    /// <summary>
+    /// The state moved since the ETag was issued - another device wrote first.
+    /// The client re-reads and shows the conflict; it does not merge silently.
+    /// </summary>
+    public const string StateConflict = "STATE_CONFLICT";
+
+    /// <summary>A write arrived without the If-Match it requires.</summary>
+    public const string PreconditionRequired = "PRECONDITION_REQUIRED";
+
     public const string RateLimited = "RATE_LIMITED";
     public const string InternalError = "INTERNAL_ERROR";
 }

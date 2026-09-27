@@ -1,21 +1,12 @@
 using Microsoft.EntityFrameworkCore;
 using Promuse.Api.Infrastructure;
+using Promuse.Api.Players;
 using Promuse.Contracts;
 using Promuse.Contracts.Auth;
 using Promuse.Persistence;
 using Promuse.Persistence.Entities;
 
 namespace Promuse.Api.Auth;
-
-/// <summary>Success carries a value; failure carries the problem to return.</summary>
-public readonly record struct AuthOutcome<T>(T? Value, ApiProblem? Problem, bool Created = false)
-{
-    public static AuthOutcome<T> Ok(T value, bool created = false) => new(value, null, created);
-
-    public static AuthOutcome<T> Fail(ApiProblem problem) => new(default, problem);
-
-    public bool IsSuccess => Problem is null;
-}
 
 /// <summary>
 /// Everything a sign-in means. The endpoints above this are thin on purpose -
@@ -44,7 +35,7 @@ public sealed class AuthService(
     /// new key for the same device, and it must not produce a second player.
     /// <c>Created</c> distinguishes 201 from 200 for the caller.
     /// </summary>
-    public async Task<AuthOutcome<AuthSession>> GuestSignInAsync(string deviceId, CancellationToken ct)
+    public async Task<Outcome<AuthSession>> GuestSignInAsync(string deviceId, CancellationToken ct)
     {
         DateTimeOffset now = clock.GetUtcNow();
 
@@ -53,9 +44,9 @@ public sealed class AuthService(
 
         if (account is not null)
         {
-            if (account.BannedAt is not null) return AuthOutcome<AuthSession>.Fail(ApiProblems.AccountBanned());
+            if (account.BannedAt is not null) return Outcome<AuthSession>.Fail(ApiProblems.AccountBanned());
 
-            return AuthOutcome<AuthSession>.Ok(await IssueSessionAsync(account, now, ct));
+            return Outcome<AuthSession>.Ok(await IssueSessionAsync(account, now, ct));
         }
 
         account = NewAccount(now);
@@ -83,15 +74,15 @@ public sealed class AuthService(
             // that was never stored.
             if (winner is null) throw;
 
-            return AuthOutcome<AuthSession>.Ok(await IssueSessionAsync(winner, now, ct));
+            return Outcome<AuthSession>.Ok(await IssueSessionAsync(winner, now, ct));
         }
 
-        return AuthOutcome<AuthSession>.Ok(await IssueSessionAsync(account, now, ct), created: true);
+        return Outcome<AuthSession>.Ok(await IssueSessionAsync(account, now, ct), created: true);
     }
 
     // ------------------------------------------------------------ register
 
-    public async Task<AuthOutcome<AuthSession>> RegisterAsync(RegisterRequest request, CancellationToken ct)
+    public async Task<Outcome<AuthSession>> RegisterAsync(RegisterRequest request, CancellationToken ct)
     {
         DateTimeOffset now = clock.GetUtcNow();
 
@@ -114,15 +105,15 @@ public sealed class AuthService(
             // concurrent sign-ups both pass through; this cannot.
             db.ChangeTracker.Clear();
 
-            return AuthOutcome<AuthSession>.Fail(ApiProblems.UsernameTaken());
+            return Outcome<AuthSession>.Fail(ApiProblems.UsernameTaken());
         }
 
-        return AuthOutcome<AuthSession>.Ok(await IssueSessionAsync(account, now, ct), created: true);
+        return Outcome<AuthSession>.Ok(await IssueSessionAsync(account, now, ct), created: true);
     }
 
     // --------------------------------------------------------------- login
 
-    public async Task<AuthOutcome<AuthSession>> LoginAsync(LoginRequest request, CancellationToken ct)
+    public async Task<Outcome<AuthSession>> LoginAsync(LoginRequest request, CancellationToken ct)
     {
         DateTimeOffset now = clock.GetUtcNow();
 
@@ -134,18 +125,18 @@ public sealed class AuthService(
         {
             passwords.Verify(request.Password, DummyHash);
 
-            return AuthOutcome<AuthSession>.Fail(ApiProblems.InvalidCredentials());
+            return Outcome<AuthSession>.Fail(ApiProblems.InvalidCredentials());
         }
 
         if (!passwords.Verify(request.Password, account.PasswordHash))
         {
-            return AuthOutcome<AuthSession>.Fail(ApiProblems.InvalidCredentials());
+            return Outcome<AuthSession>.Fail(ApiProblems.InvalidCredentials());
         }
 
         // 封号检查在验证之后 / Checked after the password, not before: answering
         // "banned" to an unverified guess tells a stranger that the account
         // exists and is worth attention.
-        if (account.BannedAt is not null) return AuthOutcome<AuthSession>.Fail(ApiProblems.AccountBanned());
+        if (account.BannedAt is not null) return Outcome<AuthSession>.Fail(ApiProblems.AccountBanned());
 
         // The only moment the plaintext is in hand, so the only moment a
         // strengthened cost parameter can be applied.
@@ -155,21 +146,21 @@ public sealed class AuthService(
             await db.SaveChangesAsync(ct);
         }
 
-        return AuthOutcome<AuthSession>.Ok(await IssueSessionAsync(account, now, ct));
+        return Outcome<AuthSession>.Ok(await IssueSessionAsync(account, now, ct));
     }
 
     // ---------------------------------------------------------------- link
 
-    public async Task<AuthOutcome<AuthSession>> LinkAsync(
+    public async Task<Outcome<AuthSession>> LinkAsync(
         Guid accountId, RegisterRequest request, CancellationToken ct)
     {
         DateTimeOffset now = clock.GetUtcNow();
 
         Account? account = await db.Accounts.FirstOrDefaultAsync(a => a.Id == accountId, ct);
 
-        if (account is null) return AuthOutcome<AuthSession>.Fail(ApiProblems.Unauthorized());
+        if (account is null) return Outcome<AuthSession>.Fail(ApiProblems.Unauthorized());
 
-        if (account.Username is not null) return AuthOutcome<AuthSession>.Fail(ApiProblems.NotAGuest());
+        if (account.Username is not null) return Outcome<AuthSession>.Fail(ApiProblems.NotAGuest());
 
         account.Username = request.Username;
         account.PasswordHash = passwords.Hash(request.Password);
@@ -182,14 +173,14 @@ public sealed class AuthService(
         {
             db.ChangeTracker.Clear();
 
-            return AuthOutcome<AuthSession>.Fail(ApiProblems.UsernameTaken());
+            return Outcome<AuthSession>.Fail(ApiProblems.UsernameTaken());
         }
 
         // 不撤销旧令牌 / Existing tokens deliberately stay valid. The player id
         // has not changed and neither has the session - this is an upgrade of
         // the account, not a new sign-in, and signing them out mid-upgrade is
         // how progress feels lost even when it is not.
-        return AuthOutcome<AuthSession>.Ok(await IssueSessionAsync(account, now, ct));
+        return Outcome<AuthSession>.Ok(await IssueSessionAsync(account, now, ct));
     }
 
     // ------------------------------------------------------------- refresh
@@ -204,7 +195,7 @@ public sealed class AuthService(
     /// had already been rotated away. Without that filter both would mint a new
     /// token and the family would silently fork.
     /// </summary>
-    public async Task<AuthOutcome<TokenPair>> RefreshAsync(string refreshToken, CancellationToken ct)
+    public async Task<Outcome<TokenPair>> RefreshAsync(string refreshToken, CancellationToken ct)
     {
         DateTimeOffset now = clock.GetUtcNow();
         string hash = TokenService.HashRefreshToken(refreshToken);
@@ -213,11 +204,11 @@ public sealed class AuthService(
             .AsNoTracking()
             .FirstOrDefaultAsync(t => t.TokenHash == hash, ct);
 
-        if (existing is null) return AuthOutcome<TokenPair>.Fail(ApiProblems.RefreshTokenInvalid());
+        if (existing is null) return Outcome<TokenPair>.Fail(ApiProblems.RefreshTokenInvalid());
 
         // Expiry first, so an expired token is simply dead rather than being
         // reported as a theft.
-        if (existing.ExpiresAt <= now) return AuthOutcome<TokenPair>.Fail(ApiProblems.RefreshTokenInvalid());
+        if (existing.ExpiresAt <= now) return Outcome<TokenPair>.Fail(ApiProblems.RefreshTokenInvalid());
 
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
 
@@ -235,7 +226,7 @@ public sealed class AuthService(
 
             await transaction.CommitAsync(ct);
 
-            return AuthOutcome<TokenPair>.Fail(ApiProblems.RefreshTokenReused());
+            return Outcome<TokenPair>.Fail(ApiProblems.RefreshTokenReused());
         }
 
         Account? account = await db.Accounts.AsNoTracking()
@@ -245,7 +236,7 @@ public sealed class AuthService(
         {
             await transaction.CommitAsync(ct);
 
-            return AuthOutcome<TokenPair>.Fail(
+            return Outcome<TokenPair>.Fail(
                 account is null ? ApiProblems.RefreshTokenInvalid() : ApiProblems.AccountBanned());
         }
 
@@ -261,7 +252,7 @@ public sealed class AuthService(
 
         await transaction.CommitAsync(ct);
 
-        return AuthOutcome<TokenPair>.Ok(pair);
+        return Outcome<TokenPair>.Ok(pair);
     }
 
     // -------------------------------------------------------------- logout
@@ -331,18 +322,53 @@ public sealed class AuthService(
         CreatedAt = now,
     };
 
-    private static Player NewPlayer(Account account, string displayName, DateTimeOffset now) => new()
-    {
-        AccountId = account.Id,
-        DisplayName = displayName,
-        Level = 1,
-        Exp = 0,
+    /// <summary>
+    /// 和客户端的初始化保持一致 / The starting roster and bag, matching
+    /// <c>PlayerData.Initialization</c>: the four playable operators from the
+    /// GDD's MVP roster, and the same three stacks. Kept in step with that method
+    /// - a new player who does not own what the character select screen expects
+    /// draws a cell with no data behind it.
+    /// </summary>
+    private static readonly string[] StartingRoster = ["AMIYA", "NOVA", "ECHO", "PULSE"];
 
-        // Starts full. GetMaxReason(1) from PlayerData is 82.
-        Stamina = 82,
-        StaminaUpdatedAt = now,
-        StateVersion = 1,
-        CreatedAt = now,
-        UpdatedAt = now,
-    };
+    private static readonly (int Id, int Amount)[] StartingItems = [(0, 5), (1, 500), (2, 1000)];
+
+    private static Player NewPlayer(Account account, string displayName, DateTimeOffset now)
+    {
+        var player = new Player
+        {
+            AccountId = account.Id,
+            DisplayName = displayName,
+            Level = 1,
+            Exp = 0,
+
+            // Starts full. PlayerProgression.MaxStamina(1) is 82, the same value
+            // PlayerData.GetMaxReason(1) gives.
+            Stamina = 82,
+            StaminaUpdatedAt = now,
+            StateVersion = 1,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+
+        foreach (string id in StartingRoster)
+        {
+            player.Characters.Add(new PlayerCharacter { AccountId = account.Id, CharacterId = id, Level = 1 });
+        }
+
+        foreach ((int id, int amount) in StartingItems)
+        {
+            player.Items.Add(new PlayerItem { AccountId = account.Id, ItemId = id, Amount = amount });
+        }
+
+        // 四行都要有, 即使全空 / All four rows exist from the start, even empty.
+        // Creating them lazily on the first write would mean the squad endpoint
+        // has to handle "no rows yet" as a separate case forever.
+        for (int slot = 0; slot < PlayerService.SquadSize; slot++)
+        {
+            player.Squad.Add(new SquadSlot { AccountId = account.Id, Slot = slot, CharacterId = null });
+        }
+
+        return player;
+    }
 }
