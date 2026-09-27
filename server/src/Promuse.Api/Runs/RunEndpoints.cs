@@ -1,0 +1,32 @@
+using System.Security.Claims;
+using Promuse.Api.Infrastructure;
+using Promuse.Contracts.Runs;
+
+namespace Promuse.Api.Runs;
+
+public static class RunEndpoints
+{
+    public static void MapRunEndpoints(this IEndpointRouteBuilder app)
+    {
+        RouteGroupBuilder group = app.MapGroup("/v1/runs")
+            .WithTags("runs")
+            .RequireAuthorization();
+
+        group.MapPost("/", StartAsync)
+             // 开一局要花理智 / Starting a run spends stamina, so a retry that
+             // reached the server the first time must not charge a second bar.
+             .AddEndpointFilter<IdempotencyFilter<StartRunRequest>>();
+    }
+
+    private static async Task<IResult> StartAsync(
+        StartRunRequest request, ClaimsPrincipal user, RunService runs, CancellationToken ct)
+    {
+        if (!user.TryGetAccountId(out Guid accountId)) return ApiProblems.Unauthorized().ToResult();
+
+        var outcome = await runs.StartAsync(accountId, request.StageId, ct);
+
+        return outcome.IsSuccess
+            ? Results.Json(outcome.Value, statusCode: StatusCodes.Status201Created)
+            : outcome.Problem!.ToResult();
+    }
+}

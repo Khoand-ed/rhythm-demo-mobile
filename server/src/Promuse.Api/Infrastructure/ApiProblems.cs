@@ -90,6 +90,27 @@ public static class ApiProblems
         Create(409, ErrorCodes.IdempotencyKeyConflict, "Idempotency key reused with a different request",
             "This Idempotency-Key was already used for a different request body.");
 
+    public static ApiProblem OfferNotFound() =>
+        Create(404, ErrorCodes.OfferNotFound, "No such offer",
+            "That shop offer does not exist, or is no longer being sold.");
+
+    /// <summary>
+    /// 409 rather than 422: the request was well formed and the rule it broke is
+    /// about state, not shape. Retrying the identical request after earning more
+    /// can succeed, which is exactly what a conflict means.
+    /// </summary>
+    public static ApiProblem InsufficientFunds() =>
+        Create(409, ErrorCodes.InsufficientFunds, "Not enough to pay for that",
+            "You do not own enough of the required item to complete this purchase.");
+
+    public static ApiProblem StageNotFound(string stageId) =>
+        Create(404, ErrorCodes.StageNotFound, "No such stage",
+            $"'{stageId}' is not a chart this server knows, or it is not in rotation.");
+
+    public static ApiProblem InsufficientStamina(int current, int required) =>
+        Create(409, ErrorCodes.InsufficientStamina, "Not enough Sanity",
+            $"This stage costs {required} and you have {current}.");
+
     public static ApiProblem StateConflict(int currentVersion) =>
         Create(412, ErrorCodes.StateConflict, "State has moved on",
             $"Another device wrote first. Re-read the player state and try again; it is now at version {currentVersion}.");

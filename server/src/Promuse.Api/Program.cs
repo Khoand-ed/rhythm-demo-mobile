@@ -7,7 +7,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Promuse.Api.Auth;
 using Promuse.Api.Infrastructure;
+using Promuse.Api.Economy;
 using Promuse.Api.Players;
+using Promuse.Api.Runs;
 using Promuse.Persistence;
 
 // 必须显式传 / WriteAsJsonAsync sets Content-Type itself and overwrites
@@ -55,6 +57,8 @@ builder.Services.AddSingleton<PasswordHasher>();
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<PlayerService>();
+builder.Services.AddScoped<EconomyService>();
+builder.Services.AddScoped<RunService>();
 
 var jwt = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>()
     ?? throw new InvalidOperationException($"Configuration section '{JwtOptions.SectionName}' is missing.");
@@ -186,6 +190,8 @@ app.MapGet("/", () => Results.Ok(new
 
 app.MapAuthEndpoints();
 app.MapPlayerEndpoints();
+app.MapEconomyEndpoints();
+app.MapRunEndpoints();
 
 app.Run();
 
