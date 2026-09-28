@@ -7,7 +7,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Promuse.Api.Auth;
 using Promuse.Api.Infrastructure;
+using System.Text.Json.Serialization;
 using Promuse.Api.Economy;
+using Promuse.Api.Missions;
 using Promuse.Api.Players;
 using Promuse.Api.Runs;
 using Promuse.Persistence;
@@ -47,6 +49,19 @@ builder.Services.AddOptions<JwtOptions>()
     .ValidateDataAnnotations()
     .ValidateOnStart();
 
+// 枚举用字符串 / Enums cross the wire as their names. An ordinal silently
+// remaps every stored and in-flight value when someone reorders an enum, and a
+// contract that says `"tab": 0` is a contract nobody can read. Configured once
+// here; the idempotency filter reads these same options so a replayed response
+// is byte-identical to the original.
+builder.Services.ConfigureHttpJsonOptions(options =>
+    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+
+builder.Services.AddOptions<MissionOptions>()
+    .Bind(builder.Configuration.GetSection(MissionOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+
 builder.Services.AddOptions<StaminaOptions>()
     .Bind(builder.Configuration.GetSection(StaminaOptions.SectionName))
     .ValidateDataAnnotations()
@@ -59,6 +74,9 @@ builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<PlayerService>();
 builder.Services.AddScoped<EconomyService>();
 builder.Services.AddScoped<RunService>();
+builder.Services.AddScoped<Inventory>();
+builder.Services.AddScoped<MissionService>();
+builder.Services.AddSingleton<MissionPeriod>();
 
 var jwt = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>()
     ?? throw new InvalidOperationException($"Configuration section '{JwtOptions.SectionName}' is missing.");
@@ -192,6 +210,7 @@ app.MapAuthEndpoints();
 app.MapPlayerEndpoints();
 app.MapEconomyEndpoints();
 app.MapRunEndpoints();
+app.MapMissionEndpoints();
 
 app.Run();
 

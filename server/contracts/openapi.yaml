@@ -2,19 +2,23 @@ openapi: 3.1.0
 
 info:
   title: Promuse Backend API
-  version: 1.0.0-draft.3
+  version: 1.0.0-draft.4
   summary: Authentication and player state for the Promuse mobile rhythm game.
   description: |
-    Contract for **Phase 1 (authentication)** and **Phase 2 (player state)**. Written
-    before any implementation so the client and the server are built against the same
-    agreement, rather than the client being written against whatever the server
-    happened to return.
+    **Phase 1** authentication, **Phase 2** player state, **Phase 3** the economy -
+    shop, runs and missions. Each written before its implementation, so the client and
+    the server are built against one agreement rather than the client being written
+    against whatever the server happened to return.
 
-    Economy mutations (shop, gacha, mission claims) are deliberately absent. They are
-    Phase 3 and every one of them is server-authoritative, so they get their own
-    endpoints rather than being folded into a player-state write. The only writes here
-    are the two fields the client legitimately owns: the squad and the desktop
-    character.
+    Every economy operation is server-authoritative and has its own endpoint rather
+    than riding along on a player-state write. The client names what it wants; it never
+    names a price, a balance, or a resulting inventory. The only writes that state a
+    value outright are the two fields the client legitimately owns: the squad and the
+    desktop character.
+
+    Still absent: gacha, and the score and replay half of a run. That endpoint exists -
+    POST /v1/runs/{runId}/complete - but carries only a win flag, and Phase 4 adds the
+    rest to it rather than introducing a second call that also means "the run ended".
 
     ## Where the data comes from
 
@@ -61,7 +65,17 @@ tags:
       The economy, with the server holding the prices. Phase 3.
   - name: runs
     description: |
-      One attempt at a song. Phase 3 opens it; Phase 4 closes it with a result.
+      One attempt at a song. Opened by `POST /v1/runs`, closed by
+      `POST /v1/runs/{runId}/complete` - which Phase 4 extends with the score and
+      the input trace rather than adding a second call that also means "it ended".
+  - name: missions
+    description: |
+      The two mission boards. Phase 3.
+
+      三步, 一步都不自动 / Three steps and only the first happens on its own: a counter
+      moves when the player does something, a finished mission pays its points when it
+      is claimed, and points hand over items when a reward is claimed. Opening the
+      board grants nothing.
 
 servers:
   - url: http://localhost:8080
@@ -572,6 +586,169 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /v1/runs/{runId}/complete:
+    post:
+      tags: [runs]
+      operationId: completeRun
+      summary: Close a run.
+      description: |
+        现在很薄 / Deliberately thin: it exists so the mission counters have something
+        to advance them. Phase 4 adds the score and the input trace to THIS endpoint
+        and replays them against the seed the run was opened with - a separate "submit
+        score" call would be a second endpoint that also means "the run ended".
+
+        通关才算 / Only a win advances the "clear any song" missions, matching what
+        `GameManager` already did: a run that ran out of HP is not a clear. The stamina
+        is spent either way; it was spent when the run opened.
+
+        A run that belongs to someone else is answered exactly like one that does not
+        exist. Telling them apart would let a stranger probe which run ids are real.
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompleteRunRequest'
+      responses:
+        '200':
+          description: Closed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunCompletion'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: |
+            `RUN_NOT_OPEN` - unknown, someone else's, or already closed.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/missions:
+    get:
+      tags: [missions]
+      operationId: getMissionBoards
+      summary: Both boards, with progress and what can be claimed.
+      description: |
+        重置是隐含的 / The reset is implicit rather than scheduled. A board's period key
+        is part of the identity of every counter and claim, so a new day is a new key, a
+        new key has no rows, and no row reads as zero. There is no job to wipe anything -
+        and therefore no job that can fail to run.
+
+        `resetsAt` is when the current board ends, in UTC. The boundary is 04:00 in the
+        players' own timezone, which is arithmetic that has no business being on a device
+        whose clock is attacker-controlled.
+      responses:
+        '200':
+          description: Both boards.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MissionBoards'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/missions/claims:
+    post:
+      tags: [missions]
+      operationId: claimMission
+      summary: Take a finished mission's points.
+      description: |
+        Pays points, not items. `granted` is empty.
+
+        存在即已领 / Claiming twice is refused by a primary key on
+        (account, tab, mission, period) rather than by a check that could race.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClaimMissionRequest'
+      responses:
+        '200':
+          description: Claimed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: '`MISSION_NOT_FOUND`.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: |
+            `MISSION_NOT_COMPLETE`, or `ALREADY_CLAIMED`. The second is not the player's
+            mistake - two taps on a slow connection land there - so a client should
+            refresh the board rather than say anything alarming.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/missions/reward-claims:
+    post:
+      tags: [missions]
+      operationId: claimMissionReward
+      summary: Take a reward the claimed points have unlocked.
+      description: |
+        The claim row and the items move together - a crash between them would either
+        pay twice or pay nothing.
+
+        Thresholds count points that have been CLAIMED, not merely earned.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClaimRewardRequest'
+      responses:
+        '200':
+          description: Claimed, and the items are in the bag.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: '`MISSION_NOT_FOUND`.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: '`NOT_ENOUGH_POINTS`, or `ALREADY_CLAIMED`.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
 components:
 
   securitySchemes:
@@ -1060,6 +1237,165 @@ components:
         staminaSpent:
           type: integer
           minimum: 0
+        player:
+          $ref: '#/components/schemas/PlayerState'
+        serverTime:
+          $ref: '#/components/schemas/ServerTime'
+
+    MissionTab:
+      type: string
+      enum: [Daily, Weekly]
+      description: |
+        枚举用名字 / Serialised as the name, not an ordinal. An ordinal silently remaps
+        every stored and in-flight value when someone reorders the enum, and these names
+        are also written into the period keys held per player.
+
+    MissionGoal:
+      type: string
+      enum: [PlaySong, BuyShopItem]
+      description: |
+        What a mission counts. A closed set on purpose: each value needs a server-side
+        place that advances it, and a goal nothing advances is a mission nobody can
+        finish. `PlaySong` advances on a WON run completion; `BuyShopItem` on a checkout,
+        once per checkout rather than once per unit.
+
+    MissionState:
+      type: object
+      required: [missionId, description, goal, target, progress, points, isComplete, isClaimed]
+      properties:
+        missionId:
+          type: string
+        description:
+          type: string
+        goal:
+          $ref: '#/components/schemas/MissionGoal'
+        target:
+          type: integer
+          minimum: 1
+        progress:
+          type: integer
+          description: Capped at the target, so a bar never overfills.
+        points:
+          type: integer
+          description: What claiming this mission pays into the board total.
+        isComplete:
+          type: boolean
+        isClaimed:
+          type: boolean
+          description: |
+            做完和领了是两回事 / Finished and claimed are different states. An unclaimed
+            mission is worth no points yet, which is the whole point of the manual step.
+
+    RewardState:
+      type: object
+      required: [rewardId, requiredPoints, itemId, amount, isClaimed, isClaimable]
+      properties:
+        rewardId:
+          type: string
+        requiredPoints:
+          type: integer
+          description: Points that must have been CLAIMED, not merely earned.
+        itemId:
+          type: integer
+        amount:
+          type: integer
+          minimum: 1
+        isClaimed:
+          type: boolean
+        isClaimable:
+          type: boolean
+          description: Computed server-side, so the client never re-derives the rule.
+
+    MissionBoard:
+      type: object
+      required: [tab, title, points, resetsAt, missions, rewards]
+      properties:
+        tab:
+          $ref: '#/components/schemas/MissionTab'
+        title:
+          type: string
+        points:
+          type: integer
+        resetsAt:
+          type: string
+          format: date-time
+          description: |
+            When this board empties, in UTC. The boundary is 04:00 in the players' own
+            timezone; the client counts down from this rather than working that out on a
+            clock the player controls.
+        missions:
+          type: array
+          items:
+            $ref: '#/components/schemas/MissionState'
+        rewards:
+          type: array
+          items:
+            $ref: '#/components/schemas/RewardState'
+
+    MissionBoards:
+      type: object
+      required: [daily, weekly, serverTime]
+      properties:
+        daily:
+          $ref: '#/components/schemas/MissionBoard'
+        weekly:
+          $ref: '#/components/schemas/MissionBoard'
+        serverTime:
+          $ref: '#/components/schemas/ServerTime'
+
+    ClaimMissionRequest:
+      type: object
+      required: [tab, missionId]
+      properties:
+        tab:
+          $ref: '#/components/schemas/MissionTab'
+        missionId:
+          type: string
+
+    ClaimRewardRequest:
+      type: object
+      required: [tab, rewardId]
+      properties:
+        tab:
+          $ref: '#/components/schemas/MissionTab'
+        rewardId:
+          type: string
+
+    ClaimResult:
+      type: object
+      required: [granted, boards, player]
+      properties:
+        granted:
+          type: array
+          description: Empty for a mission claim, which pays points rather than items.
+          items:
+            $ref: '#/components/schemas/ItemStack'
+        boards:
+          $ref: '#/components/schemas/MissionBoards'
+        player:
+          $ref: '#/components/schemas/PlayerState'
+
+    CompleteRunRequest:
+      type: object
+      required: [won]
+      properties:
+        won:
+          type: boolean
+          description: |
+            通关才算 / Only a win advances the "clear any song" missions, matching what
+            GameManager already did: a run that ran out of HP is not a clear.
+
+    RunCompletion:
+      type: object
+      required: [runId, won, boards, player, serverTime]
+      properties:
+        runId:
+          type: string
+          format: uuid
+        won:
+          type: boolean
+        boards:
+          $ref: '#/components/schemas/MissionBoards'
         player:
           $ref: '#/components/schemas/PlayerState'
         serverTime:

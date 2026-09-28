@@ -1,29 +1,18 @@
 using System.Collections.Generic;
+using Promuse.Contracts.Missions;
 
 namespace Data.Mission {
-    // 任务板 / Which board a mission belongs to.
+    // MissionTab 和 MissionGoal 搬到 Promuse.Net 了 / MissionTab and MissionGoal now
+    // live in Promuse.Contracts.Missions, because the API returns them: an enum
+    // that crosses the wire is part of the wire format, and a second copy here
+    // would be a second thing to keep in step.
     //
-    // 两个板子各算各的 / The two boards count independently: finishing one song advances the
-    // play counter on both, but Daily points never spill into Weekly and vice versa.
-    public enum MissionTab {
-        Daily,
-        Weekly
-    }
-
-    /// <summary>
-    /// 任务计数器 / What a mission watches.
-    ///
-    /// 同一个板子上盯同一个计数器的任务共用一个数 / Missions on the same board that watch the same
-    /// goal share a single counter, which is why "play 1 time" and "play 2 times" both move when
-    /// one song ends - they read the same number against different targets.
-    ///
-    /// 名字会写进存档键 / The member name is written into the PlayerPrefs key, so renaming one
-    /// silently resets that counter for everyone who already has progress.
-    /// </summary>
-    public enum MissionGoal {
-        PlaySong,
-        BuyShopItem
-    }
+    // 两个板子各算各的 / The two boards still count independently: finishing one song
+    // advances the play counter on both, but Daily points never spill into Weekly.
+    //
+    // 同一个板子上盯同一个计数器的任务共用一个数 / Missions on one board watching the same
+    // goal share a counter, which is why "play 1 time" and "play 2 times" both move
+    // when one song ends - same number, different targets.
 
     /// <summary>一条任务 / One mission row: a counter, a target on it, and the points it pays.</summary>
     public class MissionDef {

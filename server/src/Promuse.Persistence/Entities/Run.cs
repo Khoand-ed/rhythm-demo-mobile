@@ -44,4 +44,15 @@ public class Run
     /// closes the app mid-song.
     /// </summary>
     public DateTimeOffset? CompletedAt { get; set; }
+
+    /// <summary>
+    /// Null until the run is closed. 通关才算 / Only a win advances the
+    /// "clear any song" missions, matching what GameManager already did: a run
+    /// that ran out of HP is not a clear.
+    ///
+    /// Phase 4 adds the score and the replay beside this. Closing the run is
+    /// deliberately the same endpoint, so that half does not have to be designed
+    /// twice.
+    /// </summary>
+    public bool? Won { get; set; }
 }

@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Promuse.Persistence;
 using Promuse.Persistence.Entities;
 
@@ -43,6 +44,15 @@ public sealed class IdempotencyFilter<TRequest> : IEndpointFilter
         var db = http.RequestServices.GetRequiredService<PromuseDbContext>();
         var clock = http.RequestServices.GetRequiredService<TimeProvider>();
 
+        // 必须和响应用同一套 / The application's own serializer settings, not a
+        // private copy. A stored response written with different settings
+        // deserialises differently on replay - with enums configured as strings
+        // on the way out, a local copy would have replayed `"tab": 0` where the
+        // first answer said `"tab": "Daily"`.
+        JsonSerializerOptions json = http.RequestServices
+            .GetRequiredService<IOptions<Microsoft.AspNetCore.Http.Json.JsonOptions>>()
+            .Value.SerializerOptions;
+
         if (!http.Request.Headers.TryGetValue(HeaderName, out var header) ||
             string.IsNullOrWhiteSpace(header.ToString()))
         {
@@ -54,7 +64,7 @@ public sealed class IdempotencyFilter<TRequest> : IEndpointFilter
 
         string key = header.ToString();
         string endpoint = $"{http.Request.Method} {http.Request.Path}";
-        string requestHash = HashRequest(context.Arguments.OfType<TRequest>().FirstOrDefault());
+        string requestHash = HashRequest(context.Arguments.OfType<TRequest>().FirstOrDefault(), json);
 
         IdempotencyRecord? existing = await db.IdempotencyRecords
             .AsNoTracking()
@@ -67,7 +77,7 @@ public sealed class IdempotencyFilter<TRequest> : IEndpointFilter
         // 只存最终答案 / 5xx is not stored. A transient fault must not be cached
         // for 24 hours as this key's permanent answer - the whole point of a
         // retry is that the next one might work.
-        if (TryDescribe(result, out int status, out string body) && status < 500)
+        if (TryDescribe(result, json, out int status, out string body) && status < 500)
         {
             var record = new IdempotencyRecord
             {
@@ -121,7 +131,7 @@ public sealed class IdempotencyFilter<TRequest> : IEndpointFilter
     /// not is simply not stored, which fails safe - the request is answered, it
     /// is just not replayable.
     /// </summary>
-    private static bool TryDescribe(object? result, out int status, out string body)
+    private static bool TryDescribe(object? result, JsonSerializerOptions json, out int status, out string body)
     {
         status = 0;
         body = string.Empty;
@@ -130,22 +140,12 @@ public sealed class IdempotencyFilter<TRequest> : IEndpointFilter
         if (result is not IValueHttpResult valued) return false;
 
         status = coded.StatusCode.Value;
-        body = JsonSerializer.Serialize(valued.Value, JsonOptions.Web);
+        body = JsonSerializer.Serialize(valued.Value, json);
 
         return true;
     }
 
-    private static string HashRequest(TRequest? request) =>
+    private static string HashRequest(TRequest? request, JsonSerializerOptions json) =>
         Convert.ToHexStringLower(SHA256.HashData(
-            Encoding.UTF8.GetBytes(JsonSerializer.Serialize(request, JsonOptions.Web))));
-}
-
-/// <summary>
-/// One serializer configuration, used for hashing a request and for storing a
-/// response. They must agree: a body serialized one way and hashed another would
-/// make a replay compare unequal to itself.
-/// </summary>
-internal static class JsonOptions
-{
-    public static readonly JsonSerializerOptions Web = new(JsonSerializerDefaults.Web);
+            Encoding.UTF8.GetBytes(JsonSerializer.Serialize(request, json))));
 }

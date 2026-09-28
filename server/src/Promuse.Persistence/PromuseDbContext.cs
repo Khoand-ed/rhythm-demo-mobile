@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Promuse.Contracts.Missions;
 using Promuse.Persistence.Entities;
 
 namespace Promuse.Persistence;
@@ -32,6 +33,16 @@ public class PromuseDbContext(DbContextOptions<PromuseDbContext> options) : DbCo
 
     public DbSet<Stage> Stages => Set<Stage>();
 
+    public DbSet<MissionDefinition> MissionDefinitions => Set<MissionDefinition>();
+
+    public DbSet<MissionRewardDefinition> MissionRewardDefinitions => Set<MissionRewardDefinition>();
+
+    public DbSet<MissionCounter> MissionCounters => Set<MissionCounter>();
+
+    public DbSet<MissionClaim> MissionClaims => Set<MissionClaim>();
+
+    public DbSet<MissionRewardClaim> MissionRewardClaims => Set<MissionRewardClaim>();
+
     /// <summary>
     /// Readable, stable ids for the seeded catalogue - obviously seed data at a
     /// glance in psql, and identical on every machine.
@@ -46,6 +57,22 @@ public class PromuseDbContext(DbContextOptions<PromuseDbContext> options) : DbCo
         IsActive = true,
         SortOrder = n,
     };
+
+    private static MissionDefinition Mission(
+        MissionTab tab, string id, string description, MissionGoal goal, int target, int points, int order) =>
+        new()
+        {
+            Tab = tab, MissionId = id, Description = description,
+            Goal = goal, Target = target, Points = points, SortOrder = order, IsActive = true,
+        };
+
+    private static MissionRewardDefinition Reward(
+        MissionTab tab, string id, int requiredPoints, int itemId, int amount, int order) =>
+        new()
+        {
+            Tab = tab, RewardId = id, RequiredPoints = requiredPoints,
+            ItemId = itemId, Amount = amount, SortOrder = order, IsActive = true,
+        };
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -142,6 +169,101 @@ public class PromuseDbContext(DbContextOptions<PromuseDbContext> options) : DbCo
                   .WithMany(p => p.Squad)
                   .HasForeignKey(s => s.AccountId)
                   .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // 定义是内容, 进度是玩家的 / Definitions are content and are seeded; the
+        // three tables after them are per player and start empty.
+
+        modelBuilder.Entity<MissionDefinition>(entity =>
+        {
+            entity.ToTable("mission_definitions");
+            entity.HasKey(m => new { m.Tab, m.MissionId });
+            entity.Property(m => m.MissionId).HasMaxLength(64);
+            entity.Property(m => m.Description).HasMaxLength(200).IsRequired();
+
+            // 枚举存字符串 / Stored as text rather than an ordinal. An ordinal
+            // silently remaps every stored row when someone reorders the enum,
+            // and these values also appear in the period keys and in the API.
+            entity.Property(m => m.Tab).HasConversion<string>().HasMaxLength(16);
+            entity.Property(m => m.Goal).HasConversion<string>().HasMaxLength(32);
+
+            entity.ToTable(t => t.HasCheckConstraint(
+                "ck_mission_definitions_target_positive", "target > 0 AND points > 0"));
+
+            entity.HasData(
+                Mission(MissionTab.Daily, "daily.play1", "Clear any song 1 time(s)", MissionGoal.PlaySong, 1, 1, 1),
+                Mission(MissionTab.Daily, "daily.play2", "Clear any song 2 time(s)", MissionGoal.PlaySong, 2, 2, 2),
+                Mission(MissionTab.Daily, "daily.buy1", "Purchase any item from the Store 1 time(s)", MissionGoal.BuyShopItem, 1, 3, 3),
+                Mission(MissionTab.Weekly, "weekly.play5", "Clear any song 5 time(s)", MissionGoal.PlaySong, 5, 2, 1),
+                Mission(MissionTab.Weekly, "weekly.play10", "Clear any song 10 time(s)", MissionGoal.PlaySong, 10, 3, 2),
+                Mission(MissionTab.Weekly, "weekly.buy3", "Purchase any item from the Store 3 time(s)", MissionGoal.BuyShopItem, 3, 5, 3));
+        });
+
+        modelBuilder.Entity<MissionRewardDefinition>(entity =>
+        {
+            entity.ToTable("mission_reward_definitions");
+            entity.HasKey(r => new { r.Tab, r.RewardId });
+            entity.Property(r => r.RewardId).HasMaxLength(64);
+            entity.Property(r => r.Tab).HasConversion<string>().HasMaxLength(16);
+
+            entity.ToTable(t => t.HasCheckConstraint(
+                "ck_mission_rewards_positive", "required_points > 0 AND amount > 0"));
+
+            entity.HasData(
+                Reward(MissionTab.Daily, "daily.r1", 1, 2, 500, 1),
+                Reward(MissionTab.Daily, "daily.r2", 2, 1, 100, 2),
+                Reward(MissionTab.Daily, "daily.r3", 3, 6, 3, 3),
+                Reward(MissionTab.Weekly, "weekly.r1", 3, 2, 2000, 1),
+                Reward(MissionTab.Weekly, "weekly.r2", 6, 1, 300, 2),
+                Reward(MissionTab.Weekly, "weekly.r3", 10, 7, 5, 3));
+        });
+
+        modelBuilder.Entity<MissionCounter>(entity =>
+        {
+            entity.ToTable("mission_counters");
+
+            // 周期键在主键里 / The period key is part of the identity, which is
+            // what makes the reset implicit: a new day is a new key, a new key
+            // has no row, and no row reads as zero. No scheduled job to wipe
+            // anything, and therefore no scheduled job that can fail to run.
+            entity.HasKey(c => new { c.AccountId, c.Tab, c.Goal, c.PeriodKey });
+
+            entity.Property(c => c.PeriodKey).HasMaxLength(16);
+            entity.Property(c => c.Tab).HasConversion<string>().HasMaxLength(16);
+            entity.Property(c => c.Goal).HasConversion<string>().HasMaxLength(32);
+
+            entity.HasOne(c => c.Player).WithMany()
+                  .HasForeignKey(c => c.AccountId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MissionClaim>(entity =>
+        {
+            entity.ToTable("mission_claims");
+
+            // 存在即已领 / The row existing is the claim, so claiming twice is a
+            // primary key violation rather than a check the service has to
+            // remember - and a concurrent double-claim is refused by the database.
+            entity.HasKey(c => new { c.AccountId, c.Tab, c.MissionId, c.PeriodKey });
+
+            entity.Property(c => c.MissionId).HasMaxLength(64);
+            entity.Property(c => c.PeriodKey).HasMaxLength(16);
+            entity.Property(c => c.Tab).HasConversion<string>().HasMaxLength(16);
+
+            entity.HasOne(c => c.Player).WithMany()
+                  .HasForeignKey(c => c.AccountId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MissionRewardClaim>(entity =>
+        {
+            entity.ToTable("mission_reward_claims");
+            entity.HasKey(c => new { c.AccountId, c.Tab, c.RewardId, c.PeriodKey });
+
+            entity.Property(c => c.RewardId).HasMaxLength(64);
+            entity.Property(c => c.PeriodKey).HasMaxLength(16);
+            entity.Property(c => c.Tab).HasConversion<string>().HasMaxLength(16);
+
+            entity.HasOne(c => c.Player).WithMany()
+                  .HasForeignKey(c => c.AccountId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Stage>(entity =>
