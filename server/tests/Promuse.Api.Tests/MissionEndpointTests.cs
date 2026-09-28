@@ -344,6 +344,52 @@ public class MissionEndpointTests(PromuseApiFactory factory)
     }
 
     /// <summary>
+    /// 幂等记录不能跨账号 / A stored response is replayed in full, and these
+    /// responses carry player state, so the record has to belong to somebody. The
+    /// client closes a run under the run's own id as the key - a value that is
+    /// also in the URL - which makes "nobody else knows the key" the wrong thing
+    /// to depend on.
+    /// </summary>
+    [Fact]
+    public async Task One_players_idempotency_key_is_not_anothers()
+    {
+        AuthSession owner = await SignInAsync();
+        AuthSession stranger = await SignInAsync();
+
+        var ticket = (await (await _client.SendAsync(
+            Send(HttpMethod.Post, "/v1/runs", owner, new StartRunRequest("stage_001"))))
+            .Content.ReadFromJsonAsync<RunTicket>())!;
+
+        string key = ticket.RunId.ToString();
+
+        HttpResponseMessage closed = await _client.SendAsync(Send(HttpMethod.Post,
+            $"/v1/runs/{ticket.RunId}/complete", owner, new CompleteRunRequest(true), key));
+
+        Assert.Equal(HttpStatusCode.OK, closed.StatusCode);
+
+        // 同一个键, 同一条路径, 换个人 / The same key on the same path from another
+        // account. It must reach the handler, which refuses it because the run is
+        // not theirs - not be answered out of the owner's record.
+        HttpResponseMessage replayed = await _client.SendAsync(Send(HttpMethod.Post,
+            $"/v1/runs/{ticket.RunId}/complete", stranger, new CompleteRunRequest(true), key));
+
+        Assert.Equal(HttpStatusCode.Conflict, replayed.StatusCode);
+        Assert.Equal(ErrorCodes.RunNotOpen,
+            (await replayed.Content.ReadFromJsonAsync<ApiProblem>())!.Code);
+
+        // 而本人重试还是要拿到原来的答案 / And the owner's own retry still replays,
+        // which is what the header is for in the first place.
+        HttpResponseMessage retry = await _client.SendAsync(Send(HttpMethod.Post,
+            $"/v1/runs/{ticket.RunId}/complete", owner, new CompleteRunRequest(true), key));
+
+        Assert.Equal(HttpStatusCode.OK, retry.StatusCode);
+
+        // 还是只算一次 / Once, despite three requests naming the same run.
+        MissionBoards boards = await BoardsAsync(owner);
+        Assert.Equal(1, Mission(boards.Weekly, "weekly.play5").Progress);
+    }
+
+    /// <summary>
     /// 别人的局和不存在的局同样回答 / Someone else's run is answered exactly like a
     /// run that does not exist. Telling them apart would let a stranger probe
     /// which run ids are real.

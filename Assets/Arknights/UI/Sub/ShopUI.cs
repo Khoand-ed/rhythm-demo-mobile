@@ -3,14 +3,12 @@ using System.Collections.Generic;
 using Data.Item;
 using Promuse.Contracts.Shop;
 using Promuse.Net;
-using Data.Mission;
 using Data.Player;
 using DG.Tweening;
 using Manager;
 using Tools;
 using UnityEngine;
 using UnityEngine.UI;
-using Promuse.Contracts.Missions;
 
 namespace UI.Sub {
     public class ShopUI : UIBase {
@@ -200,10 +198,11 @@ namespace UI.Sub {
                     return;
                 }
 
-                // 一次结账算一次 / One checkout, one tick - not one per unit, so
-                // buying 99 of something does not clear a "purchase 3 times"
-                // mission on its own.
-                MissionManager.Inst().Notify(MissionGoal.BuyShopItem);
+                // 任务由服务端记 / The BuyShopItem counter used to be ticked here.
+                // It is now advanced inside the purchase transaction, one tick per
+                // checkout rather than one per unit, so a client that died between
+                // the two can no longer under-count and a patched one can no
+                // longer count as often as it likes.
 
                 ui.data.ApplyServerState(result.Value.Player);
 

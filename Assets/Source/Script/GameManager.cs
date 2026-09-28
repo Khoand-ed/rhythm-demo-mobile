@@ -1,13 +1,13 @@
 using System.Collections;
 using System.Collections.Generic;
 using Data.Char;
-using Data.Mission;
 using Tools;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using TMPro;
-using Promuse.Contracts.Missions;
+using Promuse.Contracts.Runs;
+using Promuse.Net;
 
 public class GameManager : MonoBehaviour
 {
@@ -101,6 +101,10 @@ public class GameManager : MonoBehaviour
     private int operatorMaxHp;
     private PassiveSO operatorPassive;
 
+    // 同样的理由 / Same reason, same place: the run id is read off SongSession before the chart
+    // handover clears it. Empty means there is nothing to close.
+    private System.Guid runId;
+
     private float feverEndsAtSongTime;
 
     private float lastPassiveSongTime;
@@ -186,6 +190,7 @@ public class GameManager : MonoBehaviour
         // 必须在 SongSession.Clear() 之前 / Before anything else, because the chart handover
         // below clears SongSession and the operator would go with it.
         CaptureOperator();
+        CaptureRun();
 
         scoreText.text = "Score: 0";
         multiText.text = "0";
@@ -244,11 +249,12 @@ void Update()
             {
                 resultsScreen.SetActive(true);
 
-                // 通关才算一次 / A run that ran out of HP is not a clear, so it does not feed the
-                // "clear any song" missions. The activeInHierarchy guard above already makes this
-                // fire once per run rather than once per frame, and Restart turns the screen back
-                // off, which is what lets a second run count again.
-                if (!state.failed) MissionManager.Inst().Notify(MissionGoal.PlaySong);
+                // 服务端记一笔 / The run is closed on the server, which is where the mission
+                // counters live. The activeInHierarchy guard above already makes this fire once
+                // per run rather than once per frame, and Restart turns the screen back off,
+                // which is what lets a second run count again - but the run id is not reissued
+                // by a restart, so the report is keyed on it and a replayed one is refused.
+                ReportRun(!state.failed);
 
                 normalsText.text = "" + state.normalHits;
                 goodsText.text = state.goodHits.ToString();
@@ -849,6 +855,53 @@ void Update()
         // 重置增量锚点 / Re-anchored here because SyncTuning runs on every reset, and a retry
         // would otherwise hand the passive the whole of the previous run as one delta.
         lastPassiveSongTime = 0f;
+    }
+
+    /// <summary>
+    /// 这局的身份 / The run the server opened for this attempt, taken before the chart handover
+    /// clears SongSession.
+    ///
+    /// 可以是空的 / Empty when the gameplay scene was opened directly in the Editor, which is a
+    /// supported way to work: there is no run to close, so <see cref="ReportRun"/> does nothing.
+    /// </summary>
+    private void CaptureRun()
+    {
+        runId = SongSession.RunId;
+    }
+
+    /// <summary>
+    /// 结束时告诉服务端 / Tells the server the run is over, which is what advances the mission
+    /// counters. Nothing on this screen waits for the answer: the results are already on the
+    /// player's own numbers, and a board they are not looking at can be a request behind.
+    ///
+    /// 不是提交分数 / Not a score submission. Phase 4 puts the score and the input trace in this
+    /// same call and replays them against the seed the run was opened with; there is deliberately
+    /// no second endpoint that also means "it ended".
+    /// </summary>
+    private async void ReportRun(bool won)
+    {
+        if (runId == System.Guid.Empty) return;
+
+        // 只报一次 / Cleared first, so a results screen that is somehow shown twice cannot send
+        // this twice. The server would refuse the second one anyway - the run is already closed,
+        // and the idempotency key is the run id - but not sending it is cheaper than being told.
+        System.Guid reporting = runId;
+        runId = System.Guid.Empty;
+
+        ApiResult<RunCompletion> result = await Data.Player.PlayerManager.Inst().Api
+            .CompleteRunAsync(reporting, won);
+
+        if (!result.IsSuccess)
+        {
+            // 不打扰玩家 / Logged rather than shown. The run happened, the player can see their
+            // result, and a dialog over the results screen saying a mission counter did not move
+            // is noise about something they cannot act on.
+            Debug.LogWarning($"[GameManager] Could not close run {reporting}: {result.Message}");
+            return;
+        }
+
+        Data.Player.PlayerData player = Data.Player.PlayerManager.Inst().Get();
+        if (player != null) player.ApplyServerState(result.Value.Player);
     }
 
     /// <summary>
