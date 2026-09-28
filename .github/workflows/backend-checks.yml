@@ -12,16 +12,25 @@ on:
     paths: &backend-paths
       - 'server/**'
 
-      # 最不明显的一行 / The least obvious line in this file, and the one most
-      # likely to be "tidied" away.
+      # 最不明显的两行 / The two least obvious lines in this file, and the ones
+      # most likely to be "tidied" away.
       #
-      # Promuse.Scoring does not copy the game's scoring rules, it COMPILES them
-      # by reference: see the Compile glob in Promuse.Scoring.csproj. A change to
-      # RunState.cs or to a passive is therefore a change to the server, and
-      # without this path the build that would have caught it never runs - the
-      # failure would surface much later as the server and the client quietly
-      # disagreeing about a score.
+      # 两个都是被服务端编译的 / Neither folder is copied into the server - both
+      # are COMPILED by it, by reference. A change in either IS a change to the
+      # server, and without these paths the build that would have caught it never
+      # runs. The failure surfaces much later, as the server and the client
+      # quietly disagreeing.
+      #
+      # Promuse.Scoring globs Core for the game's scoring rules.
       - 'Assets/Source/Script/Core/**'
+
+      # Promuse.Contracts globs this for the wire types. Added after a PR that
+      # touched only Assets/Promuse.Net ran no backend job at all: the hole was
+      # opened when the contracts moved into Assets/ and this filter was not
+      # updated with them. Harmless that time - the PR changed no contract - but
+      # a PR that renames a field here would have shipped with the server build
+      # never run.
+      - 'Assets/Promuse.Net/Contracts/**'
 
       - '.github/workflows/backend-checks.yml'
 
