@@ -64,9 +64,10 @@ XLua, Spine and DOTween under `Assets/Plugins/`.
    dotnet run --project server/src/Promuse.Api --urls http://127.0.0.1:5199
    ```
 
-   On Windows there may be two `dotnet.exe`: the one under `Program Files` is
-   runtime-only, so if you get `No .NET SDKs were found`, put
-   `%LOCALAPPDATA%\Microsoft\dotnet` first on `PATH`.
+   `No .NET SDKs were found` means the `dotnet.exe` first on `PATH` is a
+   runtime-only install. `dotnet --info` prints which one is being used and
+   where its SDK lives; the machine-wide SDK installs to `C:\Program
+   Files\dotnet`.
 
 4. Open `Assets/Arknights/Scenes/StartMenu.unity` and press Play.
 5. **Register an account** on the login screen. Username 3-24 characters, letters,
@@ -80,6 +81,10 @@ XLua, Spine and DOTween under `Assets/Plugins/`.
    `127.0.0.1` is the development machine. A build running on a phone needs the
    machine's LAN address instead - see `PromuseConfig` in
    `Assets/Promuse.Net/PromuseApi.cs`.
+
+6. `docs/TESTING.md` is the walkthrough for checking that any of this actually
+   works - through the game, and through the API for the states that are hard
+   to reach by playing.
 
 ### Four red errors on boot are expected
 
