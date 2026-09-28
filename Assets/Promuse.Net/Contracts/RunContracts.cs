@@ -4,6 +4,7 @@
 #nullable enable
 
 using System;
+using Promuse.Contracts.Missions;
 using Promuse.Contracts.Players;
 
 namespace Promuse.Contracts.Runs
@@ -33,6 +34,28 @@ namespace Promuse.Contracts.Runs
         string StageId,
         long Seed,
         int StaminaSpent,
+        PlayerState Player,
+        DateTimeOffset ServerTime);
+
+    /// <param name="Won">
+    /// 通关才算 / Only a win advances the "clear any song" missions, matching what
+    /// GameManager already did: a run that ran out of HP is not a clear.
+    /// </param>
+    public sealed record CompleteRunRequest(bool Won);
+
+    /// <summary>
+    /// Closes a run.
+    ///
+    /// 现在很薄, 以后会厚 / Deliberately thin for now: it exists so the mission
+    /// counters have something to advance them. Phase 4 adds the score and the
+    /// input trace to the SAME endpoint and replays them against the seed this
+    /// run was opened with - designing a separate "submit score" call now would
+    /// mean two endpoints that both mean "the run ended".
+    /// </summary>
+    public sealed record RunCompletion(
+        Guid RunId,
+        bool Won,
+        MissionBoards Boards,
         PlayerState Player,
         DateTimeOffset ServerTime);
 }

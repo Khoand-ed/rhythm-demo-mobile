@@ -111,6 +111,30 @@ public static class ApiProblems
         Create(409, ErrorCodes.InsufficientStamina, "Not enough Sanity",
             $"This stage costs {required} and you have {current}.");
 
+    public static ApiProblem MissionNotFound(string id) =>
+        Create(404, ErrorCodes.MissionNotFound, "No such mission",
+            $"'{id}' is not on that board, or is no longer active.");
+
+    public static ApiProblem MissionNotComplete(int progress, int target) =>
+        Create(409, ErrorCodes.MissionNotComplete, "Not finished yet",
+            $"This mission is at {progress} of {target}.");
+
+    /// <summary>
+    /// 不是错, 是重复 / Not the player's mistake: two taps on a slow connection
+    /// land here. The client refreshes the board rather than alarming anyone.
+    /// </summary>
+    public static ApiProblem AlreadyClaimed(string id) =>
+        Create(409, ErrorCodes.AlreadyClaimed, "Already claimed",
+            $"'{id}' has already been claimed this period.");
+
+    public static ApiProblem NotEnoughPoints(int points, int required) =>
+        Create(409, ErrorCodes.NotEnoughPoints, "Not enough points",
+            $"This reward needs {required} claimed points and you have {points}.");
+
+    public static ApiProblem RunNotOpen() =>
+        Create(409, ErrorCodes.RunNotOpen, "No such open run",
+            "That run is unknown, belongs to someone else, or has already been closed.");
+
     public static ApiProblem StateConflict(int currentVersion) =>
         Create(412, ErrorCodes.StateConflict, "State has moved on",
             $"Another device wrote first. Re-read the player state and try again; it is now at version {currentVersion}.");

@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Promuse.Api.Infrastructure;
+using Promuse.Api.Missions;
 using Promuse.Api.Players;
+using Promuse.Contracts.Missions;
 using Promuse.Contracts.Players;
 using Promuse.Contracts.Shop;
 using Promuse.Persistence;
@@ -19,7 +21,9 @@ namespace Promuse.Api.Economy;
 public sealed class EconomyService(
     PromuseDbContext db,
     TimeProvider clock,
-    PlayerService players)
+    PlayerService players,
+    Inventory inventory,
+    MissionService missions)
 {
     /// <summary>Matches the client's own cap on a single checkout.</summary>
     public const int MaxQuantity = 99;
@@ -67,12 +71,12 @@ public sealed class EconomyService(
 
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
 
-        if (!await TryDebitAsync(accountId, offer.PriceItemId, priceTotal, ct))
+        if (!await inventory.TryDebitAsync(accountId, offer.PriceItemId, priceTotal, ct))
         {
             return Outcome<PurchaseResult>.Fail(ApiProblems.InsufficientFunds());
         }
 
-        await CreditAsync(accountId, offer.SellItemId, sellTotal, ct);
+        await inventory.CreditAsync(accountId, offer.SellItemId, sellTotal, ct);
 
         var purchase = new Purchase
         {
@@ -93,7 +97,12 @@ public sealed class EconomyService(
         // 版本要动 / Bumped so the ETag the client is holding stops matching. A
         // purchase changes the save, and a client that kept reading 304 would
         // show an inventory it no longer has.
-        await BumpStateVersionAsync(accountId, now, ct);
+        await inventory.BumpStateVersionAsync(accountId, now, ct);
+
+        // 一次结账算一次 / One checkout, one tick - not one per unit, so buying 99
+        // of something does not clear a "purchase 3 times" mission on its own.
+        // Inside the transaction, so a rollback takes the tick with it.
+        await missions.NotifyAsync(accountId, MissionGoal.BuyShopItem, ct);
 
         await transaction.CommitAsync(ct);
 
@@ -108,82 +117,4 @@ public sealed class EconomyService(
             state.Value!));
     }
 
-    // ------------------------------------------------------------ internals
-
-    /// <summary>
-    /// Takes <paramref name="amount"/> of an item, or reports that the player
-    /// cannot afford it. Never overdraws.
-    ///
-    /// 为什么要先加锁 / The row is locked before anything is decided, and the
-    /// first version of this did not do that. A stack is removed at zero -
-    /// matching PlayerData.TakeItem on the client, and required by the
-    /// `amount > 0` constraint - so spending the last of something is a DELETE
-    /// while spending part of it is an UPDATE. Choosing between them from two
-    /// separately-guarded statements looked race-safe and was not:
-    ///
-    ///   balance 3P, three concurrent checkouts of P each.
-    ///   The third runs `DELETE ... WHERE amount = P` against a snapshot still
-    ///   showing 2P, matches nothing, then blocks on `UPDATE ... WHERE amount > P`.
-    ///   By the time it wakes the balance is exactly P, `P > P` is false, and a
-    ///   player who could afford the purchase is told they cannot.
-    ///
-    /// An integration test caught that - two succeeded where three should have.
-    /// Taking the lock first collapses it to an ordinary read-modify-write: the
-    /// second transaction waits, then reads the committed value and branches on
-    /// a number that cannot change underneath it.
-    /// </summary>
-    private async Task<bool> TryDebitAsync(Guid accountId, int itemId, int amount, CancellationToken ct)
-    {
-        // 0 means no row: the CHECK constraint makes a stored zero impossible,
-        // so the two cases cannot be confused.
-        int current = await db.Database
-            .SqlQuery<int>(
-                $"""
-                 SELECT amount AS "Value" FROM player_items
-                 WHERE account_id = {accountId} AND item_id = {itemId}
-                 FOR UPDATE
-                 """)
-            .FirstOrDefaultAsync(ct);
-
-        if (current < amount) return false;
-
-        if (current == amount)
-        {
-            await db.PlayerItems
-                .Where(i => i.AccountId == accountId && i.ItemId == itemId)
-                .ExecuteDeleteAsync(ct);
-
-            return true;
-        }
-
-        await db.PlayerItems
-            .Where(i => i.AccountId == accountId && i.ItemId == itemId)
-            .ExecuteUpdateAsync(s => s.SetProperty(i => i.Amount, i => i.Amount - amount), ct);
-
-        return true;
-    }
-
-    /// <summary>
-    /// Adds to a stack, creating it if the player had none.
-    ///
-    /// 用 upsert 而不是先读后写 / A raw upsert rather than read-then-insert,
-    /// because two purchases of the same item arriving together would both find
-    /// no row and both try to insert - and the second would fail on the primary
-    /// key. ON CONFLICT makes that case an addition instead of an error.
-    /// </summary>
-    private Task CreditAsync(Guid accountId, int itemId, int amount, CancellationToken ct) =>
-        db.Database.ExecuteSqlInterpolatedAsync(
-            $"""
-             INSERT INTO player_items (account_id, item_id, amount)
-             VALUES ({accountId}, {itemId}, {amount})
-             ON CONFLICT (account_id, item_id)
-             DO UPDATE SET amount = player_items.amount + EXCLUDED.amount
-             """, ct);
-
-    private Task BumpStateVersionAsync(Guid accountId, DateTimeOffset now, CancellationToken ct) =>
-        db.Players
-            .Where(p => p.AccountId == accountId)
-            .ExecuteUpdateAsync(s => s
-                .SetProperty(p => p.StateVersion, p => p.StateVersion + 1)
-                .SetProperty(p => p.UpdatedAt, now), ct);
 }

@@ -2,8 +2,10 @@ using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Promuse.Api.Infrastructure;
+using Promuse.Api.Missions;
 using Promuse.Api.Players;
 using Promuse.Contracts.Players;
+using Promuse.Contracts.Missions;
 using Promuse.Contracts.Runs;
 using Promuse.Persistence;
 using Promuse.Persistence.Entities;
@@ -23,6 +25,7 @@ public sealed class RunService(
     PromuseDbContext db,
     TimeProvider clock,
     PlayerService players,
+    MissionService missions,
     IOptions<StaminaOptions> stamina)
 {
     public async Task<Outcome<RunTicket>> StartAsync(Guid accountId, string stageId, CancellationToken ct)
@@ -105,6 +108,49 @@ public sealed class RunService(
 
         return Outcome<RunTicket>.Ok(new RunTicket(
             run.Id, run.StageId, run.Seed, run.StaminaSpent, state.Value!, now));
+    }
+
+    /// <summary>
+    /// Closes a run that this player opened and has not closed.
+    ///
+    /// 找不到就拒绝 / The lookup is by run id AND account AND still-open, so a run
+    /// that belongs to someone else is indistinguishable from one that does not
+    /// exist. Answering differently would let a stranger probe which run ids are
+    /// real.
+    ///
+    /// 只有通关才计数 / Only a win advances the missions, which is what
+    /// GameManager already did: a run that ran out of HP is not a clear. The
+    /// stamina is spent either way - it was spent when the run opened.
+    /// </summary>
+    public async Task<Outcome<RunCompletion>> CompleteAsync(
+        Guid accountId, Guid runId, bool won, CancellationToken ct)
+    {
+        DateTimeOffset now = clock.GetUtcNow();
+
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+
+        // 条件更新就是防重 / A conditional UPDATE rather than read-then-write:
+        // two completions racing for one run both see it open, and exactly one
+        // changes a row. The other is told the run is not open, which is true.
+        int closed = await db.Runs
+            .Where(r => r.Id == runId && r.AccountId == accountId && r.CompletedAt == null)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(r => r.CompletedAt, now)
+                .SetProperty(r => r.Won, won), ct);
+
+        if (closed == 0) return Outcome<RunCompletion>.Fail(ApiProblems.RunNotOpen());
+
+        if (won) await missions.NotifyAsync(accountId, MissionGoal.PlaySong, ct);
+
+        await transaction.CommitAsync(ct);
+
+        Outcome<MissionBoards> boards = await missions.GetBoardsAsync(accountId, ct);
+        Outcome<PlayerState> state = await players.GetStateAsync(accountId, ct);
+
+        if (!state.IsSuccess) return Outcome<RunCompletion>.Fail(state.Problem!);
+
+        return Outcome<RunCompletion>.Ok(new RunCompletion(
+            runId, won, boards.Value!, state.Value!, now));
     }
 
     /// <summary>
