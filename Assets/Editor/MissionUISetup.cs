@@ -1,6 +1,5 @@
 using System.IO;
 using Data.Item;
-using Data.Mission;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UI;
@@ -70,24 +69,13 @@ public static class MissionUISetup
                   $"  {UiPrefabDir}/MissionUI.prefab - Daily/Weekly tabs, rewards left, missions right, both scroll\n" +
                   $"  {UiPrefabDir}/MissionRewardUI.prefab - claim popup, blurred backdrop\n" +
                   $"  HomeUI {MissionsTileName}: {(hooked ? "opens MissionUI" : "NOT hooked, see warning above")}\n" +
-                  "  Progress lives in PlayerPrefs; Arknights/Mission/Reset Mission Progress clears it.");
+                  "  The boards themselves come from the server; this only builds the prefabs.");
     }
 
-    /// <summary>
-    /// 清空进度 / Wipes every counter and claimed flag on both boards.
-    ///
-    /// 这是唯一的重置 / This is the only reset there is: nothing reads the calendar, so "daily"
-    /// and "weekly" name the two boards rather than a schedule. That keeps a test run repeatable,
-    /// and a real clock reset is a change to MissionManager when it is wanted.
-    /// </summary>
-    [MenuItem("Arknights/Mission/Reset Mission Progress", false, 20)]
-    public static void ResetMissionProgress()
-    {
-        if (!GuardEditMode()) return;
-
-        MissionManager.Inst().ResetAll();
-        Debug.Log("[MissionUISetup] Mission progress reset: every counter and claimed flag cleared on both boards.");
-    }
+    // 没有重置菜单了 / There used to be an Arknights/Mission/Reset Mission Progress item here,
+    // because progress lived in PlayerPrefs and nothing read a calendar. It is gone: the counters
+    // are rows on the server keyed by the period they belong to, so a board resets by the key
+    // moving on and there is nothing on this machine left to clear.
 
     // -------------------------------------------------------------- mission screen
 

@@ -6,6 +6,7 @@ using Tools;
 using UnityEngine;
 using UnityEngine.UI;
 using Promuse.Contracts.Missions;
+using Promuse.Net;
 
 namespace UI.Sub {
     /// <summary>
@@ -19,9 +20,9 @@ namespace UI.Sub {
     ///
     /// 弹窗暂时关着 / The reward popup is off for now. MissionRewardUI and its prefab are still
     /// built and ready; nothing opens them, because a claim is now an explicit press and the press
-    /// is its own confirmation. ClaimReward and ClaimAll both return what they handed over, so
-    /// passing that to MissionRewardUI.Show in <see cref="AfterClaim"/> is all it takes to bring
-    /// the popup back.
+    /// is its own confirmation. Every claim answers with a ClaimResult whose Granted list is exactly
+    /// what changed hands, so handing that to MissionRewardUI.Show is all it takes to bring the
+    /// popup back.
     ///
     /// 节点名字是绑定的一部分 / The node paths the row wrappers below look up are load-bearing.
     /// MissionUISetup builds exactly these names and renaming one there breaks the binding here
@@ -83,9 +84,40 @@ namespace UI.Sub {
 
         // ----------------------------------------------------------------- claiming
 
-        private void ClaimAll() {
-            MissionManager.Inst().ClaimAll(tab);
+        private async void ClaimAll() {
+            // 关掉按钮 / Shut while the passes run: Claim All is several requests and
+            // a second press would start a second interleaved series of them.
+            claimAllButton.interactable = false;
+
+            ApiResult<ClaimResult> result = await MissionManager.Inst().ClaimAllAsync(tab);
+
+            Report(result);
             AfterClaim();
+        }
+
+        private async void ClaimMission(string missionId) {
+            Report(await MissionManager.Inst().ClaimMissionAsync(tab, missionId));
+            AfterClaim();
+        }
+
+        private async void ClaimReward(string rewardId) {
+            Report(await MissionManager.Inst().ClaimRewardAsync(tab, rewardId));
+            AfterClaim();
+        }
+
+        /// <summary>
+        /// 只有失败才说话 / A refused claim has to say so, because the rows redraw
+        /// from the server's answer and an unchanged board is otherwise
+        /// indistinguishable from nothing having happened.
+        ///
+        /// 默认的 default 不是失败 / ClaimAllAsync returns default when there was
+        /// nothing to claim, and a default ApiResult carries no problem, so the
+        /// silent case falls out of the same check.
+        /// </summary>
+        private static void Report<T>(ApiResult<T> result) {
+            if (result.Problem == null) return;
+
+            CommonDialogUI.Message(CommonDialogUI.GroundType.BLACK, result.Message);
         }
 
         /// <summary>
@@ -120,12 +152,16 @@ namespace UI.Sub {
 
         private void Rebuild() {
             MissionManager manager = MissionManager.Inst();
-            MissionSet set = manager.GetSet(tab);
+            MissionBoard board = manager.GetBoard(tab);
 
-            int points = manager.GetPoints(tab);
-            int max = set.MaxPoints;
+            // 还没到 / Nothing to draw before the first load lands. Show kicks that
+            // off and calls back here, so this is the frame or two in between.
+            if (board == null) return;
 
-            boardTitle.text = set.Title;
+            int points = board.Points;
+            int max = manager.MaxPoints(tab);
+
+            boardTitle.text = board.Title;
             pointsLabel.text = $"{points} / {max} PTS";
             SetFill(pointsFill, max > 0 ? (float) points / max : 0f);
 
@@ -135,51 +171,56 @@ namespace UI.Sub {
             claimAllButton.interactable = anything;
             claimAllLabel.text = anything ? "CLAIM ALL" : "NOTHING TO CLAIM";
 
-            DrawRewards(manager, set);
-            DrawMissions(manager, set);
+            DrawRewards(board);
+            DrawMissions(board);
         }
 
         /// <summary>
         /// 行是复用的 / Rows are pooled rather than rebuilt: switching tabs is a redraw of the same
         /// objects, so the two boards can hold different row counts without churning the hierarchy.
         /// </summary>
-        private void DrawRewards(MissionManager manager, MissionSet set) {
-            while (rewardRows.Count < set.Rewards.Count) {
+        private void DrawRewards(MissionBoard board) {
+            while (rewardRows.Count < board.Rewards.Count) {
                 rewardRows.Add(new RewardRow(Instantiate(rewardTemplate, rewardTemplate.parent)));
             }
 
             for (int i = 0; i < rewardRows.Count; i++) {
-                bool used = i < set.Rewards.Count;
+                bool used = i < board.Rewards.Count;
                 rewardRows[i].SetActive(used);
                 if (!used) continue;
 
                 // 捕获副本 / A local copy, because the listener below outlives this iteration.
-                RewardDef reward = set.Rewards[i];
+                RewardState reward = board.Rewards[i];
+                string rewardId = reward.RewardId;
 
+                // 状态是服务端算的 / Claimed and claimable both arrive decided. The
+                // client no longer knows the threshold rule, which is the point:
+                // there is now one place that can get it wrong.
                 rewardRows[i].Draw(reward,
-                                   manager.IsRewardClaimed(tab, reward),
-                                   manager.IsRewardClaimable(tab, reward),
-                                   () => { manager.ClaimReward(tab, reward); AfterClaim(); });
+                                   reward.IsClaimed,
+                                   reward.IsClaimable,
+                                   () => ClaimReward(rewardId));
             }
         }
 
-        private void DrawMissions(MissionManager manager, MissionSet set) {
-            while (missionRows.Count < set.Missions.Count) {
+        private void DrawMissions(MissionBoard board) {
+            while (missionRows.Count < board.Missions.Count) {
                 missionRows.Add(new MissionRow(Instantiate(missionTemplate, missionTemplate.parent)));
             }
 
             for (int i = 0; i < missionRows.Count; i++) {
-                bool used = i < set.Missions.Count;
+                bool used = i < board.Missions.Count;
                 missionRows[i].SetActive(used);
                 if (!used) continue;
 
-                MissionDef mission = set.Missions[i];
+                MissionState mission = board.Missions[i];
+                string missionId = mission.MissionId;
 
                 missionRows[i].Draw(mission,
-                                    manager.GetProgress(tab, mission),
-                                    manager.IsMissionClaimed(tab, mission),
-                                    manager.IsMissionClaimable(tab, mission),
-                                    () => { manager.ClaimMission(tab, mission); AfterClaim(); });
+                                    mission.Progress,
+                                    mission.IsClaimed,
+                                    mission.IsComplete && !mission.IsClaimed,
+                                    () => ClaimMission(missionId));
             }
         }
 
@@ -219,10 +260,43 @@ namespace UI.Sub {
 
         // ------------------------------------------------------------------- frame
 
+        /// <summary>
+        /// 每次打开都拉一次 / Fetched on every open rather than once per session: the
+        /// boards reset on a clock the client does not watch, and a run finished
+        /// since the last look has already moved counters the cache cannot know
+        /// about. Show cannot be awaited, so the fetch runs beside it and Rebuild
+        /// draws the empty frame until it lands.
+        /// </summary>
         public override void Show() {
             base.Show();
             canvasGroup.alpha = 0;
             canvasGroup.DOFade(1, 0.3f);
+
+            LoadBoards();
+        }
+
+        private async void LoadBoards() {
+            claimAllButton.interactable = false;
+            claimAllLabel.text = "LOADING";
+
+            ApiResult<MissionBoards> result = await MissionManager.Inst().LoadAsync();
+
+            // 关掉了就别画 / The screen can be gone by the time this returns, and
+            // a dialog raised over a screen that is no longer there is worse than
+            // silence. Checked before reporting, not only before drawing.
+            if (this == null || !gameObject.activeInHierarchy) return;
+
+            Report(result);
+
+            if (result.Problem != null) {
+                // 拉不到就说拉不到 / Left in a state that reads as broken rather
+                // than as an empty board, which would look like a board with
+                // nothing on it.
+                claimAllLabel.text = "UNAVAILABLE";
+                return;
+            }
+
+            Rebuild();
         }
 
         public override void Hide(bool destroy = false) {
@@ -256,7 +330,7 @@ namespace UI.Sub {
 
             internal void SetActive(bool value) => root.SetActive(value);
 
-            internal void Draw(RewardDef reward, bool claimed, bool claimable, UnityEngine.Events.UnityAction onClaim) {
+            internal void Draw(RewardState reward, bool claimed, bool claimable, UnityEngine.Events.UnityAction onClaim) {
                 requirement.text = reward.RequiredPoints.ToString();
 
                 ItemStack stack = new ItemStack(reward.ItemId, reward.Amount);
@@ -318,7 +392,7 @@ namespace UI.Sub {
 
             internal void SetActive(bool value) => root.SetActive(value);
 
-            internal void Draw(MissionDef mission, int progress, bool claimed, bool claimable,
+            internal void Draw(MissionState mission, int progress, bool claimed, bool claimable,
                                UnityEngine.Events.UnityAction onClaim) {
                 description.text = mission.Description;
                 award.text = $"x{mission.Points}";

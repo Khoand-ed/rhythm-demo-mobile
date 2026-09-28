@@ -9,9 +9,9 @@ namespace UI.Sub {
     /// 领取成功弹窗 / The "reward received" popup: one card listing everything the mission board
     /// just handed over.
     ///
-    /// 只是报喜, 不发奖 / It announces, it does not grant. MissionManager has already put the items
-    /// in the bag by the time this opens, so dismissing it - or never seeing it at all - costs the
-    /// player nothing.
+    /// 只是报喜, 不发奖 / It announces, it does not grant. The server has already put the items in
+    /// the bag by the time this opens - the claim that returns them is what granted them - so
+    /// dismissing it, or never seeing it at all, costs the player nothing.
     ///
     /// 一次只开一个模糊弹窗 / Exactly one blurred popup may be up at a time. UiBlurCapture shares a
     /// single material and render texture across the session, so the cells here are deliberately
