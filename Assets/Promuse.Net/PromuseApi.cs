@@ -8,6 +8,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 using Promuse.Contracts;
 using Promuse.Contracts.Auth;
+using Promuse.Contracts.Missions;
 using Promuse.Contracts.Players;
 using Promuse.Contracts.Runs;
 using Promuse.Contracts.Shop;
@@ -183,6 +184,32 @@ namespace Promuse.Net
             return result;
         }
 
+        // ------------------------------------------------------------- missions
+
+        public Task<ApiResult<MissionBoards>> GetMissionBoardsAsync() =>
+            SendAsync<MissionBoards>(UnityWebRequest.kHttpVerbGET, "/v1/missions",
+                body: null, authenticate: true);
+
+        public Task<ApiResult<ClaimResult>> ClaimMissionAsync(MissionTab tab, string missionId) =>
+            ClaimAsync("/v1/missions/claims", new ClaimMissionRequest(tab, missionId));
+
+        public Task<ApiResult<ClaimResult>> ClaimRewardAsync(MissionTab tab, string rewardId) =>
+            ClaimAsync("/v1/missions/reward-claims", new ClaimRewardRequest(tab, rewardId));
+
+        private async Task<ApiResult<ClaimResult>> ClaimAsync(string path, object body)
+        {
+            ApiResult<ClaimResult> result = await SendAsync<ClaimResult>(
+                UnityWebRequest.kHttpVerbPOST, path, body,
+                authenticate: true,
+                idempotencyKey: Guid.NewGuid().ToString());
+
+            // A reward claim puts items in the bag, so the version in hand is
+            // stale the moment it succeeds.
+            if (result.IsSuccess) _playerETag = ETagFor(result.Value!.Player);
+
+            return result;
+        }
+
         // ----------------------------------------------------------------- runs
 
         /// <summary>
@@ -196,6 +223,26 @@ namespace Promuse.Net
                 new StartRunRequest(stageId),
                 authenticate: true,
                 idempotencyKey: Guid.NewGuid().ToString());
+
+            if (result.IsSuccess) _playerETag = ETagFor(result.Value!.Player);
+
+            return result;
+        }
+
+        /// <summary>
+        /// Closes an attempt. 幂等键是 runId / The idempotency key is the run id
+        /// rather than a fresh Guid, because "this run ended" is a statement about
+        /// one run and not an event that can happen twice. A retry after a dropped
+        /// response replays the first answer instead of ticking the mission
+        /// counters a second time.
+        /// </summary>
+        public async Task<ApiResult<RunCompletion>> CompleteRunAsync(Guid runId, bool won)
+        {
+            ApiResult<RunCompletion> result = await SendAsync<RunCompletion>(
+                UnityWebRequest.kHttpVerbPOST, $"/v1/runs/{runId}/complete",
+                new CompleteRunRequest(won),
+                authenticate: true,
+                idempotencyKey: runId.ToString());
 
             if (result.IsSuccess) _playerETag = ETagFor(result.Value!.Player);
 
