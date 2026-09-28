@@ -98,6 +98,25 @@ namespace Promuse.Contracts
         /// <summary>The chart is unknown, or is not in rotation.</summary>
         public const string StageNotFound = "STAGE_NOT_FOUND";
 
+        /// <summary>No such mission or reward on that board.</summary>
+        public const string MissionNotFound = "MISSION_NOT_FOUND";
+
+        /// <summary>The work is not done yet, so there are no points to take.</summary>
+        public const string MissionNotComplete = "MISSION_NOT_COMPLETE";
+
+        /// <summary>
+        /// Already taken this period. Not an error the player caused - two taps
+        /// on a slow connection reach here - so the client should simply refresh
+        /// the board rather than say anything alarming.
+        /// </summary>
+        public const string AlreadyClaimed = "ALREADY_CLAIMED";
+
+        /// <summary>Not enough claimed points for that reward threshold.</summary>
+        public const string NotEnoughPoints = "NOT_ENOUGH_POINTS";
+
+        /// <summary>The run is unknown, belongs to someone else, or is already closed.</summary>
+        public const string RunNotOpen = "RUN_NOT_OPEN";
+
         public const string RateLimited = "RATE_LIMITED";
         public const string InternalError = "INTERNAL_ERROR";
     }

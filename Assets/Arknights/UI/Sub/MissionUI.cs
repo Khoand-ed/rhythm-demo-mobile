@@ -5,6 +5,7 @@ using DG.Tweening;
 using Tools;
 using UnityEngine;
 using UnityEngine.UI;
+using Promuse.Contracts.Missions;
 
 namespace UI.Sub {
     /// <summary>

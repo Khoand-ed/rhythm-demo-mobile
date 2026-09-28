@@ -3,6 +3,7 @@ using Data.Item;
 using Data.Player;
 using Tools;
 using UnityEngine;
+using Promuse.Contracts.Missions;
 
 namespace Data.Mission {
     /// <summary>

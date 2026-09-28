@@ -10,6 +10,7 @@ using Manager;
 using Tools;
 using UnityEngine;
 using UnityEngine.UI;
+using Promuse.Contracts.Missions;
 
 namespace UI.Sub {
     public class ShopUI : UIBase {
