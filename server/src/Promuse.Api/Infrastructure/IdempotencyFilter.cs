@@ -22,6 +22,12 @@ namespace Promuse.Api.Infrastructure;
 ///   - Record with the same request hash: replay it. The handler does not run.
 ///   - Record with a different hash: 409. The same key for a different request
 ///     is not a retry, and answering it with the first response would be a lie.
+///
+/// 记录按账号分开 / Records are scoped to the caller. A replay hands back a stored
+/// response in full, and those responses carry player state, so two accounts
+/// presenting the same key must never meet in the same record. Keys are chosen by
+/// the client and some of them are values that appear elsewhere - a run closes
+/// under its own run id - so "unguessable" is not something this can rely on.
 /// </summary>
 public sealed class IdempotencyFilter<TRequest> : IEndpointFilter
     where TRequest : notnull
@@ -63,7 +69,7 @@ public sealed class IdempotencyFilter<TRequest> : IEndpointFilter
         }
 
         string key = header.ToString();
-        string endpoint = $"{http.Request.Method} {http.Request.Path}";
+        string endpoint = $"{Subject(http)} {http.Request.Method} {http.Request.Path}";
         string requestHash = HashRequest(context.Arguments.OfType<TRequest>().FirstOrDefault(), json);
 
         IdempotencyRecord? existing = await db.IdempotencyRecords
@@ -117,6 +123,18 @@ public sealed class IdempotencyFilter<TRequest> : IEndpointFilter
 
         return result;
     }
+
+    /// <summary>
+    /// 谁在发这个请求 / Who the record belongs to.
+    ///
+    /// 匿名也要有个名字 / Register and guest sign-in run this filter with nobody
+    /// signed in yet, and those are exactly the calls a client retries after a
+    /// dropped response. They share one bucket, which is what they did before -
+    /// their responses are the caller's own new session and hold no one else's
+    /// state.
+    /// </summary>
+    private static string Subject(HttpContext http) =>
+        http.User.TryGetAccountId(out Guid accountId) ? accountId.ToString() : "anon";
 
     private static IResult Replay(IdempotencyRecord record, string requestHash)
     {
