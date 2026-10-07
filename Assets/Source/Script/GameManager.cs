@@ -41,6 +41,10 @@ public class GameManager : MonoBehaviour
     [Tooltip("Optional. Left unassigned, the results screen simply omits these.")]
     public TextMeshProUGUI maxComboText, fullComboText;
 
+    [Tooltip("Optional. What the server made of the run - its rank, under review, or not verified. " +
+             "Left unassigned, the verdict is only logged.")]
+    public TextMeshProUGUI rankingText;
+
     // Where the character stands. A missed note travels here and pauses before disappearing.
     public Transform middleZoneMarker;
 
@@ -104,6 +108,14 @@ public class GameManager : MonoBehaviour
     // 同样的理由 / Same reason, same place: the run id is read off SongSession before the chart
     // handover clears it. Empty means there is nothing to close.
     private System.Guid runId;
+
+    // The seed the server issued with the run. RunState rolls the passives from it, and the server
+    // keeps the same number, so the rolls can be drawn again when the run is replayed.
+    private long runSeed;
+
+    // 每帧的输入 / Every gameplay frame's input, for the server. Kept across a retry's reset only
+    // in the sense that BeginTrace empties it: the trace sent is the attempt that was reported.
+    private readonly InputTraceWriter inputTrace = new InputTraceWriter();
 
     private float feverEndsAtSongTime;
 
@@ -197,6 +209,7 @@ public class GameManager : MonoBehaviour
 
         SyncTuning();
         state.Reset();
+        BeginTrace();
 
         if (failedText != null) failedText.SetActive(false);
         PushGauges();
@@ -396,6 +409,9 @@ void Update()
         if (Conductor.instance.IsPaused) return;
 
         float songTime = Conductor.instance.SongTime;
+
+        // The same song time and the same input the judging below consumes.
+        RecordFrame(songTime);
 
         // Holds first, so a hold whose tail completes this frame frees its
         // lane before a new press in that lane is looked at.
@@ -693,12 +709,14 @@ void Update()
 
         SyncTuning();
         state.Reset();
+        BeginTrace();
 
         if (failedText != null) failedText.SetActive(false);
         PushGauges();
 
         scoreText.text = "Score: 0";
         multiText.text = "0";
+        if (rankingText != null) rankingText.text = "";
         resultsScreen.SetActive(false);
     }
 
@@ -852,31 +870,64 @@ void Update()
         state.passive = operatorPassive;
         state.operatorMaxHp = operatorMaxHp;
 
+        // Reset rewinds the rolls to this, so a retry draws exactly what the first attempt drew.
+        state.seed = runSeed;
+
         // 重置增量锚点 / Re-anchored here because SyncTuning runs on every reset, and a retry
         // would otherwise hand the passive the whole of the previous run as one delta.
         lastPassiveSongTime = 0f;
     }
 
     /// <summary>
-    /// 这局的身份 / The run the server opened for this attempt, taken before the chart handover
-    /// clears SongSession.
+    /// 这局的身份 / The run the server opened for this attempt and the seed it issued, taken
+    /// before the chart handover clears SongSession.
     ///
     /// 可以是空的 / Empty when the gameplay scene was opened directly in the Editor, which is a
-    /// supported way to work: there is no run to close, so <see cref="ReportRun"/> does nothing.
+    /// supported way to work: there is no run to close, so <see cref="ReportRun"/> does nothing,
+    /// and the seed of 0 still gives the passives a sequence to draw from.
     /// </summary>
     private void CaptureRun()
     {
         runId = SongSession.RunId;
+        runSeed = SongSession.Seed;
     }
 
     /// <summary>
-    /// 结束时告诉服务端 / Tells the server the run is over, which is what advances the mission
-    /// counters. Nothing on this screen waits for the answer: the results are already on the
-    /// player's own numbers, and a board they are not looking at can be a request behind.
+    /// 每帧记一笔 / Records what this frame's judging is about to consume: the song time it judges
+    /// at, the lanes that went down, and the lanes being held.
     ///
-    /// 不是提交分数 / Not a score submission. Phase 4 puts the score and the input trace in this
-    /// same call and replays them against the seed the run was opened with; there is deliberately
-    /// no second endpoint that also means "it ended".
+    /// 只读 / Pure reads of the same input the judging reads a few lines later, so recording can
+    /// never change what the player gets. Called after the pause check, so a paused frame - whose
+    /// song time is frozen - is not recorded at all.
+    /// </summary>
+    private void RecordFrame(float songTime)
+    {
+        int pressed = 0;
+        int held = 0;
+
+        for (int lane = 0; lane < noteSpawner.lanes.Length && lane < 8; lane++)
+        {
+            KeyCode key = noteSpawner.lanes[lane].key;
+
+            if (Input.GetKeyDown(key) || simulatedKeyDownsThisFrame.Contains(key)) pressed |= 1 << lane;
+            if (IsLaneHeld(key)) held |= 1 << lane;
+        }
+
+        inputTrace.Record(songTime, pressed, held);
+    }
+
+    /// <summary>A fresh trace, at the top of every attempt - a retry included.</summary>
+    private void BeginTrace()
+    {
+        inputTrace.Begin(noteSpawner != null && noteSpawner.lanes != null ? noteSpawner.lanes.Length : 0);
+    }
+
+    /// <summary>
+    /// 结束时交给服务端 / Hands the result to the server, which reviews it, counts it towards the
+    /// missions if it is a clear, and ranks it if it is accepted.
+    ///
+    /// 不等它 / The results screen does not wait: the player's own numbers are already on it, and
+    /// the server's verdict fills in the ranking line when it arrives.
     /// </summary>
     private async void ReportRun(bool won)
     {
@@ -888,20 +939,122 @@ void Update()
         System.Guid reporting = runId;
         runId = System.Guid.Empty;
 
+        // 等待之前就定下 / Built before the await: the state is final now, and a retry pressed
+        // while the request is in flight would otherwise reset it under the result.
+        RunResult outcome = BuildResult();
+
+        ShowRanking("Submitting...");
+
         ApiResult<RunCompletion> result = await Data.Player.PlayerManager.Inst().Api
-            .CompleteRunAsync(reporting, won, null);
+            .CompleteRunAsync(reporting, won, outcome);
 
         if (!result.IsSuccess)
         {
-            // 不打扰玩家 / Logged rather than shown. The run happened, the player can see their
-            // result, and a dialog over the results screen saying a mission counter did not move
-            // is noise about something they cannot act on.
+            // 不打扰玩家 / Logged rather than shown as a dialog. The run happened and the player
+            // can see their result; a popup over the results screen about a request they cannot
+            // act on is noise.
             Debug.LogWarning($"[GameManager] Could not close run {reporting}: {result.Message}");
+            ShowRanking("Not recorded");
             return;
         }
 
         Data.Player.PlayerData player = Data.Player.PlayerManager.Inst().Get();
         if (player != null) player.ApplyServerState(result.Value.Player);
+
+        ScoreReview review = result.Value.Review;
+
+        if (review != null && review.Verdict == ScoreVerdict.Rejected)
+        {
+            // 开发时要看得到 / Spelled out in the log: a rejection on an honest device is a bug,
+            // most often the ruleset - RULESET_MISMATCH means server/data/ruleset.json no longer
+            // matches the tuning assets.
+            Debug.LogWarning($"[GameManager] Run {reporting} was rejected: {string.Join(", ", review.Reasons)}");
+        }
+
+        string verdict = DescribeReview(review);
+        Debug.Log($"[GameManager] Run {reporting} closed: {(review != null ? review.Verdict.ToString() : "no result")}. {verdict}");
+
+        ShowRanking(verdict);
+    }
+
+    /// <summary>
+    /// What this run was played under, as the shared ruleset describes it. The server computes the
+    /// same fingerprint from server/data/ruleset.json; a difference is the two sides disagreeing
+    /// about the rules, and is reported as such instead of as an impossible score.
+    /// </summary>
+    private RunResult BuildResult()
+    {
+        Ruleset rules = new Ruleset
+        {
+            version = Ruleset.CurrentVersion,
+            score = new ScoreRules
+            {
+                perfect = scorePerPerfectNote,
+                great = scorePerGoodNote,
+                hit = scorePerNote,
+                holdTick = scorePerHoldTick,
+                holdTickInterval = holdTickInterval,
+                multiplierThresholds = multiplierThresholds ?? new int[0],
+            },
+            judge = JudgeRules.From(judge),
+            health = HealthRules.From(health),
+            fever = FeverRules.From(fever),
+        };
+
+        // The values the run actually used: CaptureOperator has already applied the fallbacks.
+        OperatorRules op = new OperatorRules
+        {
+            scoreModifier = operatorScoreModifier,
+            feverModifier = operatorFeverModifier,
+            maxHp = operatorMaxHp,
+            passive = PassiveRules.From(operatorPassive),
+        };
+
+        if (inputTrace.Overflowed)
+        {
+            Debug.LogWarning("[GameManager] The input trace hit its frame limit; the server will refuse it as incomplete.");
+        }
+
+        // The counters are floats on RunState for the accuracy maths; they only ever hold whole
+        // numbers.
+        return new RunResult(
+            state.score,
+            state.maxCombo,
+            Mathf.RoundToInt(state.perfectHits),
+            Mathf.RoundToInt(state.goodHits),
+            Mathf.RoundToInt(state.normalHits),
+            Mathf.RoundToInt(state.missedHits),
+            state.IsFullCombo,
+            RulesetFingerprint.Compute(rules, op),
+            TracePacker.Pack(inputTrace.ToArray()));
+    }
+
+    private void ShowRanking(string text)
+    {
+        // 场景可能已经换了 / The scene may have changed while the request was out.
+        if (this == null || rankingText == null) return;
+
+        rankingText.text = text;
+    }
+
+    private static string DescribeReview(ScoreReview review)
+    {
+        if (review == null) return "";
+
+        switch (review.Verdict)
+        {
+            case ScoreVerdict.Accepted:
+                string line = review.IsPersonalBest ? "NEW BEST   " : "";
+                if (review.AllTimeRank.HasValue) line += "#" + review.AllTimeRank.Value + " all-time";
+                if (review.WeeklyRank.HasValue) line += "   #" + review.WeeklyRank.Value + " this week";
+                return line;
+
+            case ScoreVerdict.Flagged:
+                return "Under review - not ranked yet";
+
+            default:
+                return "Not verified - not ranked";
+        }
     }
 
     /// <summary>
