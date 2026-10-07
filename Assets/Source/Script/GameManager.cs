@@ -889,7 +889,7 @@ void Update()
         runId = System.Guid.Empty;
 
         ApiResult<RunCompletion> result = await Data.Player.PlayerManager.Inst().Api
-            .CompleteRunAsync(reporting, won);
+            .CompleteRunAsync(reporting, won, null);
 
         if (!result.IsSuccess)
         {

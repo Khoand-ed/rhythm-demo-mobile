@@ -71,13 +71,30 @@ public class MissionEndpointTests(PromuseApiFactory factory)
     /// <summary>Opens a run and closes it, which is what a cleared song is.</summary>
     private async Task<HttpResponseMessage> PlayAsync(AuthSession session, bool won = true)
     {
-        var ticket = (await (await _client.SendAsync(
-            Send(HttpMethod.Post, "/v1/runs", session, new StartRunRequest("stage_001"))))
-            .Content.ReadFromJsonAsync<RunTicket>())!;
+        RunTicket ticket = await OpenRunAsync(session);
 
         return await _client.SendAsync(Send(HttpMethod.Post,
-            $"/v1/runs/{ticket.RunId}/complete", session, new CompleteRunRequest(won)));
+            $"/v1/runs/{ticket.RunId}/complete", session, won ? Won() : Lost()));
     }
+
+    /// <summary>
+    /// Opens a run on stage_001 and ages it past the chart's length, so a win closed straight
+    /// away is not refused for finishing faster than the song plays.
+    /// </summary>
+    private async Task<RunTicket> OpenRunAsync(AuthSession session)
+    {
+        var ticket = (await (await _client.SendAsync(
+            Send(HttpMethod.Post, "/v1/runs", session, new StartRunRequest(Played.Stage, Played.Operator))))
+            .Content.ReadFromJsonAsync<RunTicket>())!;
+
+        await Played.AgeAsync(factory, ticket.RunId, TimeSpan.FromMinutes(5));
+        return ticket;
+    }
+
+    /// <summary>A clean win the review accepts. Deterministic, so two of these are the same request.</summary>
+    private CompleteRunRequest Won() => new(true, Played.Win(factory));
+
+    private static CompleteRunRequest Lost() => new(false, null);
 
     private async Task GrantAsync(Guid accountId, int itemId, int amount)
     {
@@ -324,15 +341,13 @@ public class MissionEndpointTests(PromuseApiFactory factory)
     {
         AuthSession session = await SignInAsync();
 
-        var ticket = (await (await _client.SendAsync(
-            Send(HttpMethod.Post, "/v1/runs", session, new StartRunRequest("stage_001"))))
-            .Content.ReadFromJsonAsync<RunTicket>())!;
+        RunTicket ticket = await OpenRunAsync(session);
 
         await _client.SendAsync(Send(HttpMethod.Post,
-            $"/v1/runs/{ticket.RunId}/complete", session, new CompleteRunRequest(true)));
+            $"/v1/runs/{ticket.RunId}/complete", session, Won()));
 
         HttpResponseMessage second = await _client.SendAsync(Send(HttpMethod.Post,
-            $"/v1/runs/{ticket.RunId}/complete", session, new CompleteRunRequest(true)));
+            $"/v1/runs/{ticket.RunId}/complete", session, Won()));
 
         Assert.Equal(HttpStatusCode.Conflict, second.StatusCode);
         Assert.Equal(ErrorCodes.RunNotOpen,
@@ -356,14 +371,13 @@ public class MissionEndpointTests(PromuseApiFactory factory)
         AuthSession owner = await SignInAsync();
         AuthSession stranger = await SignInAsync();
 
-        var ticket = (await (await _client.SendAsync(
-            Send(HttpMethod.Post, "/v1/runs", owner, new StartRunRequest("stage_001"))))
-            .Content.ReadFromJsonAsync<RunTicket>())!;
+        RunTicket ticket = await OpenRunAsync(owner);
 
         string key = ticket.RunId.ToString();
+        CompleteRunRequest won = Won();
 
         HttpResponseMessage closed = await _client.SendAsync(Send(HttpMethod.Post,
-            $"/v1/runs/{ticket.RunId}/complete", owner, new CompleteRunRequest(true), key));
+            $"/v1/runs/{ticket.RunId}/complete", owner, won, key));
 
         Assert.Equal(HttpStatusCode.OK, closed.StatusCode);
 
@@ -371,7 +385,7 @@ public class MissionEndpointTests(PromuseApiFactory factory)
         // account. It must reach the handler, which refuses it because the run is
         // not theirs - not be answered out of the owner's record.
         HttpResponseMessage replayed = await _client.SendAsync(Send(HttpMethod.Post,
-            $"/v1/runs/{ticket.RunId}/complete", stranger, new CompleteRunRequest(true), key));
+            $"/v1/runs/{ticket.RunId}/complete", stranger, won, key));
 
         Assert.Equal(HttpStatusCode.Conflict, replayed.StatusCode);
         Assert.Equal(ErrorCodes.RunNotOpen,
@@ -380,7 +394,7 @@ public class MissionEndpointTests(PromuseApiFactory factory)
         // 而本人重试还是要拿到原来的答案 / And the owner's own retry still replays,
         // which is what the header is for in the first place.
         HttpResponseMessage retry = await _client.SendAsync(Send(HttpMethod.Post,
-            $"/v1/runs/{ticket.RunId}/complete", owner, new CompleteRunRequest(true), key));
+            $"/v1/runs/{ticket.RunId}/complete", owner, won, key));
 
         Assert.Equal(HttpStatusCode.OK, retry.StatusCode);
 
@@ -400,15 +414,13 @@ public class MissionEndpointTests(PromuseApiFactory factory)
         AuthSession owner = await SignInAsync();
         AuthSession stranger = await SignInAsync();
 
-        var ticket = (await (await _client.SendAsync(
-            Send(HttpMethod.Post, "/v1/runs", owner, new StartRunRequest("stage_001"))))
-            .Content.ReadFromJsonAsync<RunTicket>())!;
+        RunTicket ticket = await OpenRunAsync(owner);
 
         HttpResponseMessage theirs = await _client.SendAsync(Send(HttpMethod.Post,
-            $"/v1/runs/{ticket.RunId}/complete", stranger, new CompleteRunRequest(true)));
+            $"/v1/runs/{ticket.RunId}/complete", stranger, Won()));
 
         HttpResponseMessage nonsense = await _client.SendAsync(Send(HttpMethod.Post,
-            $"/v1/runs/{Guid.NewGuid()}/complete", stranger, new CompleteRunRequest(true)));
+            $"/v1/runs/{Guid.NewGuid()}/complete", stranger, Won()));
 
         Assert.Equal(theirs.StatusCode, nonsense.StatusCode);
 

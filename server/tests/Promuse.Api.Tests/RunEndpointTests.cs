@@ -37,7 +37,7 @@ public class RunEndpointTests(PromuseApiFactory factory)
     {
         var request = new HttpRequestMessage(HttpMethod.Post, "/v1/runs")
         {
-            Content = JsonContent.Create(new StartRunRequest(stageId)),
+            Content = JsonContent.Create(new StartRunRequest(stageId, Played.Operator)),
         };
 
         request.Headers.Authorization = new("Bearer", session.Tokens.AccessToken);
@@ -210,7 +210,7 @@ public class RunEndpointTests(PromuseApiFactory factory)
     public async Task Starting_without_a_token_is_refused()
     {
         HttpResponseMessage response = await _client.PostAsJsonAsync(
-            "/v1/runs", new StartRunRequest(Stage));
+            "/v1/runs", new StartRunRequest(Stage, Played.Operator));
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }

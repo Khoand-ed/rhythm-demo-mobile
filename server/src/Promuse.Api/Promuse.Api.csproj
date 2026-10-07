@@ -25,6 +25,28 @@
   <ItemGroup>
     <ProjectReference Include="..\Promuse.Persistence\Promuse.Persistence.csproj" />
     <ProjectReference Include="..\Promuse.Contracts\Promuse.Contracts.csproj" />
+    <ProjectReference Include="..\Promuse.Scoring\Promuse.Scoring.csproj" />
+  </ItemGroup>
+
+  <!--
+    The data results are checked against, copied beside the binaries as gamedata/.
+    =============================================================================
+    Linked from where it lives rather than copied into this project, for the same reason the
+    scoring rules are: the charts are the JSON the importer reads in Unity, and the ruleset is
+    the file RulesetParityTests holds to the Unity assets. A second copy here would be a third
+    thing to keep in step.
+
+    Every chart JSON under Assets/Beatmaps is taken; GameData indexes them by their stageId and
+    refuses two that claim the same stage.
+  -->
+  <ItemGroup>
+    <Content Include="..\..\data\ruleset.json"
+             Link="gamedata\ruleset.json"
+             CopyToOutputDirectory="PreserveNewest" />
+
+    <Content Include="..\..\..\Assets\Beatmaps\**\*.json"
+             Link="gamedata\charts\%(RecursiveDir)%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

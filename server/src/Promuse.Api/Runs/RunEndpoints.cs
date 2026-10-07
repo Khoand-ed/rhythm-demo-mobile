@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Microsoft.AspNetCore.Mvc;
 using Promuse.Api.Infrastructure;
 using Promuse.Contracts.Runs;
 
@@ -18,14 +19,17 @@ public static class RunEndpoints
              .AddEndpointFilter<IdempotencyFilter<StartRunRequest>>();
 
         group.MapPost("/{runId:guid}/complete", CompleteAsync)
-             .AddEndpointFilter<IdempotencyFilter<CompleteRunRequest>>();
+             .AddEndpointFilter<IdempotencyFilter<CompleteRunRequest>>()
+             // 带着 trace / The body carries the input trace. Capped well above the largest real
+             // one, and far below Kestrel's 30 MB default - this is the endpoint that accepts the
+             // most bytes from a client, so it is the one that gets an explicit limit.
+             .WithMetadata(new RequestSizeLimitAttribute(4 * 1024 * 1024));
     }
 
     /// <summary>
-    /// Closes a run. Thin for now - it exists so the mission counters have
-    /// something to advance them. Phase 4 adds the score and the input trace to
-    /// this same endpoint and replays them against the seed the run was opened
-    /// with, rather than introducing a second call that also means "it ended".
+    /// Closes a run: reviews its result, counts it towards the missions if it is a clear, and
+    /// ranks it if it was accepted. One call for "the run ended", so a run cannot be counted
+    /// by one request and scored by another.
     /// </summary>
     private static async Task<IResult> CompleteAsync(
         Guid runId, CompleteRunRequest request, ClaimsPrincipal user,
@@ -33,7 +37,7 @@ public static class RunEndpoints
     {
         if (!user.TryGetAccountId(out Guid accountId)) return ApiProblems.Unauthorized().ToResult();
 
-        var outcome = await runs.CompleteAsync(accountId, runId, request.Won, ct);
+        var outcome = await runs.CompleteAsync(accountId, runId, request, ct);
 
         return outcome.IsSuccess
             ? Results.Json(outcome.Value, statusCode: StatusCodes.Status200OK)
@@ -45,7 +49,7 @@ public static class RunEndpoints
     {
         if (!user.TryGetAccountId(out Guid accountId)) return ApiProblems.Unauthorized().ToResult();
 
-        var outcome = await runs.StartAsync(accountId, request.StageId, ct);
+        var outcome = await runs.StartAsync(accountId, request.StageId, request.CharacterId, ct);
 
         return outcome.IsSuccess
             ? Results.Json(outcome.Value, statusCode: StatusCodes.Status201Created)
