@@ -87,6 +87,8 @@ licence, no secrets. There is no CI that compiles C#; only the Editor can do tha
 | Moving a `.cs` without its `.meta` | Breaks every reference. Move both, or move it inside Unity |
 | Editing Lua in `Assets/Arknights/LuaScripts/` | Live in the Editor (reads disk first), but a device build reads the AssetBundle — rebuild before testing on a phone |
 | An `Image` with alpha 0 | Still a raycast target. A transparent full-screen container will swallow every click behind it |
+| Retuning a score award, the multiplier ladder, a judge/health/fever value, or an operator's CharMeta or passive | The server checks results against `server/data/ruleset.json`. Update it in the same change: `RulesetParityTests` fails in CI naming the field, and a device on rules the server does not hold has every run rejected as `RULESET_MISMATCH` |
+| A passive that rolls dice | Draw from `RunState.NextRoll()`, never `UnityEngine.Random` - that one is shared with the whole scene, so the server could never draw the same numbers when it replays the run |
 
 ## Working here
 
