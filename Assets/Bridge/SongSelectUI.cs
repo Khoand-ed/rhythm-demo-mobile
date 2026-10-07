@@ -44,6 +44,7 @@ public class SongSelectUI : UIBase
     private Button nodeTemplate;
     private TextMeshProUGUI sanityText;
     private InfoPanel infoPanel;
+    private LeaderboardPanel leaderboard;
 
     public override void Init()
     {
@@ -60,7 +61,13 @@ public class SongSelectUI : UIBase
         transform.GetComponent<Button>("TopBar/BackButton").onClick
             .AddListener(() => HideAndDestroy(UIName));
 
-        infoPanel = new InfoPanel(transform.Find("InfoPanel"));
+        // 旧的预制体没有排行榜 / A prefab built before the leaderboard existed has no panel for it.
+        // The song list still works; it just says how to add one.
+        Transform board = transform.Find("LeaderboardPanel");
+        if (board != null) leaderboard = new LeaderboardPanel(board);
+        else Debug.LogWarning("[SongSelectUI] No LeaderboardPanel in the prefab. Run Tools/Rhythm/Wire Song Flow to add it.");
+
+        infoPanel = new InfoPanel(transform.Find("InfoPanel"), leaderboard);
 
         BuildMap();
     }
@@ -72,8 +79,8 @@ public class SongSelectUI : UIBase
         // throws when it is opened without a player - it does not need one.
         PlayerData playerData = PlayerManager.Inst().Get();
 
-        // Sanity is shown to keep the front-end's look; nothing here spends it,
-        // so a song can be practised as often as the player likes.
+        // START spends it, PRACTICE does not - so this is the number the player
+        // weighs between the two.
         sanityText.text = playerData != null
             ? $"{playerData.GetReason()}/{playerData.GetMaxReason()}"
             : "--/--";
@@ -84,6 +91,11 @@ public class SongSelectUI : UIBase
         base.Show();
         canvasGroup.alpha = 0;
         canvasGroup.DOFade(1, 0.3f);
+
+        // 补发离线的成绩 / Coming back to the song list is also coming back from a song, often one
+        // that ended without a network. Anything still waiting goes out now, before the board is
+        // read, so the player's own clear is on it.
+        PlayerManager.Inst().FlushPendingRuns();
     }
 
     public override void Hide(bool destroy = false)
@@ -196,13 +208,17 @@ public class SongSelectUI : UIBase
         private readonly RectTransform difficultyRoot;
         private readonly Button difficultyTemplate;
         private readonly Button startButton;
+        private readonly Button practiceButton;
+        private readonly LeaderboardPanel leaderboard;
 
         private readonly List<Button> rows = new List<Button>();
 
         private SongChart selected;
 
-        internal InfoPanel(Transform transform)
+        internal InfoPanel(Transform transform, LeaderboardPanel leaderboard)
         {
+            this.leaderboard = leaderboard;
+
             group = transform.GetComponent<CanvasGroup>();
 
             txt_name = transform.GetComponent<TextMeshProUGUI>("Header/Name");
@@ -227,8 +243,16 @@ public class SongSelectUI : UIBase
             difficultyTemplate = difficultyRoot.GetComponent<Button>("DifficultyTemplate");
             difficultyTemplate.gameObject.SetActive(false);
 
-            startButton = transform.GetComponent<Button>("StartButton");
-            startButton.onClick.AddListener(StartSong);
+            // START sits in an Actions row beside PRACTICE since the two modes arrived; a prefab
+            // from before that still has it directly under the panel.
+            Transform start = transform.Find("Actions/StartButton") ?? transform.Find("StartButton");
+            startButton = start.GetComponent<Button>();
+            startButton.onClick.AddListener(() => StartSong(PlayMode.Ranked));
+
+            Transform practice = transform.Find("Actions/PracticeButton");
+            practiceButton = practice != null ? practice.GetComponent<Button>() : null;
+            if (practiceButton != null) practiceButton.onClick.AddListener(() => StartSong(PlayMode.Practice));
+            else Debug.LogWarning("[SongSelectUI] No PracticeButton in the prefab. Run Tools/Rhythm/Wire Song Flow to add it.");
 
             group.gameObject.SetActive(false);
         }
@@ -254,9 +278,12 @@ public class SongSelectUI : UIBase
 
             BuildRows(charts);
 
-            // Nothing is picked yet, so Start stays dead until a difficulty is.
+            // Nothing is picked yet, so Start stays dead until a difficulty is, and there is no
+            // board to show until there is a chart to show it for.
             selected = null;
             startButton.interactable = false;
+            if (practiceButton != null) practiceButton.interactable = false;
+            if (leaderboard != null) leaderboard.Hide();
             txt_stats.text = "";
             SetRating(0);
 
@@ -267,6 +294,7 @@ public class SongSelectUI : UIBase
         internal void Hide()
         {
             selected = null;
+            if (leaderboard != null) leaderboard.Hide();
             group.DOFade(0f, 0.2f).OnComplete(() => group.gameObject.SetActive(false));
         }
 
@@ -306,6 +334,15 @@ public class SongSelectUI : UIBase
             txt_stats.text = $"BPM {chart.bpm:0.#}    {chart.notes.Count} NOTES";
             SetRating(chart.difficulty);
             startButton.interactable = true;
+            if (practiceButton != null) practiceButton.interactable = true;
+
+            // 每个难度一张榜 / Each difficulty is its own chart and so its own board. The caption
+            // gives the level rather than DifficultyLabel, whose "Dễ" the default font cannot draw.
+            if (leaderboard != null)
+            {
+                string title = !string.IsNullOrEmpty(chart.songName) ? chart.songName : chart.songId;
+                leaderboard.Show(chart.stageId, $"{title}   LV.{chart.difficulty}");
+            }
 
             for (int i = 0; i < rows.Count; i++)
             {
@@ -328,7 +365,8 @@ public class SongSelectUI : UIBase
         }
 
         /// <summary>
-        /// 选好曲子后去选人 / Hands the chart to the operator picker; gameplay starts from there.
+        /// 选好曲子后去选人 / Hands the chart and the mode to the operator picker; gameplay starts
+        /// from there. START is a ranked run that spends stamina, PRACTICE costs and counts nothing.
         ///
         /// 这里不写 SongSession / Deliberately writes nothing to SongSession and does not load the
         /// scene. Both moved to CharSelectUI.Play, because the player can still back out of that
@@ -340,11 +378,11 @@ public class SongSelectUI : UIBase
         /// tap is harmless: CharSelectUI opens opaque and last-sibling over this screen, and its
         /// own `leaving` latch guards the scene load.
         /// </summary>
-        private void StartSong()
+        private void StartSong(PlayMode mode)
         {
             if (selected == null) return;
 
-            CharSelectUI.Show(selected);
+            CharSelectUI.Show(selected, mode);
         }
     }
 }

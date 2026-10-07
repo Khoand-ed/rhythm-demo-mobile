@@ -45,6 +45,16 @@ public class GameManager : MonoBehaviour
              "Left unassigned, the verdict is only logged.")]
     public TextMeshProUGUI rankingText;
 
+    [Tooltip("The results screen's RETRY. Its label is rewritten per run to say what another attempt " +
+             "costs. Added by Tools/Rhythm/Wire Song Flow.")]
+    public Button resultsRetryButton;
+    public TextMeshProUGUI resultsRetryLabel;
+
+    [Tooltip("One line over everything else - why a retry was refused, for instance. Added by " +
+             "Tools/Rhythm/Wire Song Flow; left unassigned, the message only reaches the log.")]
+    public GameObject noticeRoot;
+    public TextMeshProUGUI noticeText;
+
     // Where the character stands. A missed note travels here and pauses before disappearing.
     public Transform middleZoneMarker;
 
@@ -112,6 +122,24 @@ public class GameManager : MonoBehaviour
     // The seed the server issued with the run. RunState rolls the passives from it, and the server
     // keeps the same number, so the rolls can be drawn again when the run is replayed.
     private long runSeed;
+
+    // 这一局怎么玩 / Ranked or practice, read off SongSession with the run. A retry plays the same
+    // mode again: a ranked retry opens, and pays for, a new run; a practice retry is free.
+    private PlayMode playMode;
+
+    // What this run cost, so RETRY can say what another one will.
+    private int runCost;
+
+    // 是否和服务端打交道 / Whether this session plays against the server at all. False for practice,
+    // and for the gameplay scene opened straight from the Editor, which has no run to report.
+    private bool scored;
+
+    // The operator's id, kept for opening the next run on a ranked retry - by then SongSession has
+    // long been cleared.
+    private string operatorId;
+
+    private bool openingRun;
+    private Coroutine noticeRoutine;
 
     // 每帧的输入 / Every gameplay frame's input, for the server. Kept across a retry's reset only
     // in the sense that BeginTrace empties it: the trace sent is the attempt that was reported.
@@ -204,6 +232,8 @@ public class GameManager : MonoBehaviour
         CaptureOperator();
         CaptureRun();
 
+        if (noticeRoot != null) noticeRoot.SetActive(false);
+
         scoreText.text = "Score: 0";
         multiText.text = "0";
 
@@ -261,6 +291,7 @@ void Update()
             if(SongFinished() && !resultsScreen.activeInHierarchy)
             {
                 resultsScreen.SetActive(true);
+                LabelRetry();
 
                 // 服务端记一笔 / The run is closed on the server, which is where the mission
                 // counters live. The activeInHierarchy guard above already makes this fire once
@@ -654,6 +685,15 @@ void Update()
     // and telling GameStart to open the song list instead of the login screen.
     public void ReturnToSongSelect()
     {
+        // 中途离开就关局 / Leaving mid-song walks away from a ranked run that is still open: close
+        // it as not cleared, so the record says what happened instead of leaving it open forever.
+        // After the results screen the run is already closed and runId is empty.
+        if (scored && runId != System.Guid.Empty)
+        {
+            AbandonRun(runId);
+            runId = System.Guid.Empty;
+        }
+
         // Pausing leaves timeScale at 0, and it would stay there in the next
         // scene - every tween and animation in the front-end would freeze.
         Time.timeScale = 1f;
@@ -878,6 +918,151 @@ void Update()
         lastPassiveSongTime = 0f;
     }
 
+    // ------------------------------------------------------------------- retry
+
+    /// <summary>Wired to the results screen's RETRY button.</summary>
+    public void RetryFromResults()
+    {
+        RequestRetry(() =>
+        {
+            // The same run-in a pause-menu retry plays; without the pause menu, straight in.
+            PauseMenu menu = FindAnyObjectByType<PauseMenu>();
+            if (menu != null) menu.RestartWithIntro();
+            else RestartSong();
+        }, null);
+    }
+
+    /// <summary>
+    /// 按原来的模式再来一局 / Runs the next attempt in the mode this one was started in, then calls
+    /// <paramref name="onReady"/> to actually restart.
+    ///
+    /// 练习直接开始 / Practice - and the Editor's run-less gameplay scene - restart at once, for free.
+    ///
+    /// 排位要先开新局 / A ranked retry is a new ranked run: the server opens it and charges the stage
+    /// again before anything restarts. The new run is opened FIRST and the abandoned one closed only
+    /// once that succeeds - the other order would leave a player who cannot afford the retry with
+    /// their current run already thrown away. When it is refused, the reason goes on screen and
+    /// nothing moves: the player stays where they were and decides for themselves.
+    /// </summary>
+    public void RequestRetry(System.Action onReady, System.Action onRefused)
+    {
+        if (openingRun) return;
+
+        if (!scored)
+        {
+            onReady();
+            return;
+        }
+
+        OpenNextRunAsync(onReady, onRefused);
+    }
+
+    private async void OpenNextRunAsync(System.Action onReady, System.Action onRefused)
+    {
+        string stageId = noteSpawner != null && noteSpawner.chart != null ? noteSpawner.chart.stageId : null;
+
+        if (string.IsNullOrEmpty(stageId) || string.IsNullOrEmpty(operatorId))
+        {
+            ShowNotice("THIS SONG CANNOT START A RANKED RUN");
+            if (onRefused != null) onRefused();
+            return;
+        }
+
+        openingRun = true;
+        ShowNotice("OPENING A NEW RUN...", 0f);
+
+        ApiResult<RunTicket> ticket = await Data.Player.PlayerManager.Inst().Api.StartRunAsync(stageId, operatorId);
+
+        openingRun = false;
+
+        // 场景可能已经换了 / The scene may have changed while the request was out.
+        if (this == null) return;
+
+        if (!ticket.IsSuccess)
+        {
+            // "This stage costs 6 and you have 3." - the server's own words, which already say what
+            // a player needs to know.
+            ShowNotice(ticket.Message);
+            if (onRefused != null) onRefused();
+            return;
+        }
+
+        Data.Player.PlayerData player = Data.Player.PlayerManager.Inst().Get();
+        if (player != null) player.ApplyServerState(ticket.Value.Player);
+
+        // Still open when a ranked song is retried part-way; empty after the results screen, which
+        // closed it.
+        System.Guid abandoned = runId;
+
+        runId = ticket.Value.RunId;
+        runSeed = ticket.Value.Seed;
+        runCost = ticket.Value.StaminaSpent;
+
+        if (abandoned != System.Guid.Empty) AbandonRun(abandoned);
+
+        HideNotice();
+        onReady();
+    }
+
+    /// <summary>
+    /// 放弃的局要关上 / Closes a run the player walked away from - retried or quit part-way - as
+    /// not cleared: it counts for nothing, but the record says it ended rather than leaving it
+    /// open forever. Fire and forget; a run left open by a failure here is harmless.
+    /// </summary>
+    private static async void AbandonRun(System.Guid run)
+    {
+        ApiResult<RunCompletion> result = await Data.Player.PlayerManager.Inst().Api.CompleteRunAsync(run, false, null);
+
+        if (!result.IsSuccess) Debug.LogWarning($"[GameManager] Could not close abandoned run {run}: {result.Message}");
+    }
+
+    /// <summary>The results screen's RETRY says what another attempt costs, before it is pressed.</summary>
+    private void LabelRetry()
+    {
+        if (resultsRetryLabel == null) return;
+
+        resultsRetryLabel.text = scored ? $"RETRY  -{runCost} SANITY"
+                               : playMode == PlayMode.Practice ? "RETRY (PRACTICE)"
+                               : "RETRY";
+    }
+
+    // ------------------------------------------------------------------ notice
+
+    /// <summary>
+    /// One line over everything, for as long as <paramref name="seconds"/>, or until replaced when
+    /// that is 0. Unscaled time, because the pause menu has the game at timeScale 0.
+    /// </summary>
+    private void ShowNotice(string text, float seconds = 3.5f)
+    {
+        Debug.Log("[GameManager] " + text);
+
+        if (noticeRoot == null || noticeText == null) return;
+
+        noticeText.text = text;
+        noticeRoot.SetActive(true);
+
+        if (noticeRoutine != null) StopCoroutine(noticeRoutine);
+        noticeRoutine = seconds > 0f ? StartCoroutine(HideNoticeAfter(seconds)) : null;
+    }
+
+    private IEnumerator HideNoticeAfter(float seconds)
+    {
+        yield return new WaitForSecondsRealtime(seconds);
+        noticeRoutine = null;
+        HideNotice();
+    }
+
+    private void HideNotice()
+    {
+        if (noticeRoutine != null)
+        {
+            StopCoroutine(noticeRoutine);
+            noticeRoutine = null;
+        }
+
+        if (noticeRoot != null) noticeRoot.SetActive(false);
+    }
+
     /// <summary>
     /// 这局的身份 / The run the server opened for this attempt and the seed it issued, taken
     /// before the chart handover clears SongSession.
@@ -890,6 +1075,9 @@ void Update()
     {
         runId = SongSession.RunId;
         runSeed = SongSession.Seed;
+        runCost = SongSession.StaminaCost;
+        playMode = SongSession.Mode;
+        scored = playMode == PlayMode.Ranked && runId != System.Guid.Empty;
     }
 
     /// <summary>
@@ -931,6 +1119,13 @@ void Update()
     /// </summary>
     private async void ReportRun(bool won)
     {
+        // 练习不上报 / Practice reports nothing: it opened no run, and counts for nothing by design.
+        if (!scored)
+        {
+            ShowRanking(playMode == PlayMode.Practice ? "PRACTICE - NOT SCORED" : "");
+            return;
+        }
+
         if (runId == System.Guid.Empty) return;
 
         // 只报一次 / Cleared first, so a results screen that is somehow shown twice cannot send
@@ -950,9 +1145,18 @@ void Update()
 
         if (!result.IsSuccess)
         {
-            // 不打扰玩家 / Logged rather than shown as a dialog. The run happened and the player
-            // can see their result; a popup over the results screen about a request they cannot
-            // act on is noise.
+            // 网络问题就先存着 / A network failure is not the end of the result: it waits on the
+            // device and goes out on the next sign-in or visit to the song list, under the run's
+            // own id as its key, so sending it late can never count it twice. Anything else is a
+            // refusal sending again would not change.
+            if (RetryPolicy.IsTransient(result.Problem))
+            {
+                Data.Player.PlayerManager.Inst().Api.Pending.Add(reporting, won, outcome, System.DateTimeOffset.UtcNow);
+                Debug.LogWarning($"[GameManager] Run {reporting} could not be sent ({result.Message}); queued.");
+                ShowRanking("SAVED - WILL SEND WHEN ONLINE");
+                return;
+            }
+
             Debug.LogWarning($"[GameManager] Could not close run {reporting}: {result.Message}");
             ShowRanking("Not recorded");
             return;
@@ -1072,6 +1276,8 @@ void Update()
     private void CaptureOperator()
     {
         if (!SongSession.HasCharacter) return;
+
+        operatorId = SongSession.Character.GetId();
 
         try
         {

@@ -169,10 +169,31 @@ public class PauseMenu : MonoBehaviour
         busy = false;
     }
 
-    /// <summary>Wired to the orange button: clears the run, then plays the run-in again.</summary>
+    /// <summary>
+    /// Wired to the orange button: clears the run, then plays the run-in again.
+    ///
+    /// 按模式重试 / In the mode the song was started in. A practice retry starts at once; a ranked
+    /// one waits for the server to open - and charge for - the next run, and when it is refused
+    /// (not enough Sanity, no network) the panel stays up with the reason on screen.
+    /// </summary>
     public void Retry()
     {
         if (busy) return;
+
+        busy = true;
+
+        GameManager.instance.RequestRetry(
+            () => StartCoroutine(RunRetry()),
+            () => busy = false);
+    }
+
+    /// <summary>
+    /// The results screen's RETRY, once GameManager has the next run ready: the same reset and
+    /// READY/GO run-in a pause-menu retry plays.
+    /// </summary>
+    public void RestartWithIntro()
+    {
+        StopAllCoroutines();
         StartCoroutine(RunRetry());
     }
 
