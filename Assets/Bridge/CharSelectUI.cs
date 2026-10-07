@@ -73,6 +73,7 @@ public class CharSelectUI : UIBase
     private static readonly Color LabelDim = new Color(1f, 1f, 1f, 0.55f);
 
     private SongChart chart;
+    private PlayMode mode;
     private CharData selected;
     private readonly List<CharCell> cells = new List<CharCell>();
 
@@ -81,9 +82,10 @@ public class CharSelectUI : UIBase
     private bool leaving;
 
     /// <summary>
-    /// 从选曲界面进来 / Opened by SongSelectUI once a chart has been picked.
+    /// 从选曲界面进来 / Opened by SongSelectUI once a chart has been picked, with the mode the
+    /// player chose there: START for a ranked run, PRACTICE for one that costs and counts nothing.
     /// </summary>
-    public static CharSelectUI Show(SongChart chart)
+    public static CharSelectUI Show(SongChart chart, PlayMode mode)
     {
         CharSelectUI ui = UIManager.Inst().Show(UIName) as CharSelectUI;
 
@@ -96,6 +98,7 @@ public class CharSelectUI : UIBase
         }
 
         ui.chart = chart;
+        ui.mode = mode;
         ui.selected = null;
         ui.leaving = false;
 
@@ -121,7 +124,8 @@ public class CharSelectUI : UIBase
     {
         queueLabel.text = chart == null
             ? ""
-            : $"{chart.songName}   ·   {chart.DifficultyLabel} LV.{chart.difficulty}";
+            : $"{chart.songName}   ·   {chart.DifficultyLabel} LV.{chart.difficulty}"
+              + (mode == PlayMode.Practice ? "   ·   PRACTICE" : "");
 
         BuildGrid();
         Draw();
@@ -220,7 +224,9 @@ public class CharSelectUI : UIBase
 
         playFace.color = armed ? PlayArmed : PlayDormant;
         playLabel.color = armed ? Color.white : LabelDim;
-        playLabel.text = armed ? "PLAY" : "SELECT AN OPERATOR";
+        playLabel.text = !armed ? "SELECT AN OPERATOR"
+                       : mode == PlayMode.Practice ? "PRACTICE"
+                       : "PLAY";
     }
 
     private static Color RarityTint(int rarity)
@@ -266,6 +272,18 @@ public class CharSelectUI : UIBase
 
         leaving = true;
 
+        // 练习不开局 / Practice opens no run: it costs nothing and counts for nothing, so there is
+        // nothing for the server to know about. The seed only feeds the passives' rolls, which
+        // nobody will ever check, so the device picks it.
+        if (mode == PlayMode.Practice)
+        {
+            long seed = ((long)UnityEngine.Random.Range(int.MinValue, int.MaxValue) << 32)
+                        | (uint)UnityEngine.Random.Range(int.MinValue, int.MaxValue);
+
+            EnterGameplay(chart, selected, PlayMode.Practice, System.Guid.Empty, seed, 0);
+            return;
+        }
+
         StartRunAsync(chart, selected);
     }
 
@@ -298,12 +316,26 @@ public class CharSelectUI : UIBase
         PlayerData player = PlayerManager.Inst().Get();
         if (player != null) player.ApplyServerState(ticket.Value.Player);
 
+        // A submitted result has to name the run it belongs to, and have been played
+        // against the sequence the server issued.
+        EnterGameplay(starting, operatorChosen, PlayMode.Ranked,
+                      ticket.Value.RunId, ticket.Value.Seed, ticket.Value.StaminaSpent);
+    }
+
+    /// <summary>
+    /// 两种模式共用的出口 / The one way into the song, for both modes: SongSession is written here
+    /// and nowhere else, then the front-end steps aside and the gameplay scene loads.
+    ///
+    /// 静态 / Static on purpose. The ranked path reaches here after an await, by which time this
+    /// screen may already be destroyed; nothing below may touch an instance member.
+    /// </summary>
+    private static void EnterGameplay(SongChart starting, CharData operatorChosen, PlayMode playMode,
+                                      System.Guid runId, long seed, int staminaCost)
+    {
         SongSession.Set(starting);
         SongSession.SetCharacter(operatorChosen);
-
-        // Carried for Phase 4: a submitted result has to name the run it belongs
-        // to, and have been played against the sequence the server issued.
-        SongSession.SetRun(ticket.Value.RunId, ticket.Value.Seed);
+        SongSession.SetMode(playMode);
+        SongSession.SetRun(runId, seed, staminaCost);
 
         // SoundManager is DontDestroyOnLoad, so the front-end's music would keep
         // playing underneath the song. HomeUI starts it again on the way back,
@@ -314,7 +346,7 @@ public class CharSelectUI : UIBase
         // HomeUI has to still be underneath for Back to land on. This screen is
         // destroyed, so the next entry rebuilds it with no stale selection.
         UIManager.Inst().Hide(SongSelectUI.UIName);
-        HideAndDestroy(UIName);
+        UIManager.Inst().Hide(UIName, true);
 
         // The UI camera and canvas are DontDestroyOnLoad, so they survive into the
         // gameplay scene and would draw the front-end over the song. Switching the
@@ -333,7 +365,7 @@ public class CharSelectUI : UIBase
             SceneManager.LoadScene(SongSelectUI.GameplayScene);
         }, 0.6f);
 
-        Debug.Log($"Starting {starting.stageId} ({starting.name}) with {operatorId}.");
+        Debug.Log($"Starting {starting.stageId} ({starting.name}) with {operatorId}, {playMode}.");
     }
 
     // ------------------------------------------------------------------- frame

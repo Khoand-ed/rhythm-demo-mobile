@@ -105,7 +105,29 @@ namespace Data.Player {
 
             playerData.ApplyServerState(state.Value);
 
+            // 登录后补发 / Every sign-in, fresh or resumed, ends here - the first moment there is
+            // both a network and a session, so the first moment a result left over from an offline
+            // song can go out.
+            FlushPendingRuns();
+
             return ApiResult<PlayerData>.Ok(playerData);
+        }
+
+        /// <summary>
+        /// 补发离线成绩 / Sends any results that could not be sent when their song ended, and folds
+        /// the last answer's player state in - a clear sent late still moves the missions and the
+        /// player state the screens show. Fire and forget: nothing waits on it, and an empty
+        /// queue costs no request at all.
+        /// </summary>
+        public async void FlushPendingRuns() {
+            if (playerData == null) return;
+
+            System.Collections.Generic.IReadOnlyList<Promuse.Contracts.Runs.RunCompletion> sent =
+                await api.FlushPendingRunsAsync();
+
+            if (sent.Count > 0 && playerData != null) {
+                playerData.ApplyServerState(sent[sent.Count - 1].Player);
+            }
         }
 
         /// <summary>
