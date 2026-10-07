@@ -32,6 +32,12 @@ on:
       # never run.
       - 'Assets/Promuse.Net/Contracts/**'
 
+      # The server loads the beatmap JSON to check results against - copied into
+      # its output as gamedata/charts - and the scoring tests pin each chart's note
+      # counts. A retimed chart changes the score ceiling, so it is a change to the
+      # server as surely as the two above.
+      - 'Assets/Beatmaps/**'
+
       - '.github/workflows/backend-checks.yml'
 
   pull_request:
