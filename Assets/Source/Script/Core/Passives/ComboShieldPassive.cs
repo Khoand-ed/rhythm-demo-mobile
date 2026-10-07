@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
@@ -27,5 +28,15 @@ public class ComboShieldPassive : PassiveSO
 
         run.passiveCharges--;
         return true;
+    }
+
+    public override void WriteRules(List<RuleParam> into)
+    {
+        into.Add(new RuleParam("charges", charges));
+    }
+
+    public override void ReadRules(IReadOnlyList<RuleParam> from)
+    {
+        charges = (int)RuleParam.Find(from, "charges", charges);
     }
 }

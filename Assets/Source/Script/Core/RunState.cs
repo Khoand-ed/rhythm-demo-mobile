@@ -51,6 +51,18 @@ public class RunState
     [System.NonSerialized] public int passiveCharges;
     [System.NonSerialized] public float passiveTimer;
 
+    // 这一局自己的随机数 / The run's own random sequence, seeded with what the server issued
+    // when the run opened. A passive that rolls must draw from here and never from
+    // UnityEngine.Random: that one is global, so a particle system or any other script calling
+    // it mid-song would shift every roll after it, and the server - which runs none of those -
+    // could never draw the same numbers again.
+    //
+    // 重开也重播 / Reset rewinds the sequence to the seed, so a retry rolls exactly what the
+    // first attempt rolled at the same judgements. The server replays only the attempt that
+    // was reported, from the top, and needs the sequence to start where that attempt started.
+    [System.NonSerialized] public long seed;
+    [System.NonSerialized] private ulong rollState;
+
     public int score;
     public int combo;
     public int maxCombo;
@@ -141,9 +153,35 @@ public class RunState
         passiveCharges = 0;
         passiveTimer = 0f;
 
+        rollState = unchecked((ulong)seed);
+
         // 让被动自己填初值 / After the scratch is cleared, so a passive that seeds a charge
         // count writes into a clean slate rather than onto the last run's leftovers.
         if (passive != null) passive.BeginRun(this);
+    }
+
+    /// <summary>
+    /// The next number in [0, 1) from this run's sequence.
+    ///
+    /// SplitMix64 / Integer arithmetic only until the last line, so a phone and the server
+    /// draw bit-identical values: wrapping 64-bit multiplies behave the same on every runtime,
+    /// where a float-based generator could differ in the last bit between ARM and x64. The
+    /// top 24 bits become the float, which is exactly a float's precision, so the conversion
+    /// rounds nothing.
+    /// </summary>
+    public float NextRoll()
+    {
+        unchecked
+        {
+            rollState += 0x9E3779B97F4A7C15UL;
+
+            ulong z = rollState;
+            z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9UL;
+            z = (z ^ (z >> 27)) * 0x94D049BB133111EBUL;
+            z ^= z >> 31;
+
+            return (z >> 40) * (1f / 16777216f);
+        }
     }
 
     /// <summary>

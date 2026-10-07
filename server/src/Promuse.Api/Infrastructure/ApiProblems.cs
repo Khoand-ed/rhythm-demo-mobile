@@ -131,6 +131,10 @@ public static class ApiProblems
         Create(409, ErrorCodes.NotEnoughPoints, "Not enough points",
             $"This reward needs {required} claimed points and you have {points}.");
 
+    public static ApiProblem CharacterNotOwned(string characterId) =>
+        Create(409, ErrorCodes.CharacterNotOwned, "Operator not owned",
+            $"'{characterId}' is not on this player's roster, so a run cannot be played with it.");
+
     public static ApiProblem RunNotOpen() =>
         Create(409, ErrorCodes.RunNotOpen, "No such open run",
             "That run is unknown, belongs to someone else, or has already been closed.");

@@ -9,9 +9,11 @@ using Promuse.Api.Auth;
 using Promuse.Api.Infrastructure;
 using System.Text.Json.Serialization;
 using Promuse.Api.Economy;
+using Promuse.Api.Leaderboards;
 using Promuse.Api.Missions;
 using Promuse.Api.Players;
 using Promuse.Api.Runs;
+using Microsoft.Extensions.Options;
 using Promuse.Persistence;
 
 // 必须显式传 / WriteAsJsonAsync sets Content-Type itself and overwrites
@@ -77,6 +79,22 @@ builder.Services.AddScoped<RunService>();
 builder.Services.AddScoped<Inventory>();
 builder.Services.AddScoped<MissionService>();
 builder.Services.AddSingleton<MissionPeriod>();
+builder.Services.AddScoped<LeaderboardService>();
+
+builder.Services.AddOptions<GameDataOptions>()
+    .Bind(builder.Configuration.GetSection(GameDataOptions.SectionName));
+
+// 规则和谱面 / The ruleset and charts a result is checked against. Resolved once right after
+// Build below, so a file that does not load stops the server before it takes a request.
+builder.Services.AddSingleton(sp =>
+{
+    string? configured = sp.GetRequiredService<IOptions<GameDataOptions>>().Value.Root;
+    string root = string.IsNullOrWhiteSpace(configured)
+        ? Path.Combine(AppContext.BaseDirectory, "gamedata")
+        : configured;
+
+    return GameData.Load(root, sp.GetRequiredService<ILoggerFactory>().CreateLogger<GameData>());
+});
 
 var jwt = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>()
     ?? throw new InvalidOperationException($"Configuration section '{JwtOptions.SectionName}' is missing.");
@@ -165,6 +183,10 @@ builder.Services.AddHealthChecks()
 
 var app = builder.Build();
 
+// 现在就读 / Now, not on the first submitted run: an unreadable ruleset or chart is a reason not
+// to start at all.
+app.Services.GetRequiredService<GameData>();
+
 // 所有失败一个形状 / Every failure leaves as the same problem+json shape,
 // including the ones nobody planned for. The trace id is the only part of a 500
 // that is safe to show and the only part worth asking a player to quote.
@@ -211,6 +233,7 @@ app.MapPlayerEndpoints();
 app.MapEconomyEndpoints();
 app.MapRunEndpoints();
 app.MapMissionEndpoints();
+app.MapLeaderboardEndpoints();
 
 app.Run();
 

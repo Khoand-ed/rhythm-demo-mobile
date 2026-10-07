@@ -43,6 +43,10 @@ public class PromuseDbContext(DbContextOptions<PromuseDbContext> options) : DbCo
 
     public DbSet<MissionRewardClaim> MissionRewardClaims => Set<MissionRewardClaim>();
 
+    public DbSet<RunScore> RunScores => Set<RunScore>();
+
+    public DbSet<LeaderboardScore> LeaderboardScores => Set<LeaderboardScore>();
+
     /// <summary>
     /// Readable, stable ids for the seeded catalogue - obviously seed data at a
     /// glance in psql, and identical on every machine.
@@ -341,11 +345,68 @@ public class PromuseDbContext(DbContextOptions<PromuseDbContext> options) : DbCo
             entity.HasKey(r => r.Id);
 
             entity.Property(r => r.StageId).HasMaxLength(64).IsRequired();
+            entity.Property(r => r.CharacterId).HasMaxLength(32);
             entity.HasIndex(r => new { r.AccountId, r.StartedAt });
 
             entity.HasOne(r => r.Player)
                   .WithMany()
                   .HasForeignKey(r => r.AccountId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<RunScore>(entity =>
+        {
+            entity.ToTable("run_scores");
+            entity.HasKey(s => s.RunId);
+
+            entity.Property(s => s.StageId).HasMaxLength(64).IsRequired();
+            entity.Property(s => s.RulesetFingerprint).HasMaxLength(32).IsRequired();
+
+            // 存名字 / Stored by name, like every other enum here: a verdict read in psql
+            // should say what it is.
+            entity.Property(s => s.Verdict).HasConversion<string>().HasMaxLength(16);
+
+            entity.HasIndex(s => new { s.AccountId, s.SubmittedAt });
+
+            // "Every run the checks rejected" is the query the review of the checks
+            // themselves starts from.
+            entity.HasIndex(s => s.Verdict);
+
+            // 负数先被 API 挡住 / The API answers a negative count with a 422 before a row
+            // is ever written, so these hold for every stored result - a negative here
+            // would be a bug in the API, not a cheat.
+            entity.ToTable(t => t.HasCheckConstraint(
+                "ck_run_scores_not_negative",
+                "score >= 0 AND max_combo >= 0 AND perfect >= 0 AND great >= 0 AND hit >= 0 AND miss >= 0"));
+
+            entity.HasOne(s => s.Run)
+                  .WithOne()
+                  .HasForeignKey<RunScore>(s => s.RunId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<LeaderboardScore>(entity =>
+        {
+            entity.ToTable("leaderboard_scores");
+            entity.HasKey(e => new { e.StageId, e.PeriodKey, e.AccountId });
+
+            entity.Property(e => e.StageId).HasMaxLength(64);
+            entity.Property(e => e.PeriodKey).HasMaxLength(16);
+            entity.Property(e => e.CharacterId).HasMaxLength(32);
+
+            // The board is read top-down within one stage and period, ties to whoever
+            // was there first - exactly this order.
+            entity.HasIndex(e => new { e.StageId, e.PeriodKey, e.Score, e.AchievedAt })
+                  .IsDescending(false, false, true, false);
+
+            entity.HasOne(e => e.Player)
+                  .WithMany()
+                  .HasForeignKey(e => e.AccountId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne<Run>()
+                  .WithMany()
+                  .HasForeignKey(e => e.RunId)
                   .OnDelete(DeleteBehavior.Cascade);
         });
 

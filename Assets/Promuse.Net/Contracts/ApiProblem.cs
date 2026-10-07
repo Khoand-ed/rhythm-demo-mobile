@@ -117,6 +117,9 @@ namespace Promuse.Contracts
         /// <summary>The run is unknown, belongs to someone else, or is already closed.</summary>
         public const string RunNotOpen = "RUN_NOT_OPEN";
 
+        /// <summary>A run was opened with an operator this player does not own.</summary>
+        public const string CharacterNotOwned = "CHARACTER_NOT_OWNED";
+
         public const string RateLimited = "RATE_LIMITED";
         public const string InternalError = "INTERNAL_ERROR";
     }

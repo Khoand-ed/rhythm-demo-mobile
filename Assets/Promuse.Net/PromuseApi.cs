@@ -8,6 +8,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 using Promuse.Contracts;
 using Promuse.Contracts.Auth;
+using Promuse.Contracts.Leaderboards;
 using Promuse.Contracts.Missions;
 using Promuse.Contracts.Players;
 using Promuse.Contracts.Runs;
@@ -216,11 +217,11 @@ namespace Promuse.Net
         /// Opens an attempt at a chart: the server charges the stamina and hands
         /// back the seed this run must be played with.
         /// </summary>
-        public async Task<ApiResult<RunTicket>> StartRunAsync(string stageId)
+        public async Task<ApiResult<RunTicket>> StartRunAsync(string stageId, string characterId)
         {
             ApiResult<RunTicket> result = await SendAsync<RunTicket>(
                 UnityWebRequest.kHttpVerbPOST, "/v1/runs",
-                new StartRunRequest(stageId),
+                new StartRunRequest(stageId, characterId),
                 authenticate: true,
                 idempotencyKey: Guid.NewGuid().ToString());
 
@@ -230,23 +231,41 @@ namespace Promuse.Net
         }
 
         /// <summary>
-        /// Closes an attempt. 幂等键是 runId / The idempotency key is the run id
+        /// Closes an attempt and hands over its result for review. A win must carry a result -
+        /// the server counts a clear only once it has checked one.
+        ///
+        /// 幂等键是 runId / The idempotency key is the run id
         /// rather than a fresh Guid, because "this run ended" is a statement about
         /// one run and not an event that can happen twice. A retry after a dropped
         /// response replays the first answer instead of ticking the mission
         /// counters a second time.
         /// </summary>
-        public async Task<ApiResult<RunCompletion>> CompleteRunAsync(Guid runId, bool won)
+        public async Task<ApiResult<RunCompletion>> CompleteRunAsync(Guid runId, bool won, RunResult? result)
         {
-            ApiResult<RunCompletion> result = await SendAsync<RunCompletion>(
+            ApiResult<RunCompletion> answer = await SendAsync<RunCompletion>(
                 UnityWebRequest.kHttpVerbPOST, $"/v1/runs/{runId}/complete",
-                new CompleteRunRequest(won),
+                new CompleteRunRequest(won, result),
                 authenticate: true,
                 idempotencyKey: runId.ToString());
 
-            if (result.IsSuccess) _playerETag = ETagFor(result.Value!.Player);
+            if (answer.IsSuccess) _playerETag = ETagFor(answer.Value!.Player);
 
-            return result;
+            return answer;
+        }
+
+        // ---------------------------------------------------------- leaderboards
+
+        /// <summary>
+        /// One stage's board, top first, with the caller's own line wherever it falls. Read-only:
+        /// scores reach the board only through a run's completion.
+        /// </summary>
+        public Task<ApiResult<LeaderboardPage>> GetLeaderboardAsync(
+            string stageId, LeaderboardPeriod period = LeaderboardPeriod.AllTime, int limit = 20)
+        {
+            string path = "/v1/leaderboards/" + Uri.EscapeDataString(stageId)
+                        + "?period=" + period + "&limit=" + limit;
+
+            return SendAsync<LeaderboardPage>(UnityWebRequest.kHttpVerbGET, path, body: null, authenticate: true);
         }
 
         // ------------------------------------------------------------ transport

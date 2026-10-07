@@ -60,6 +60,15 @@ XLua, Spine and DOTween under `Assets/Plugins/`.
    docker compose -f server/docker-compose.yml up -d
    ```
 
+   Create or update the schema - on first run, and again after pulling any change that
+   adds a migration under `server/src/Promuse.Persistence/Migrations/`. The API does not
+   migrate itself on startup, deliberately: with more than one instance running, every
+   one of them would race to alter the same tables.
+
+   ```bash
+   (cd server && dotnet tool restore && dotnet ef database update --project src/Promuse.Persistence --startup-project src/Promuse.Api)
+   ```
+
    ```bash
    dotnet run --project server/src/Promuse.Api --urls http://127.0.0.1:5199
    ```
