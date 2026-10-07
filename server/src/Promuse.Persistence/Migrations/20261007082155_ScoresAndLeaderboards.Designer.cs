@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Promuse.Persistence;
@@ -11,9 +12,11 @@ using Promuse.Persistence;
 namespace Promuse.Persistence.Migrations
 {
     [DbContext(typeof(PromuseDbContext))]
-    partial class PromuseDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261007082155_ScoresAndLeaderboards")]
+    partial class ScoresAndLeaderboards
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

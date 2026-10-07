@@ -27,6 +27,13 @@ public class Run
     /// <summary>The chart, from SongChart.stageId.</summary>
     public string StageId { get; set; } = string.Empty;
 
+    /// <summary>
+    /// The operator, fixed when the run opens. A result is checked against this operator's
+    /// modifiers, so it cannot be chosen after the song. Null on runs opened before operators
+    /// were recorded.
+    /// </summary>
+    public string? CharacterId { get; set; }
+
     /// <summary>What entering cost, recorded so a refund knows the amount.</summary>
     public int StaminaSpent { get; set; }
 
@@ -50,9 +57,9 @@ public class Run
     /// "clear any song" missions, matching what GameManager already did: a run
     /// that ran out of HP is not a clear.
     ///
-    /// Phase 4 adds the score and the replay beside this. Closing the run is
-    /// deliberately the same endpoint, so that half does not have to be designed
-    /// twice.
+    /// 服务端的结论 / What the SERVER counted, not what the device claimed: a win
+    /// whose result was rejected is stored here as false. The claim itself is on
+    /// <see cref="RunScore.ClaimedWon"/>.
     /// </summary>
     public bool? Won { get; set; }
 }
