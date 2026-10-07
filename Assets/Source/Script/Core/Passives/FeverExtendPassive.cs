@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
@@ -19,5 +20,17 @@ public class FeverExtendPassive : PassiveSO
     public override float ExtraFeverSeconds(RunState run)
     {
         return run.combo >= comboThreshold ? extraSeconds : 0f;
+    }
+
+    public override void WriteRules(List<RuleParam> into)
+    {
+        into.Add(new RuleParam("comboThreshold", comboThreshold));
+        into.Add(new RuleParam("extraSeconds", extraSeconds));
+    }
+
+    public override void ReadRules(IReadOnlyList<RuleParam> from)
+    {
+        comboThreshold = (int)RuleParam.Find(from, "comboThreshold", comboThreshold);
+        extraSeconds = RuleParam.Find(from, "extraSeconds", extraSeconds);
     }
 }

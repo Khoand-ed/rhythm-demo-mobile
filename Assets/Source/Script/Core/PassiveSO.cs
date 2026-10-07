@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
@@ -54,6 +55,22 @@ public abstract class PassiveSO : ScriptableObject
     {
         return 0f;
     }
+
+    /// <summary>
+    /// 写出影响玩法的数字 / Appends every number that changes how this passive plays, by name.
+    ///
+    /// 服务端靠它重建 / This is how the server learns what a passive does without loading a
+    /// Unity asset: it builds the same subclass from the type name and hands these back to
+    /// <see cref="ReadRules"/>. It is also what the ruleset fingerprint hashes, so a retune on
+    /// one side and not the other is caught on the first submitted run.
+    ///
+    /// 只写数字 / Numbers only. The name, description and icon are presentation and do not
+    /// belong in the rules - changing a tooltip must not look like a balance change.
+    /// </summary>
+    public virtual void WriteRules(List<RuleParam> into) { }
+
+    /// <summary>The inverse of <see cref="WriteRules"/>. Absent names keep their defaults.</summary>
+    public virtual void ReadRules(IReadOnlyList<RuleParam> from) { }
 
     /// <summary>
     /// Called every frame while the song is playing, with song-time delta.

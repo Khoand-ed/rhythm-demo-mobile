@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
@@ -37,5 +38,17 @@ public class RegenPassive : PassiveSO
             run.passiveTimer -= interval;
             run.Heal(amount);
         }
+    }
+
+    public override void WriteRules(List<RuleParam> into)
+    {
+        into.Add(new RuleParam("interval", interval));
+        into.Add(new RuleParam("amount", amount));
+    }
+
+    public override void ReadRules(IReadOnlyList<RuleParam> from)
+    {
+        interval = RuleParam.Find(from, "interval", interval);
+        amount = (int)RuleParam.Find(from, "amount", amount);
     }
 }

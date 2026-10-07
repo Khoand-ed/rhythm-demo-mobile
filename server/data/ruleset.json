@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "score": {
+    "perfect": 150,
+    "great": 125,
+    "hit": 100,
+    "holdTick": 10,
+    "holdTickInterval": 0.1,
+    "multiplierThresholds": [4, 8, 16]
+  },
+  "judge": {
+    "tapPerfect": 0.05,
+    "tapGreat": 0.1,
+    "tapHit": 0.2,
+    "holdPerfect": 0.06,
+    "holdGreat": 0.16
+  },
+  "health": {
+    "maxHp": 100,
+    "tapMissDamage": 10,
+    "holdMissDamage": 15,
+    "twinMissDamage": 10
+  },
+  "fever": {
+    "maxFever": 100,
+    "perfectGain": 3,
+    "greatGain": 2,
+    "hitGain": 1,
+    "missLoss": 10,
+    "autoActivate": true,
+    "feverDuration": 8,
+    "feverScoreMultiplier": 2
+  },
+  "operators": [
+    {
+      "id": "AMIYA",
+      "scoreModifier": 1.2,
+      "feverModifier": 1.2,
+      "maxHp": 300,
+      "passive": { "type": "ComboShieldPassive", "parameters": [ { "name": "charges", "value": 1 } ] }
+    },
+    {
+      "id": "NOVA",
+      "scoreModifier": 1.1,
+      "feverModifier": 1.1,
+      "maxHp": 275,
+      "passive": { "type": "JudgeUpgradePassive", "parameters": [ { "name": "chance", "value": 0.25 } ] }
+    },
+    {
+      "id": "ECHO",
+      "scoreModifier": 1.1,
+      "feverModifier": 1.1,
+      "maxHp": 275,
+      "passive": {
+        "type": "FeverExtendPassive",
+        "parameters": [ { "name": "comboThreshold", "value": 50 }, { "name": "extraSeconds", "value": 3 } ]
+      }
+    },
+    {
+      "id": "PULSE",
+      "scoreModifier": 1,
+      "feverModifier": 1,
+      "maxHp": 250,
+      "passive": {
+        "type": "RegenPassive",
+        "parameters": [ { "name": "interval", "value": 10 }, { "name": "amount", "value": 5 } ]
+      }
+    }
+  ]
+}
