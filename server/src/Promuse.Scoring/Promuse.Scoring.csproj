@@ -66,4 +66,12 @@
              Link="Linked\Passives\%(Filename)%(Extension)" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!--
+      For the verdict and the rejection codes. The review speaks the wire's vocabulary
+      directly, so a code cannot be spelled one way here and another in the response.
+    -->
+    <ProjectReference Include="..\Promuse.Contracts\Promuse.Contracts.csproj" />
+  </ItemGroup>
+
 </Project>

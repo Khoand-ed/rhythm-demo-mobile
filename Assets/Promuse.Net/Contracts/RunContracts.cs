@@ -44,6 +44,71 @@ namespace Promuse.Contracts.Runs
     public sealed record CompleteRunRequest(bool Won);
 
     /// <summary>
+    /// 三种结论 / What the server made of a result.
+    /// </summary>
+    public enum ScoreVerdict
+    {
+        /// <summary>Consistent with the chart and the rules. Counted, and ranked if won.</summary>
+        Accepted,
+
+        /// <summary>
+        /// Nothing about it is impossible, but something about it looks unlike a person
+        /// playing. Counted as a clear; held off the leaderboards.
+        /// </summary>
+        Flagged,
+
+        /// <summary>
+        /// Impossible as submitted. Not ranked, and not a clear - missions included, since a
+        /// forged clear is exactly what someone farming missions would send.
+        /// </summary>
+        Rejected
+    }
+
+    /// <summary>
+    /// Why a result was rejected.
+    ///
+    /// 只解释不可能的 / These name arithmetic impossibilities in what the device itself sent, so
+    /// an honest client with a bug can be told what it got wrong. A flagged run is told only
+    /// <see cref="UnderReview"/>: which statistical signal fired stays on the server, because
+    /// naming it is a recipe for avoiding it.
+    /// </summary>
+    public static class ScoreReviewCodes
+    {
+        /// <summary>The device played under different rules than the server holds.</summary>
+        public const string RulesetMismatch = "RULESET_MISMATCH";
+
+        /// <summary>A win arrived without its input trace.</summary>
+        public const string TraceMissing = "TRACE_MISSING";
+
+        /// <summary>The trace did not decode, or is not something the writer produces.</summary>
+        public const string TraceInvalid = "TRACE_INVALID";
+
+        /// <summary>A win whose trace does not cover the chart from first note to last.</summary>
+        public const string TraceIncomplete = "TRACE_INCOMPLETE";
+
+        /// <summary>The judgement counts do not add up to the chart.</summary>
+        public const string CountsInconsistent = "COUNTS_INCONSISTENT";
+
+        /// <summary>A max combo the counts could not have produced.</summary>
+        public const string ComboInconsistent = "COMBO_INCONSISTENT";
+
+        /// <summary>A Full Combo claim that disagrees with the misses.</summary>
+        public const string FullComboInconsistent = "FULL_COMBO_INCONSISTENT";
+
+        /// <summary>Above the most this chart and operator can score.</summary>
+        public const string ScoreAboveCeiling = "SCORE_ABOVE_CEILING";
+
+        /// <summary>Closed sooner after opening than the chart takes to play.</summary>
+        public const string FinishedTooFast = "FINISHED_TOO_FAST";
+
+        /// <summary>Fewer presses in the trace than the hits claimed.</summary>
+        public const string NotEnoughInput = "NOT_ENOUGH_INPUT";
+
+        /// <summary>The whole of what a flagged run is told.</summary>
+        public const string UnderReview = "UNDER_REVIEW";
+    }
+
+    /// <summary>
     /// Closes a run.
     ///
     /// 现在很薄, 以后会厚 / Deliberately thin for now: it exists so the mission
