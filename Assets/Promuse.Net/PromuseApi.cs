@@ -33,6 +33,16 @@ namespace Promuse.Net
         /// laptop on wifi turns that into a spurious failure the player sees.
         /// </summary>
         public int timeoutSeconds = 20;
+
+        /// <summary>
+        /// 失败后再试几次 / Further attempts after a transient failure, for requests that are safe to
+        /// repeat - see <see cref="RetryPolicy"/>. Two, not more: with a 20 second timeout, every
+        /// extra attempt is up to 20 more seconds of a player staring at a spinner.
+        /// </summary>
+        public int maxRetries = 2;
+
+        /// <summary>The first wait; each retry after it waits twice as long, with jitter.</summary>
+        public float retryBaseDelaySeconds = 0.5f;
     }
 
     /// <summary>
@@ -68,13 +78,22 @@ namespace Promuse.Net
         /// </summary>
         private string? _playerETag;
 
+        /// <summary>Only for retry jitter; it decides nothing anyone could game.</summary>
+        private readonly System.Random _jitter = new System.Random();
+
+        private bool _flushing;
+
         public PromuseApi(PromuseConfig config, TokenStore tokens)
         {
             _config = config;
             _tokens = tokens;
+            Pending = new PendingRunResults(Application.persistentDataPath);
         }
 
         public TokenStore Tokens => _tokens;
+
+        /// <summary>Results that could not be sent when their run ended. See <see cref="FlushPendingRunsAsync"/>.</summary>
+        public PendingRunResults Pending { get; }
 
         // ----------------------------------------------------------------- auth
 
@@ -253,6 +272,54 @@ namespace Promuse.Net
             return answer;
         }
 
+        /// <summary>
+        /// Sends every queued result, oldest first, and returns the completions that went through.
+        ///
+        /// 停在第一个暂时失败上 / Stops at the first transient failure: if one result cannot get out,
+        /// the rest will not either, and they keep their place in the queue. A result the server
+        /// refuses outright - its run already closed, a request it calls malformed - is dropped,
+        /// because sending it again would only be refused again.
+        ///
+        /// 不会并发 / Runs one at a time across the whole app. Two flushes racing would send the same
+        /// result twice; the idempotency key makes that harmless, but not sending it is cheaper.
+        /// </summary>
+        public async Task<IReadOnlyList<RunCompletion>> FlushPendingRunsAsync()
+        {
+            List<RunCompletion> done = new List<RunCompletion>();
+
+            if (_flushing || !_tokens.HasSession) return done;
+
+            _flushing = true;
+
+            try
+            {
+                foreach (PendingRunResults.Entry entry in Pending.Load())
+                {
+                    ApiResult<RunCompletion> result = await CompleteRunAsync(entry.RunId, entry.Won, entry.Result);
+
+                    if (result.IsSuccess)
+                    {
+                        Pending.Remove(entry.RunId);
+                        done.Add(result.Value!);
+                        continue;
+                    }
+
+                    if (RetryPolicy.IsTransient(result.Problem)) break;
+
+                    Debug.LogWarning($"[PromuseApi] Dropping the queued result for run {entry.RunId}: {result.Message}");
+                    Pending.Remove(entry.RunId);
+                }
+            }
+            finally
+            {
+                _flushing = false;
+            }
+
+            if (done.Count > 0) Debug.Log($"[PromuseApi] Sent {done.Count} result(s) that were waiting for the network.");
+
+            return done;
+        }
+
         // ---------------------------------------------------------- leaderboards
 
         /// <summary>
@@ -283,7 +350,7 @@ namespace Promuse.Net
             string? idempotencyKey = null,
             string? ifMatch = null)
         {
-            ApiResult<T> first = await SendOnceAsync<T>(method, path, body, authenticate, idempotencyKey, ifMatch);
+            ApiResult<T> first = await SendWithRetriesAsync<T>(method, path, body, authenticate, idempotencyKey, ifMatch);
 
             if (!authenticate || !first.Is(ErrorCodes.Unauthorized)) return first;
 
@@ -292,7 +359,37 @@ namespace Promuse.Net
             // 幂等键要沿用 / The SAME idempotency key on the retry. A fresh one
             // would make the server treat this as a new request and do the work
             // twice, which is the exact failure the header exists to prevent.
-            return await SendOnceAsync<T>(method, path, body, authenticate, idempotencyKey, ifMatch);
+            return await SendWithRetriesAsync<T>(method, path, body, authenticate, idempotencyKey, ifMatch);
+        }
+
+        /// <summary>
+        /// One request, sent again after a transient failure while <see cref="RetryPolicy"/> says it
+        /// is safe to repeat - with the same idempotency key every time, so a repeat that reaches a
+        /// server which already did the work gets the first answer back instead of a second effect.
+        /// </summary>
+        private async Task<ApiResult<T>> SendWithRetriesAsync<T>(
+            string method, string path, object? body,
+            bool authenticate, string? idempotencyKey, string? ifMatch)
+        {
+            bool repeatable = RetryPolicy.IsSafeToRepeat(method, idempotencyKey);
+
+            for (int attempt = 0; ; attempt++)
+            {
+                ApiResult<T> result = await SendOnceAsync<T>(method, path, body, authenticate, idempotencyKey, ifMatch);
+
+                if (result.IsSuccess || !repeatable || attempt >= _config.maxRetries
+                    || !RetryPolicy.IsTransient(result.Problem))
+                {
+                    return result;
+                }
+
+                TimeSpan wait = RetryPolicy.Delay(attempt, _config.retryBaseDelaySeconds, _jitter.NextDouble());
+
+                Debug.Log($"[PromuseApi] {method} {path} failed ({result.Problem!.Code}); " +
+                          $"retry {attempt + 1}/{_config.maxRetries} in {wait.TotalSeconds:0.0}s.");
+
+                await Task.Delay(wait);
+            }
         }
 
         private async Task<bool> TryRefreshAsync()
