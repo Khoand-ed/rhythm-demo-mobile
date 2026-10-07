@@ -2,13 +2,14 @@ openapi: 3.1.0
 
 info:
   title: Promuse Backend API
-  version: 1.0.0-draft.4
+  version: 1.0.0-draft.5
   summary: Authentication and player state for the Promuse mobile rhythm game.
   description: |
     **Phase 1** authentication, **Phase 2** player state, **Phase 3** the economy -
-    shop, runs and missions. Each written before its implementation, so the client and
-    the server are built against one agreement rather than the client being written
-    against whatever the server happened to return.
+    shop, runs and missions, **Phase 4** scored results and leaderboards. Each written
+    before its implementation, so the client and the server are built against one
+    agreement rather than the client being written against whatever the server happened
+    to return.
 
     Every economy operation is server-authoritative and has its own endpoint rather
     than riding along on a player-state write. The client names what it wants; it never
@@ -16,9 +17,10 @@ info:
     value outright are the two fields the client legitimately owns: the squad and the
     desktop character.
 
-    Still absent: gacha, and the score and replay half of a run. That endpoint exists -
-    POST /v1/runs/{runId}/complete - but carries only a win flag, and Phase 4 adds the
-    rest to it rather than introducing a second call that also means "the run ended".
+    Still absent: gacha, and replaying a run. A result is reviewed today against hard
+    limits from the chart and the rules - counts, combo, a score ceiling, timing - and
+    its raw input trace is kept, so the replay can be added to the same review without
+    changing what the client sends.
 
     ## Where the data comes from
 
@@ -65,9 +67,16 @@ tags:
       The economy, with the server holding the prices. Phase 3.
   - name: runs
     description: |
-      One attempt at a song. Opened by `POST /v1/runs`, closed by
-      `POST /v1/runs/{runId}/complete` - which Phase 4 extends with the score and
-      the input trace rather than adding a second call that also means "it ended".
+      One attempt at a song. Opened by `POST /v1/runs` with the operator fixed, closed by
+      `POST /v1/runs/{runId}/complete` with the result and the input trace - one call for
+      "it ended", so a run cannot be counted by one request and scored by another.
+  - name: leaderboards
+    description: |
+      Each stage's best scores, all-time and this week. Phase 4.
+
+      Written only by a run's completion, and only once its result was accepted. The
+      weekly board is keyed by ISO week on the same Monday 04:00 boundary as the weekly
+      missions, so it empties itself without a job.
   - name: missions
     description: |
       The two mission boards. Phase 3.
@@ -550,6 +559,10 @@ paths:
         The cost lives on the server. It had no home before: `DungeonMeta` declares a
         `reason` field but no DungeonMeta asset exists in the project, so
         SelectDungeonUI was spending a number that came from nowhere.
+
+        选了谁要先说 / The operator is named here, before the song, and must be on the
+        player's roster. Its modifiers are part of what the result is checked against;
+        a result that could name its operator afterwards would name the strongest one.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -575,8 +588,8 @@ paths:
                 $ref: '#/components/schemas/Problem'
         '409':
           description: |
-            `INSUFFICIENT_STAMINA`, or `STATE_CONFLICT` when two starts raced for the
-            last of the bar.
+            `INSUFFICIENT_STAMINA`, `CHARACTER_NOT_OWNED`, or `STATE_CONFLICT` when two
+            starts raced for the last of the bar.
           content:
             application/problem+json:
               schema:
@@ -590,16 +603,31 @@ paths:
     post:
       tags: [runs]
       operationId: completeRun
-      summary: Close a run.
+      summary: Close a run and have its result reviewed.
       description: |
-        现在很薄 / Deliberately thin: it exists so the mission counters have something
-        to advance them. Phase 4 adds the score and the input trace to THIS endpoint
-        and replays them against the seed the run was opened with - a separate "submit
-        score" call would be a second endpoint that also means "the run ended".
+        Reviews the result, counts it towards the missions if it is a clear, and ranks it
+        if it was accepted - committed together, so a run is never ranked without being
+        closed nor counted without its result on record.
 
-        通关才算 / Only a win advances the "clear any song" missions, matching what
-        `GameManager` already did: a run that ran out of HP is not a clear. The stamina
-        is spent either way; it was spent when the run opened.
+        三种结论 / The review answers one of three ways:
+
+        - `Accepted` - consistent with the chart and the rules. A clear, and ranked.
+        - `Flagged` - nothing impossible, but something statistical looks unlike a
+          person (timing locked to the frame, input far beyond the notes). Still a clear;
+          held off the leaderboards. The client is told only `UNDER_REVIEW`.
+        - `Rejected` - impossible as submitted. Not ranked and NOT a clear: the missions
+          do not move, since a forged clear is exactly what mission farming would send.
+          The reasons are named, because they describe the client's own output.
+
+        Malformed is not the same as dishonest: a missing result on a win or a negative
+        count is a `422` and nothing is stored, while a well-formed result that cannot be
+        true is stored and answered with a verdict.
+
+        通关才算 / Only a clear advances the "clear any song" missions. The stamina is
+        spent either way; it was spent when the run opened.
+
+        The idempotency key the client uses is the run id itself: "this run ended" cannot
+        honestly happen twice, so a retry replays the first answer.
 
         A run that belongs to someone else is answered exactly like one that does not
         exist. Telling them apart would let a stranger probe which run ids are real.
@@ -633,6 +661,58 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+        '413':
+          description: The body is over 4 MiB. A real trace compresses to tens of kilobytes.
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/leaderboards/{stageId}:
+    get:
+      tags: [leaderboards]
+      operationId: getLeaderboard
+      summary: A stage's board, top first, with the caller's own line.
+      description: |
+        Ties go to whoever set the score first: matching a score is not the same as having
+        held it. `me` is the caller's entry and rank wherever it falls, page or not.
+      parameters:
+        - name: stageId
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+        - name: period
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/LeaderboardPeriod'
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: The board.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaderboardPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: '`STAGE_NOT_FOUND` - unknown chart, or not in rotation.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -1207,12 +1287,16 @@ components:
 
     StartRunRequest:
       type: object
-      required: [stageId]
+      required: [stageId, characterId]
       properties:
         stageId:
           type: string
           maxLength: 64
           description: The chart being attempted, from `SongChart.stageId`.
+        characterId:
+          type: string
+          maxLength: 32
+          description: The operator, which must be on the player's roster.
 
     RunTicket:
       type: object
@@ -1228,12 +1312,14 @@ components:
           format: int64
           description: |
             服务端发, 从不接收 / Issued by the server and never accepted from the
-            client. JudgeUpgradePassive rolls `Random.value` per judgement, so the
-            scoring rules are not deterministic and the server cannot re-simulate a
-            run without knowing the sequence. If the client chose this number it
-            would simply re-roll until the draw was favourable.
+            client. JudgeUpgradePassive rolls per judgement, so the scoring rules are
+            not deterministic and the server cannot re-simulate a run without knowing
+            the sequence. If the client chose this number it would simply re-roll until
+            the draw was favourable.
 
-            The client seeds its own generator from this before the first note.
+            The client seeds the run's own generator (`RunState.NextRoll`, SplitMix64)
+            from this - never UnityEngine.Random, which the rest of the scene also
+            draws from.
         staminaSpent:
           type: integer
           minimum: 0
@@ -1384,6 +1470,87 @@ components:
           description: |
             通关才算 / Only a win advances the "clear any song" missions, matching what
             GameManager already did: a run that ran out of HP is not a clear.
+        result:
+          oneOf:
+            - $ref: '#/components/schemas/RunResult'
+            - type: 'null'
+          description: Required when `won` is true. Optional for a failed run.
+
+    RunResult:
+      type: object
+      required: [score, maxCombo, perfect, great, hit, miss, fullCombo, rulesetFingerprint, trace]
+      description: |
+        What the device says happened, and the raw input it happened from. Counts are
+        named after the Judgement enum; the results screen's "good" and "normal" are older
+        labels for Great and Hit.
+      properties:
+        score:
+          type: integer
+          minimum: 0
+        maxCombo:
+          type: integer
+          minimum: 0
+        perfect:
+          type: integer
+          minimum: 0
+        great:
+          type: integer
+          minimum: 0
+        hit:
+          type: integer
+          minimum: 0
+        miss:
+          type: integer
+          minimum: 0
+        fullCombo:
+          type: boolean
+        rulesetFingerprint:
+          type: string
+          maxLength: 32
+          description: |
+            `RulesetFingerprint.Compute` over the rules the run was played with: a 64-bit
+            FNV-1a of every scoring number, floats hashed by their IEEE bits. A mismatch is
+            the device and the server disagreeing about the rules, and is answered as
+            `RULESET_MISMATCH` rather than as an impossible score.
+        trace:
+          type: string
+          maxLength: 2097152
+          description: |
+            The input trace, gzipped then base64. One record per gameplay frame: the song
+            time the frame was judged at, the lanes pressed and the lanes held. Kept by the
+            server so the run can be replayed against its seed.
+
+    ScoreVerdict:
+      type: string
+      enum: [Accepted, Flagged, Rejected]
+
+    ScoreReview:
+      type: object
+      required: [verdict, reasons, score, isPersonalBest]
+      properties:
+        verdict:
+          $ref: '#/components/schemas/ScoreVerdict'
+        reasons:
+          type: array
+          description: |
+            Empty when accepted. When rejected, any of `RULESET_MISMATCH`, `TRACE_MISSING`,
+            `TRACE_INVALID`, `TRACE_INCOMPLETE`, `COUNTS_INCONSISTENT`, `COMBO_INCONSISTENT`,
+            `FULL_COMBO_INCONSISTENT`, `SCORE_ABOVE_CEILING`, `FINISHED_TOO_FAST`,
+            `NOT_ENOUGH_INPUT`. When flagged, `UNDER_REVIEW` alone - which signal fired
+            stays on the server.
+          items:
+            type: string
+        score:
+          type: integer
+        isPersonalBest:
+          type: boolean
+          description: This run is now the player's all-time entry on the stage.
+        allTimeRank:
+          type: [integer, 'null']
+          minimum: 1
+        weeklyRank:
+          type: [integer, 'null']
+          minimum: 1
 
     RunCompletion:
       type: object
@@ -1394,9 +1561,69 @@ components:
           format: uuid
         won:
           type: boolean
+          description: Whether the server counted a clear - the claim, unless rejected.
+        review:
+          oneOf:
+            - $ref: '#/components/schemas/ScoreReview'
+            - type: 'null'
+          description: Null when no result was sent, which only a failed run may do.
         boards:
           $ref: '#/components/schemas/MissionBoards'
         player:
           $ref: '#/components/schemas/PlayerState'
+        serverTime:
+          $ref: '#/components/schemas/ServerTime'
+
+    LeaderboardPeriod:
+      type: string
+      enum: [AllTime, Weekly]
+      default: AllTime
+
+    LeaderboardEntry:
+      type: object
+      required: [rank, playerId, displayName, score, maxCombo, achievedAt]
+      properties:
+        rank:
+          type: integer
+          minimum: 1
+        playerId:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        score:
+          type: integer
+        maxCombo:
+          type: integer
+        characterId:
+          type: [string, 'null']
+          description: The operator the score was set with.
+        achievedAt:
+          type: string
+          format: date-time
+
+    LeaderboardPage:
+      type: object
+      required: [stageId, period, periodKey, entries, serverTime]
+      properties:
+        stageId:
+          type: string
+        period:
+          $ref: '#/components/schemas/LeaderboardPeriod'
+        periodKey:
+          type: string
+          description: '"all", or the ISO week such as "2026-W41".'
+        resetsAt:
+          type: [string, 'null']
+          format: date-time
+          description: When the weekly board moves to a new key. Null for all-time.
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/LeaderboardEntry'
+        me:
+          oneOf:
+            - $ref: '#/components/schemas/LeaderboardEntry'
+            - type: 'null'
         serverTime:
           $ref: '#/components/schemas/ServerTime'
