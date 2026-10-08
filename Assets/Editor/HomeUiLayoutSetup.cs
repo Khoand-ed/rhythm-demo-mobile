@@ -10,6 +10,18 @@ using UnityEngine.UI;
 //
 // The motion itself lives in HomeUI.lua.txt; this only decides what sits under
 // the two transforms that script drives.
+//
+// 近景再分两块 / Inside move2 the near widgets are split into RightPanel (the
+// menu tiles, the currency row and the clock) and LeftPanel (the news panel,
+// and whatever is added beside it later). Each panel is a plain container you
+// tilt by hand in the Inspector, so a whole side leans as one rigid plane about
+// one pivot. Tilting the tiles one at a time could never look right: each would
+// turn about its own centre and they would stop lining up as a surface.
+//
+// 面板的旋转不会被覆盖 / HomeUI.lua.txt writes move2.localRotation every frame,
+// so a tilt set on move2 itself would be erased at runtime. The panels sit one
+// level below and the Lua never touches them, so the hand-set tilt composes with
+// the pointer-driven one instead of being replaced by it.
 public static class HomeUiLayoutSetup
 {
     private const string HomePrefabPath = "Assets/Arknights/Resources/Prefab/UI/HomeUI.prefab";
@@ -17,6 +29,8 @@ public static class HomeUiLayoutSetup
 
     private const string Move1 = "move1";
     private const string Move2 = "move2";
+    private const string RightPanel = "RightPanel";
+    private const string LeftPanel = "LeftPanel";
     private const string Background = "BackGround";
 
     // 不动的 / Stays put: the top-left utility icons and everything belonging to
@@ -36,13 +50,22 @@ public static class HomeUiLayoutSetup
     // move2: 其余全部 / Everything else - the menu tiles the player actually aims
     // at, plus the clock, the currency row and the news panel. This is the near
     // plane and carries the bulk of the movement.
-    private static readonly string[] NearGroup =
+    //
+    // 右边一块 / RightPanel: everything on the right half. The currency row and the
+    // clock lean with the tiles rather than staying flat above them, by choice -
+    // the whole corner reads as one surface. Listed in stacking order.
+    private static readonly string[] RightGroup =
     {
         "time", "dragonCoinSlot", "syntheticJadeSlot", "sourceStoneSlot",
         "OperationTile", "SquadTile", "OperatorsTile", "StoreTile", "RecruitTile",
-        "PublicRecruitTile", "HeadhuntTile", "MissionsTile", "ManufactureTile", "DepotTile",
-        "NewsPanel"
+        "PublicRecruitTile", "HeadhuntTile", "MissionsTile", "ManufactureTile", "DepotTile"
     };
+
+    // 左边一块 / LeftPanel: the news panel, with room for buttons added beside it.
+    // Anything put in here later inherits the panel's tilt rather than needing its own.
+    private static readonly string[] LeftGroup = { "NewsPanel" };
+
+    private static readonly string[] NearGroup = Concat(RightGroup, LeftGroup);
 
     [MenuItem("Arknights/Home/Apply Parallax Groups")]
     public static void ApplyParallaxGroups()
@@ -88,10 +111,21 @@ public static class HomeUiLayoutSetup
             // a rotation about the centre of the screen would swing the far tiles
             // through an arc instead of leaning them.
             Vector2 centre = GroupCentre(root, NearGroup, out Vector2 size);
-            move2.anchoredPosition = centre;
+            Recentre(move2, centre, root);
             move2.sizeDelta = size;
             move2.localRotation = Quaternion.identity;
-            foreach (string name in NearGroup) Reparent(Find(root, name), move2, root);
+
+            // 两块面板 / The two hand-tilted panels. Found if they exist and left exactly
+            // as they are - their rotation is the one thing in here that is set by hand.
+            RectTransform right = FindOrCreatePanel(move2, RightPanel, RightGroup, root, out bool rightMade);
+            if (right != null) foreach (string name in RightGroup) Reparent(Find(root, name), right, root);
+
+            RectTransform left = FindOrCreateLeftPanel(move2, root, out bool leftMade);
+            if (left != null) foreach (string name in LeftGroup) Reparent(Find(root, name), left, root);
+
+            // 新闻面板原本在最上层 / The news panel was authored on top, so its panel stays last.
+            if (right != null) right.SetSiblingIndex(0);
+            if (left != null) left.SetAsLastSibling();
 
             // 还原原来的层次 / Restore the stacking the prefab was authored with:
             // decor behind, then the plate, then the icons, then everything else.
@@ -103,11 +137,13 @@ public static class HomeUiLayoutSetup
 
             PrefabUtility.SaveAsPrefabAsset(contents, HomePrefabPath);
 
-            Debug.Log($"HomeUI parallax groups applied.\n" +
+            Debug.Log($"[HomeUiLayoutSetup] HomeUI parallax groups applied.\n" +
                       $"  still: {string.Join(", ", StaticIcons)} + {string.Join(", ", StaticPlate)}\n" +
                       $"  {Move1} (far, drifts against): {string.Join(", ", FarGroup)}\n" +
-                      $"  {Move2} (near, pivot {centre} size {size}): {string.Join(", ", NearGroup)}\n" +
-                      "  Amounts and the idle return live in HomeUI.lua.txt.");
+                      $"  {Move2} (near, pivot {centre} size {size}):\n" +
+                      $"    {RightPanel} ({(rightMade ? "created" : "kept")}): {string.Join(", ", RightGroup)}\n" +
+                      $"    {LeftPanel} ({(leftMade ? "created" : "kept")}): {string.Join(", ", LeftGroup)}\n" +
+                      "  Tilt a side by rotating its panel. Pointer amounts and the idle return live in HomeUI.lua.txt.");
         }
         finally
         {
@@ -204,9 +240,15 @@ public static class HomeUiLayoutSetup
     }
 
     /// <summary>
-    /// Where a node sits relative to the screen centre. Every rect in HomeUI is centre-anchored
-    /// with no rotation or scale, so the offsets simply add up the chain - which makes moving a
-    /// widget between parents a matter of subtracting the new parent's own offset.
+    /// Where a node sits in the layout, relative to the screen centre. Every rect in HomeUI is
+    /// centre-anchored, so the offsets simply add up the chain - which makes moving a widget
+    /// between parents a matter of subtracting the new parent's own offset.
+    ///
+    /// 这是布局坐标, 不是世界坐标 / Layout position, deliberately not world position: rotation
+    /// is ignored. The panels are tilted by hand, and that tilt is presentation layered on top
+    /// of the layout. Placing a widget into a tilted panel therefore puts it at its designed
+    /// spot within the tilt, so it leans with its neighbours - which is the whole point of the
+    /// panel. A world-space reparent would instead counter-rotate it and leave it standing flat.
     /// </summary>
     private static Vector2 PositionUnderRoot(RectTransform node, Transform root)
     {
@@ -222,13 +264,141 @@ public static class HomeUiLayoutSetup
 
     private static void Reparent(RectTransform node, RectTransform target, RectTransform root)
     {
-        if (node == null || node == target) return;
+        // 已经在位就不动 / Already where it belongs: touch nothing, not even its sibling index,
+        // so a re-run never restacks or nudges something adjusted by hand.
+        if (node == null || node == target || node.parent == target) return;
 
         Vector2 position = PositionUnderRoot(node, root);
         Vector2 targetPosition = target == root ? Vector2.zero : PositionUnderRoot(target, root);
 
         node.SetParent(target, false);
         node.anchoredPosition = position - targetPosition;
+    }
+
+    /// <summary>
+    /// 挪容器但不挪内容 / Moves a container's centre without moving anything it holds: the
+    /// children are shifted back by the same amount. Without this, re-centring move2 after a
+    /// widget is added to a group would drag every panel and tile along with it.
+    /// </summary>
+    private static void Recentre(RectTransform container, Vector2 centre, RectTransform root)
+    {
+        Vector2 delta = centre - PositionUnderRoot(container, root);
+        if (delta.sqrMagnitude < 0.0001f) return;
+
+        container.anchoredPosition += delta;
+
+        for (int i = 0; i < container.childCount; i++)
+        {
+            if (container.GetChild(i) is RectTransform child) child.anchoredPosition -= delta;
+        }
+    }
+
+    /// <summary>
+    /// A bare container: a RectTransform and nothing else. Deliberately no Graphic, so it can
+    /// never become the invisible raycast target StopEatingClicks has to clean up after.
+    /// </summary>
+    private static RectTransform NewContainer(string name, RectTransform parent)
+    {
+        GameObject go = new GameObject(name, typeof(RectTransform));
+        go.layer = parent.gameObject.layer;
+
+        RectTransform rect = (RectTransform)go.transform;
+        rect.SetParent(parent, false);
+        rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 0.5f);
+        return rect;
+    }
+
+    /// <summary>
+    /// Finds a panel or builds it around the bounding box of its members, pivot in the middle,
+    /// so a tilt turns the group about its own centre rather than the screen's.
+    ///
+    /// 已存在就原样保留 / An existing panel is returned untouched - position, size and above
+    /// all rotation. Its tilt is set by hand and a re-run must never undo it.
+    /// </summary>
+    private static RectTransform FindOrCreatePanel(RectTransform move2, string name, string[] members,
+                                                   RectTransform root, out bool created)
+    {
+        created = false;
+
+        RectTransform panel = Find(root, name);
+        if (panel != null)
+        {
+            if (panel.parent != move2) Reparent(panel, move2, root);
+            return panel;
+        }
+
+        Vector2 centre = GroupCentre(root, members, out Vector2 size);
+        if (size == Vector2.zero)
+        {
+            Debug.LogWarning($"[HomeUiLayoutSetup] None of {name}'s widgets exist; not creating it.");
+            return null;
+        }
+
+        panel = NewContainer(name, move2);
+        panel.sizeDelta = size;
+        panel.anchoredPosition = centre - PositionUnderRoot(move2, root);
+
+        created = true;
+        return panel;
+    }
+
+    /// <summary>
+    /// 左边的面板接管新闻面板的整个姿态 / LeftPanel is built by taking over the news panel's
+    /// whole pose - position, depth, size, pivot and its hand-set tilt - and then resetting the
+    /// news panel to sit flat at the panel's origin. On screen nothing moves; the difference is
+    /// that the tilt now belongs to the panel, so a button added beside the news later leans
+    /// with it instead of needing its own angle.
+    ///
+    /// Only done when the panel is first created. On a re-run the panel already owns the tilt,
+    /// and copying the news panel's (now flat) rotation up again would wipe it.
+    /// </summary>
+    private static RectTransform FindOrCreateLeftPanel(RectTransform move2, RectTransform root, out bool created)
+    {
+        created = false;
+
+        RectTransform panel = Find(root, LeftPanel);
+        if (panel != null)
+        {
+            if (panel.parent != move2) Reparent(panel, move2, root);
+            return panel;
+        }
+
+        RectTransform news = Find(root, LeftGroup[0]);
+        if (news == null)
+        {
+            Debug.LogWarning($"[HomeUiLayoutSetup] No {LeftGroup[0]} to build {LeftPanel} around; not creating it.");
+            return null;
+        }
+
+        Vector2 layout = PositionUnderRoot(news, root) - PositionUnderRoot(move2, root);
+
+        panel = NewContainer(LeftPanel, move2);
+        panel.anchorMin = news.anchorMin;
+        panel.anchorMax = news.anchorMax;
+        panel.pivot = news.pivot;
+        panel.sizeDelta = news.sizeDelta;
+        panel.anchoredPosition3D = new Vector3(layout.x, layout.y, news.localPosition.z);
+        panel.localRotation = news.localRotation;
+        panel.localScale = news.localScale;
+
+        // 新闻面板回到原点, 平放 / Pivot-for-pivot on the panel's origin, flat and at depth 0.
+        // With a centred pivot that is (0, 0); the general form keeps it right if the pivot moves.
+        news.SetParent(panel, false);
+        news.anchoredPosition3D = new Vector3((news.pivot.x - 0.5f) * news.sizeDelta.x,
+                                              (news.pivot.y - 0.5f) * news.sizeDelta.y, 0f);
+        news.localRotation = Quaternion.identity;
+        news.localScale = Vector3.one;
+
+        created = true;
+        return panel;
+    }
+
+    private static string[] Concat(string[] a, string[] b)
+    {
+        string[] all = new string[a.Length + b.Length];
+        a.CopyTo(all, 0);
+        b.CopyTo(all, a.Length);
+        return all;
     }
 
     private static RectTransform Find(Transform root, string name)
