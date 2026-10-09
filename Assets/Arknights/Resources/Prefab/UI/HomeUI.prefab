@@ -2729,6 +2729,7 @@ GameObject:
   - component: {fileID: 8117688989138520348}
   - component: {fileID: 8318376856965678960}
   - component: {fileID: 987962787688898856}
+  - component: {fileID: 4825422488351240784}
   m_Layer: 0
   m_Name: HeadhuntTile
   m_TagString: Untagged
@@ -2838,6 +2839,19 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
+--- !u!114 &4825422488351240784
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2744407087535629018}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 87649f0ce7ff2bc43bdfae9cfa3dd515, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::OpenUIButton
+  uiName: GachaUI
 --- !u!1 &2854403317224762012
 GameObject:
   m_ObjectHideFlags: 0
