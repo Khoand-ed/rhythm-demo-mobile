@@ -45,35 +45,10 @@ namespace UI.Sub {
         public TextMeshProUGUI orundumAmount;
         public Button originitePlus;
 
-        [Header("翻页 / Side arrows, and swiping the card itself")]
+        [Header("翻页 / Side arrows, and the two banner cards that page under the swipe")]
         public Button prevButton;
         public Button nextButton;
         public SwipePager swipe;
-
-        [Header("卡面 / The banner card")]
-        public TextMeshProUGUI kindLabel;
-        public TextMeshProUGUI titleText;
-        public TextMeshProUGUI headlineText;
-        public TextMeshProUGUI guaranteeText;
-        public TextMeshProUGUI descriptionText;
-        public TextMeshProUGUI timeCaption;
-        public TextMeshProUGUI timeValue;
-
-        [Header("角色 / Operator art")]
-        public Image featuredImage;
-        public GameObject featuredPlate;
-        public GameObject upBadge;
-        public TextMeshProUGUI featuredName;
-        public Image featuredStars;
-        public TextMeshProUGUI featuredEpithet;
-
-        [Tooltip("Smaller portraits behind the featured operator.")]
-        public RectTransform lineupBehind;
-        public Image lineupBehindTemplate;
-
-        [Tooltip("The whole pool side by side, for a banner with no featured operator.")]
-        public RectTransform lineupFull;
-        public Image lineupFullTemplate;
 
         [Header("底栏 / Bottom row")]
         public Button shopButton;
@@ -91,8 +66,9 @@ namespace UI.Sub {
         public Button detailsClose;
 
         private readonly List<TabView> tabs = new List<TabView>();
-        private readonly List<Image> lineupClones = new List<Image>();
 
+        // 前卡上的卡池 / The banner on the front card. Set when a page change is decided, not when
+        // its slide ends, so the tabs and pull buttons switch the moment the finger lifts.
         private int current;
         private float nextTick;
 
@@ -103,12 +79,16 @@ namespace UI.Sub {
             originitePlus.onClick.AddListener(OpenShop);
             shopButton.onClick.AddListener(OpenShop);
 
-            // 箭头先归位再翻 / Arrows and tabs snap the card home first, in case a swipe's slide is
-            // still running. The swipe itself pages through Step directly: it calls back while the
-            // card is out of sight, and snapping then would cut off its own slide back in.
-            prevButton.onClick.AddListener(() => { swipe.Snap(); Step(-1); });
-            nextButton.onClick.AddListener(() => { swipe.Snap(); Step(+1); });
-            swipe.Paged += Step;
+            // 箭头和手指同一个动作 / The arrows page with the same slide a swipe ends in. The pager
+            // asks for the neighbour when it needs one, and says which card is in front once a
+            // change is decided - the card itself knows which banner it shows.
+            prevButton.onClick.AddListener(() => swipe.Slide(-1));
+            nextButton.onClick.AddListener(() => swipe.Slide(+1));
+            swipe.Prepare += (page, direction) => DrawCard(page, Wrap(current + direction));
+            swipe.Paged += page => {
+                current = Card(page).Index;
+                DrawAround();
+            };
 
             detailsButton.onClick.AddListener(ShowDetails);
             detailsClose.onClick.AddListener(() => detailsOverlay.SetActive(false));
@@ -154,18 +134,21 @@ namespace UI.Sub {
             GachaBanner banner = Current;
             if (banner == null) return;
 
-            DrawTime(banner);
+            // 两张都走 / Both cards tick: mid-swipe, the one arriving is in view too.
+            foreach (RectTransform page in swipe.pages) Card(page).DrawTime();
+
             DrawCurrencies();
             DrawCosts(banner);
+            SetPullable(IsOpen(banner));
         }
 
         // ---------------------------------------------------------------------- tabs
 
-        private GachaBanner Current {
-            get {
-                if (library == null || library.banners.Count == 0) return null;
-                return library.banners[Mathf.Clamp(current, 0, library.banners.Count - 1)];
-            }
+        private GachaBanner Current => BannerAt(current);
+
+        private GachaBanner BannerAt(int index) {
+            if (library == null || library.banners.Count == 0) return null;
+            return library.banners[Mathf.Clamp(index, 0, library.banners.Count - 1)];
         }
 
         private void BuildTabs() {
@@ -175,7 +158,7 @@ namespace UI.Sub {
             for (int i = 0; i < count; i++) {
                 int index = i;
                 TabView tab = new TabView(Instantiate(tabTemplate, tabRow), library.banners[i]);
-                tab.Button.onClick.AddListener(() => { swipe.Snap(); Select(index); });
+                tab.Button.onClick.AddListener(() => SlideTo(index));
                 tabs.Add(tab);
             }
 
@@ -190,113 +173,52 @@ namespace UI.Sub {
             }
         }
 
-        private void Step(int delta) {
-            int count = tabs.Count;
-            if (count == 0) return;
-            Select(((current + delta) % count + count) % count);
+        private int Wrap(int index) {
+            int count = library != null ? library.banners.Count : 0;
+            return count == 0 ? 0 : (index % count + count) % count;
         }
 
-        private void Select(int index) {
+        /// <summary>
+        /// 页签往它所在的那边滑 / A tab slides towards where it sits: one right of the current tab
+        /// pages like ›, one left of it like ‹, and lands straight on its own banner without
+        /// passing the ones in between.
+        /// </summary>
+        private void SlideTo(int index) {
             if (index == current) return;
-            current = index;
-            Draw();
+            swipe.Slide(index > current ? +1 : -1, page => DrawCard(page, index));
         }
 
         // ---------------------------------------------------------------------- draw
 
         private void Draw() {
+            DrawCard(swipe.Front, current);
+            DrawAround();
+        }
+
+        private void DrawCard(RectTransform page, int index) {
+            Card(page).Draw(BannerAt(index), index);
+        }
+
+        // 卡外的一切跟着前卡 / Everything around the cards follows the front one: the lit tab,
+        // the costs, and whether the pull buttons are lit.
+        private void DrawAround() {
             for (int i = 0; i < tabs.Count; i++) tabs[i].SetSelected(i == current);
 
             GachaBanner banner = Current;
-            if (banner == null) {
-                titleText.text = "No banners";
-                return;
-            }
+            if (banner == null) return;
 
-            kindLabel.text = banner.kind == GachaBannerKind.Event ? "EVENT HEADHUNTING" : "STANDARD HEADHUNTING";
-            titleText.text = banner.title;
-            headlineText.text = banner.headline;
-            descriptionText.text = banner.description;
-
-            // 保底说明从数值生成 / Generated from the threshold rather than typed into the asset,
-            // so the sentence can never disagree with the number it describes.
-            guaranteeText.text = $"No 5-star in {banner.pityThreshold} pulls? The next one is guaranteed.";
-
-            DrawArt(banner);
-            DrawTime(banner);
             DrawCosts(banner);
+            SetPullable(IsOpen(banner));
         }
 
-        private void DrawArt(GachaBanner banner) {
-            foreach (Image clone in lineupClones) Destroy(clone.gameObject);
-            lineupClones.Clear();
-
-            CharMeta featured = banner.HasFeatured ? SafeMeta(banner.featuredCharId) : null;
-
-            featuredImage.gameObject.SetActive(featured != null);
-            featuredPlate.SetActive(featured != null);
-            lineupBehind.gameObject.SetActive(featured != null);
-            lineupFull.gameObject.SetActive(featured == null);
-
-            if (featured != null) {
-                featuredImage.sprite = featured.GetImage();
-                featuredImage.color = featured.GetImage() != null ? Color.white : Color.clear;
-
-                upBadge.SetActive(banner.kind == GachaBannerKind.Event);
-                featuredName.text = featured.GetEnglishName();
-                featuredStars.sprite = SafeSprite(() => CharManager.Inst().GetStarImage("info_" + featured.GetRarity()));
-                featuredStars.enabled = featuredStars.sprite != null;
-                featuredEpithet.text = featured.GetPassive() != null ? featured.GetPassive().passiveName : "";
-
-                FillLineup(lineupBehind, lineupBehindTemplate, banner, banner.featuredCharId);
-            } else {
-                FillLineup(lineupFull, lineupFullTemplate, banner, null);
-            }
+        private static GachaBannerCard Card(RectTransform page) {
+            return page.GetComponent<GachaBannerCard>();
         }
 
-        private void FillLineup(RectTransform root, Image template, GachaBanner banner, string skip) {
-            template.gameObject.SetActive(false);
-
-            foreach (string id in banner.poolCharIds) {
-                if (id == skip) continue;
-
-                CharMeta meta = SafeMeta(id);
-                if (meta == null || meta.GetImage() == null) continue;
-
-                Image clone = Instantiate(template, root);
-                clone.sprite = meta.GetImage();
-                clone.gameObject.SetActive(true);
-                lineupClones.Add(clone);
-            }
-        }
-
-        private void DrawTime(GachaBanner banner) {
+        private static bool IsOpen(GachaBanner banner) {
             DateTime now = DateTime.UtcNow;
-
-            if (banner.TryGetStart(out DateTime start) && now < start) {
-                timeCaption.text = "OPENS IN";
-                timeValue.text = Span(start - now);
-                SetPullable(false);
-                return;
-            }
-
-            if (!banner.TryGetEnd(out DateTime end)) {
-                timeCaption.text = "AVAILABILITY";
-                timeValue.text = "Permanent";
-                SetPullable(true);
-                return;
-            }
-
-            if (now >= end) {
-                timeCaption.text = "TIME REMAINING";
-                timeValue.text = "Ended";
-                SetPullable(false);
-                return;
-            }
-
-            timeCaption.text = "TIME REMAINING";
-            timeValue.text = Span(end - now);
-            SetPullable(true);
+            if (banner.TryGetStart(out DateTime start) && now < start) return false;
+            return !banner.HasEnded(now);
         }
 
         // 结束或未开的卡池按钮变暗 / An ended or unopened banner dims its buttons, but they stay
@@ -468,7 +390,7 @@ namespace UI.Sub {
         /// 查不到就当没有 / A missing operator must cost the screen a portrait, not the screen.
         /// CharManager loads metadata on demand, and that load can throw as well as return null.
         /// </summary>
-        private static CharMeta SafeMeta(string id) {
+        internal static CharMeta SafeMeta(string id) {
             if (string.IsNullOrEmpty(id)) return null;
 
             try {
@@ -479,7 +401,7 @@ namespace UI.Sub {
             }
         }
 
-        private static Sprite SafeSprite(Func<Sprite> get) {
+        internal static Sprite SafeSprite(Func<Sprite> get) {
             try {
                 return get();
             } catch (Exception) {
@@ -498,13 +420,6 @@ namespace UI.Sub {
 
         private static string Inv(FormattableString text) {
             return FormattableString.Invariant(text);
-        }
-
-        private static string Span(TimeSpan left) {
-            if (left.TotalMinutes < 1) return "Less than a minute";
-            return left.Days > 0
-                ? $"{left.Days}d {left.Hours}h {left.Minutes}m"
-                : $"{left.Hours}h {left.Minutes}m";
         }
 
         /// <summary>

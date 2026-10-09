@@ -215,8 +215,9 @@ public static class GachaUISetup
         band.transform.localRotation = Quaternion.Euler(0f, 0f, 12f);
 
         BuildHeader(rootRect, ui);
+        // 箭头在卡之后 / Arrows after the cards, so they draw over a card sliding past them.
+        BuildPager(rootRect, ui);
         BuildArrows(rootRect, ui);
-        BuildCard(rootRect, ui);
         BuildBottomLeft(rootRect, ui);
         BuildPullButtons(rootRect, ui);
         BuildDetails(rootRect, ui);
@@ -331,33 +332,46 @@ public static class GachaUISetup
 
     // ----------------------------------------------------------------------- card
 
-    private static void BuildCard(RectTransform root, GachaUI ui)
+    /// <summary>
+    /// 两张卡轮流 / Two identical cards under one pager, taking turns: the one on screen and the
+    /// one a page change brings in beside it. The pager is the card's slot and never moves; the
+    /// cards slide inside it, a whole screen width apart, and it does not clip - a card leaving
+    /// goes off the edge of the screen, not the edge of the slot.
+    /// </summary>
+    private static void BuildPager(RectTransform root, GachaUI ui)
+    {
+        RectTransform slot = NewRect("CardPager", root);
+        Place(slot, Center, Center, Center, new Vector2(0f, -10f), CardSize);
+
+        UI.SwipePager pager = slot.gameObject.AddComponent<UI.SwipePager>();
+        pager.pages = new[] { BuildCard(slot, "CardA"), BuildCard(slot, "CardB") };
+        ui.swipe = pager;
+
+        // 第二张放到屏幕外 / Only so the prefab shows one card while edited; at run time the
+        // pager places both itself.
+        pager.pages[1].anchoredPosition = new Vector2(1920f, 0f);
+    }
+
+    private static RectTransform BuildCard(RectTransform slot, string name)
     {
         // 外框不裁切, 让种类标签压在卡片上沿 / The frame does not clip, so the kind tag can sit
         // across the card's top edge the way the reference does. Only the inner card masks.
-        RectTransform frame = NewRect("CardFrame", root);
-        Place(frame, Center, Center, Center, new Vector2(0f, -10f), CardSize);
-
-        // 整张卡可以左右滑 / The whole card - kind tag and edges included - moves with a swipe, and
-        // fades across a page change through this group.
-        CanvasGroup cardFade = frame.gameObject.AddComponent<CanvasGroup>();
-        UI.SwipePager pager = frame.gameObject.AddComponent<UI.SwipePager>();
-        pager.target = frame;
-        pager.fade = cardFade;
-        ui.swipe = pager;
+        RectTransform frame = NewRect(name, slot);
+        Stretch(frame);
+        GachaBannerCard view = frame.gameObject.AddComponent<GachaBannerCard>();
 
         RectTransform card = NewRect("Card", frame);
         Stretch(card);
         card.gameObject.AddComponent<RectMask2D>();
 
         // 卡面接收拖动 / The face is the card's one raycast target: drag events start here and
-        // bubble up to the SwipePager on the frame. Nothing on the card is a button, so taking
+        // bubble up to the SwipePager on the slot. Nothing on the card is a button, so taking
         // the touch costs nothing.
         UnityEngine.UI.Image face = NewImage("Face", card, PanelInk, true);
         Stretch((RectTransform)face.transform);
 
-        BuildArt(card, ui);
-        BuildInfo(card, ui);
+        BuildArt(card, view);
+        BuildInfo(card, view);
 
         AddEdges(frame, Edge, 2f);
 
@@ -377,13 +391,14 @@ public static class GachaUISetup
         tagFit.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
         tagFit.verticalFit = ContentSizeFitter.FitMode.Unconstrained;
 
-        ui.kindLabel = NewText("Text", tag.transform, 24f, Color.white, TextAlignmentOptions.Center);
-        ui.kindLabel.fontStyle = FontStyles.Bold;
-        ui.kindLabel.characterSpacing = 2f;
-        ui.kindLabel.textWrappingMode = TextWrappingModes.NoWrap;
+        view.kindLabel = NewText("Text", tag.transform, 24f, Color.white, TextAlignmentOptions.Center);
+        view.kindLabel.fontStyle = FontStyles.Bold;
+        view.kindLabel.characterSpacing = 2f;
+        view.kindLabel.textWrappingMode = TextWrappingModes.NoWrap;
+        return frame;
     }
 
-    private static void BuildArt(RectTransform card, GachaUI ui)
+    private static void BuildArt(RectTransform card, GachaBannerCard view)
     {
         RectTransform art = NewRect("Art", card);
         art.anchorMin = Vector2.zero;
@@ -395,21 +410,21 @@ public static class GachaUISetup
         Stretch((RectTransform)glow.transform);
 
         // 主推身后的阵容 / The rest of the pool, smaller, behind the featured operator.
-        ui.lineupBehind = Lineup("LineupBehind", art, BottomRight, new Vector2(1f, 0f), new Vector2(-10f, -40f),
-            new Vector2(520f, 520f), -150f, TextAnchor.LowerRight, new Vector2(300f, 450f), out ui.lineupBehindTemplate);
+        view.lineupBehind = Lineup("LineupBehind", art, BottomRight, new Vector2(1f, 0f), new Vector2(-10f, -40f),
+            new Vector2(520f, 520f), -150f, TextAnchor.LowerRight, new Vector2(300f, 450f), out view.lineupBehindTemplate);
 
         // 没有主推时整排展示 / With no featured operator, the whole pool fanned like a hand of
         // cards. Sized so four fit inside the art area: 4 x 300 - 3 x 160 = 720 of the 760 there
         // is. Wider cards or less overlap push the outer two under the info column and past the
         // card's clip.
-        ui.lineupFull = Lineup("LineupFull", art, BottomCenter, new Vector2(0.5f, 0f), new Vector2(0f, 60f),
-            new Vector2(740f, 480f), -160f, TextAnchor.LowerCenter, new Vector2(300f, 450f), out ui.lineupFullTemplate);
+        view.lineupFull = Lineup("LineupFull", art, BottomCenter, new Vector2(0.5f, 0f), new Vector2(0f, 60f),
+            new Vector2(740f, 480f), -160f, TextAnchor.LowerCenter, new Vector2(300f, 450f), out view.lineupFullTemplate);
 
-        ui.featuredImage = NewImage("Featured", art, Color.white, false);
-        Place(ui.featuredImage.rectTransform, BottomLeft, BottomLeft, BottomLeft, new Vector2(40f, -70f), new Vector2(533f, 800f));
-        ui.featuredImage.preserveAspect = true;
+        view.featuredImage = NewImage("Featured", art, Color.white, false);
+        Place(view.featuredImage.rectTransform, BottomLeft, BottomLeft, BottomLeft, new Vector2(40f, -70f), new Vector2(533f, 800f));
+        view.featuredImage.preserveAspect = true;
 
-        BuildPlate(art, ui);
+        BuildPlate(art, view);
     }
 
     private static RectTransform Lineup(string name, RectTransform art, Vector2 anchor, Vector2 pivot,
@@ -434,27 +449,27 @@ public static class GachaUISetup
         return row;
     }
 
-    private static void BuildPlate(RectTransform art, GachaUI ui)
+    private static void BuildPlate(RectTransform art, GachaBannerCard view)
     {
         RectTransform plate = NewRect("Plate", art);
         Place(plate, BottomLeft, BottomLeft, BottomLeft, new Vector2(330f, 60f), new Vector2(420f, 170f));
-        ui.featuredPlate = plate.gameObject;
+        view.featuredPlate = plate.gameObject;
 
         UnityEngine.UI.Image back = NewImage("Back", plate, Strip, false);
         Place((RectTransform)back.transform, new Vector2(0f, 0.32f), Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
 
-        ui.featuredName = NewText("Name", plate, 46f, Color.white, TextAlignmentOptions.Left);
-        Place(ui.featuredName.rectTransform, TopLeft, TopRight, TopLeft, new Vector2(20f, -6f), new Vector2(-40f, 60f));
-        ui.featuredName.fontStyle = FontStyles.Bold;
+        view.featuredName = NewText("Name", plate, 46f, Color.white, TextAlignmentOptions.Left);
+        Place(view.featuredName.rectTransform, TopLeft, TopRight, TopLeft, new Vector2(20f, -6f), new Vector2(-40f, 60f));
+        view.featuredName.fontStyle = FontStyles.Bold;
 
-        ui.featuredStars = NewImage("Stars", plate, Color.white, false);
-        Place(ui.featuredStars.rectTransform, TopLeft, TopLeft, TopLeft, new Vector2(20f, -70f), new Vector2(170f, 34f));
-        ui.featuredStars.preserveAspect = true;
+        view.featuredStars = NewImage("Stars", plate, Color.white, false);
+        Place(view.featuredStars.rectTransform, TopLeft, TopLeft, TopLeft, new Vector2(20f, -70f), new Vector2(170f, 34f));
+        view.featuredStars.preserveAspect = true;
 
         UnityEngine.UI.Image epithetBack = NewImage("EpithetBack", plate, new Color(Accent.r, Accent.g, Accent.b, 0.85f), false);
         Place((RectTransform)epithetBack.transform, BottomLeft, BottomLeft, BottomLeft, new Vector2(20f, 0f), new Vector2(300f, 44f));
-        ui.featuredEpithet = NewText("Epithet", epithetBack.transform, 24f, Color.white, TextAlignmentOptions.Left);
-        Inset(ui.featuredEpithet.rectTransform, 12f);
+        view.featuredEpithet = NewText("Epithet", epithetBack.transform, 24f, Color.white, TextAlignmentOptions.Left);
+        Inset(view.featuredEpithet.rectTransform, 12f);
 
         UnityEngine.UI.Image badge = NewImage("UpBadge", plate, new Color(0.95f, 0.78f, 0.25f, 1f), false);
         Place((RectTransform)badge.transform, TopRight, TopRight, new Vector2(0.5f, 0.5f), new Vector2(-30f, 0f), new Vector2(84f, 40f));
@@ -463,10 +478,10 @@ public static class GachaUISetup
         Stretch(up.rectTransform);
         up.fontStyle = FontStyles.Bold;
         up.text = "UP!";
-        ui.upBadge = badge.gameObject;
+        view.upBadge = badge.gameObject;
     }
 
-    private static void BuildInfo(RectTransform card, GachaUI ui)
+    private static void BuildInfo(RectTransform card, GachaBannerCard view)
     {
         UnityEngine.UI.Image info = NewImage("Info", card, InfoInk, false);
         RectTransform rect = (RectTransform)info.transform;
@@ -479,35 +494,35 @@ public static class GachaUISetup
         const float pad = 44f;
         const float width = InfoWidth - pad * 2f;
 
-        ui.titleText = NewText("Title", rect, 58f, Color.white, TextAlignmentOptions.TopLeft);
-        Place(ui.titleText.rectTransform, TopLeft, TopLeft, TopLeft, new Vector2(pad, -46f), new Vector2(width, 150f));
-        ui.titleText.fontStyle = FontStyles.Bold;
-        ui.titleText.lineSpacing = -12f;
+        view.titleText = NewText("Title", rect, 58f, Color.white, TextAlignmentOptions.TopLeft);
+        Place(view.titleText.rectTransform, TopLeft, TopLeft, TopLeft, new Vector2(pad, -46f), new Vector2(width, 150f));
+        view.titleText.fontStyle = FontStyles.Bold;
+        view.titleText.lineSpacing = -12f;
 
         UnityEngine.UI.Image rule = NewImage("Rule", rect, Faint, false);
         Place((RectTransform)rule.transform, TopLeft, TopLeft, TopLeft, new Vector2(pad, -206f), new Vector2(width, 2f));
 
-        ui.headlineText = NewText("Headline", rect, 32f, Color.white, TextAlignmentOptions.TopLeft);
-        Place(ui.headlineText.rectTransform, TopLeft, TopLeft, TopLeft, new Vector2(pad, -224f), new Vector2(width, 44f));
-        ui.headlineText.fontStyle = FontStyles.Bold;
+        view.headlineText = NewText("Headline", rect, 32f, Color.white, TextAlignmentOptions.TopLeft);
+        Place(view.headlineText.rectTransform, TopLeft, TopLeft, TopLeft, new Vector2(pad, -224f), new Vector2(width, 44f));
+        view.headlineText.fontStyle = FontStyles.Bold;
 
         UnityEngine.UI.Image box = NewImage("GuaranteeBox", rect, new Color(Accent.r, Accent.g, Accent.b, 0.85f), false);
         Place((RectTransform)box.transform, TopLeft, TopLeft, TopLeft, new Vector2(pad, -278f), new Vector2(width, 86f));
         UnityEngine.UI.Image boxMark = NewImage("Mark", box.transform, Color.white, false);
         Place((RectTransform)boxMark.transform, MiddleLeft, MiddleLeft, new Vector2(0.5f, 0.5f), new Vector2(20f, 0f), new Vector2(10f, 10f));
         boxMark.transform.localRotation = Quaternion.Euler(0f, 0f, 45f);
-        ui.guaranteeText = NewText("Text", box.transform, 24f, Color.white, TextAlignmentOptions.Left);
-        Place(ui.guaranteeText.rectTransform, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(18f, 0f), new Vector2(-60f, -12f));
+        view.guaranteeText = NewText("Text", box.transform, 24f, Color.white, TextAlignmentOptions.Left);
+        Place(view.guaranteeText.rectTransform, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(18f, 0f), new Vector2(-60f, -12f));
 
-        ui.descriptionText = NewText("Description", rect, 22f, Dim, TextAlignmentOptions.TopLeft);
-        Place(ui.descriptionText.rectTransform, TopLeft, TopLeft, TopLeft, new Vector2(pad, -384f), new Vector2(width, 120f));
+        view.descriptionText = NewText("Description", rect, 22f, Dim, TextAlignmentOptions.TopLeft);
+        Place(view.descriptionText.rectTransform, TopLeft, TopLeft, TopLeft, new Vector2(pad, -384f), new Vector2(width, 120f));
 
-        ui.timeCaption = NewText("TimeCaption", rect, 20f, Dim, TextAlignmentOptions.BottomLeft);
-        Place(ui.timeCaption.rectTransform, BottomLeft, BottomLeft, BottomLeft, new Vector2(pad, 84f), new Vector2(width, 30f));
-        ui.timeCaption.characterSpacing = 3f;
+        view.timeCaption = NewText("TimeCaption", rect, 20f, Dim, TextAlignmentOptions.BottomLeft);
+        Place(view.timeCaption.rectTransform, BottomLeft, BottomLeft, BottomLeft, new Vector2(pad, 84f), new Vector2(width, 30f));
+        view.timeCaption.characterSpacing = 3f;
 
-        ui.timeValue = NewText("TimeValue", rect, 32f, Color.white, TextAlignmentOptions.BottomLeft);
-        Place(ui.timeValue.rectTransform, BottomLeft, BottomLeft, BottomLeft, new Vector2(pad, 40f), new Vector2(width, 44f));
+        view.timeValue = NewText("TimeValue", rect, 32f, Color.white, TextAlignmentOptions.BottomLeft);
+        Place(view.timeValue.rectTransform, BottomLeft, BottomLeft, BottomLeft, new Vector2(pad, 40f), new Vector2(width, 44f));
     }
 
     // ---------------------------------------------------------------- bottom left
