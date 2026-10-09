@@ -1,0 +1,37 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ad86b36dc1d75aa49890458f5bb062db, type: 3}
+  m_Name: Banner_Event_Amiya
+  m_EditorClassIdentifier: Arknights::Data.Gacha.GachaBanner
+  bannerId: event_amiya
+  kind: 0
+  title: 'Resonant
+
+    Dawn'
+  headline: Featured operator
+  description: AMIYA leads this event. Every operator in the standard pool can appear
+    as well, at the same odds - see Details.
+  featuredCharId: AMIYA
+  poolCharIds:
+  - AMIYA
+  - NOVA
+  - ECHO
+  - PULSE
+  startsAtUtc: 2026-10-01T00:00:00Z
+  endsAtUtc: 2026-12-31T23:59:59Z
+  rateFiveStar: 0.02
+  rateFourStar: 0.1
+  rateThreeStar: 0.88
+  pityThreshold: 30
+  currencyItemId: 1
+  costSingle: 180
+  costMulti: 1800

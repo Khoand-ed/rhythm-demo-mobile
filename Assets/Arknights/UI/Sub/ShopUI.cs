@@ -12,6 +12,8 @@ using UnityEngine.UI;
 
 namespace UI.Sub {
     public class ShopUI : UIBase {
+        public const string UIName = "ShopUI";
+
         public Sprite zzpz_icon;
         public Sprite gjpz_icon;
         public Sprite cgpz_icon;
@@ -25,6 +27,16 @@ namespace UI.Sub {
         
         private AudioClip clip;
         private AudioClip loop_clip;
+
+        // 从哪里来回哪里去 / The screen that opened the shop, and so the one closing it returns to.
+        // Home unless an opener says otherwise through OpenFrom - which is also what every plain
+        // Show("ShopUI") still gets, so the Home tile behaves exactly as it always has.
+        private string returnTo = BootIntent.Home;
+
+        // 主界面的循环曲 / Home's loop. The shop replaces whatever was playing with its own music,
+        // and Home puts its own back when it is shown - but a screen like Gacha has none to put
+        // back, so the shop restores Home's when it returns anywhere else.
+        private AudioClip homeLoop;
         
         private PlayerData data;
         private ShopItemPanel shopItemPanel;
@@ -40,6 +52,20 @@ namespace UI.Sub {
             cur_ys = transform.GetComponent<Text>("CurrencyPanel/YS/ValueGround/txt_value");
             clip = Asset.Load<AudioClip>("Audio/Music/Shop", "m_sys_shop_intro");
             loop_clip = Asset.Load<AudioClip>("Audio/Music/Shop", "m_sys_shop_loop");
+
+            // 和 HomeUI.lua 里的同一首 / The same clip HomeUI.lua loads. If the two ever diverge,
+            // coming back from the shop through another screen plays the wrong theme.
+            homeLoop = Asset.Load<AudioClip>("Audio/Music/Home", "m_sys_void_loop");
+        }
+
+        /// <summary>
+        /// 打开商店并记住回到哪里 / Opens the shop and remembers which screen to go back to, so a
+        /// shop opened from headhunting closes back onto headhunting instead of the home screen.
+        /// </summary>
+        public static ShopUI OpenFrom(string opener) {
+            ShopUI ui = UIManager.Inst().Show(UIName) as ShopUI;
+            if (ui != null) ui.returnTo = string.IsNullOrEmpty(opener) ? BootIntent.Home : opener;
+            return ui;
         }
 
         public void GiveYs(int size) {
@@ -81,7 +107,17 @@ namespace UI.Sub {
             canvasGroup.DOFade(0, 0.2f).OnComplete(() => { 
                 base.Hide(destroy);
             });
-            UIManager.Inst().Show("HomeUI");
+
+            // 用一次就回到默认 / Spent on this close and reset, because the shop is cached rather
+            // than destroyed: the next time it opens from the Home tile it must return Home again.
+            string target = returnTo;
+            returnTo = BootIntent.Home;
+
+            // Home 显示时自己会放音乐, 别的界面不会 / Home restarts its own music when shown;
+            // anywhere else would be left playing the shop's, so put Home's loop back first.
+            if (target != BootIntent.Home) SoundManager.Inst().PlayMusic(homeLoop, true);
+
+            UIManager.Inst().Show(target);
         }
 
         public override void UpdateView() {
