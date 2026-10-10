@@ -43,6 +43,9 @@ namespace Data.Char {
             [Tooltip("The operator on the rhythm stage. CharMeta.GetBattleRig.")]
             public SkeletonDataAsset battleRig;
 
+            [Tooltip("Which of battleRig's animations answer which event. CharMeta.GetBattleMotion.")]
+            public OperatorMotion battleMotion;
+
             [Tooltip("The operator on the Home screen. CharMeta.GetHomeRig.")]
             public SkeletonDataAsset homeRig;
         }

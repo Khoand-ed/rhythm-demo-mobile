@@ -90,6 +90,11 @@ namespace Data.Char {
         [Header("主页骨骼"), SerializeField]
         private SkeletonDataAsset homeRig;
 
+        // 战斗骨骼的动作表 / Which of battleRig's animations answer which event. Empty is fine: the
+        // stage falls back to its own default table, clip by clip.
+        [Header("战斗动作"), SerializeField]
+        private OperatorMotion battleMotion;
+
         
         public string GetId() => id;
         public string GetChineseName() => chineseName;
@@ -136,6 +141,14 @@ namespace Data.Char {
         public SkeletonDataAsset GetHomeRig() {
             CharArtOverrides.Entry local = LocalArt();
             return local != null && local.homeRig != null ? local.homeRig : homeRig;
+        }
+
+        // 动作表跟着骨骼走 / The motion table goes with the rig it describes: local art brings its own,
+        // and only a local rig with no table of its own falls back to the tracked one.
+        public OperatorMotion GetBattleMotion() {
+            CharArtOverrides.Entry local = LocalArt();
+            if (local != null && local.battleRig != null) return local.battleMotion;
+            return battleMotion;
         }
 
         // id 不序列化, 没经过 CharManager 时是空的 / id is not serialized and stays empty when this

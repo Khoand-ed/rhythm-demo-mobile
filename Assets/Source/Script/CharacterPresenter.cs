@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Data.Char;
 using Spine.Unity;
 using UnityEngine;
+using Clip = Data.Char.OperatorMotion.Clip;
 
 /// <summary>
 /// 舞台中央的干员 / The operator standing in the middle of the rhythm stage, reacting to the run.
@@ -15,9 +16,14 @@ using UnityEngine;
 ///
 /// 动画名是数据 / Animation names are data, not code. Every reaction is a Clip: names to try, where
 /// to start and stop, how fast. A rig without the first name uses the next, and a rig with none of
-/// them skips that reaction. The defaults are the names Arknights Spine rigs share (Idle, Skill_2,
-/// Stun, Die...), so any operator exported that way plays without edits; art drawn later can name its
-/// clips anything and set them here.
+/// them skips that reaction. The table on this component is the default, in the names Arknights Spine
+/// rigs share (Idle, Attack, Stun, Die...). An operator whose rig needs other clips or other timings
+/// brings an OperatorMotion, and each clip it sets replaces the default one for that operator only.
+///
+/// 按看得见的部分量身高 / Sized by what can be seen. The height a Spine export records counts
+/// effects and invisible attachments - one rig here claims 7.16 units for a figure 3.84 tall - so the
+/// stage measures the top of the idle pose's visible attachments instead and scales that to
+/// targetHeight. Every operator stands about as tall, whatever size its rig was drawn at.
 ///
 /// 一条轨道 / One track does everything. Idle is always either playing or queued behind the current
 /// reaction, so every change is a blend from a pose that was really on screen. Spine will not blend
@@ -31,37 +37,8 @@ using UnityEngine;
 /// </summary>
 public class CharacterPresenter : MonoBehaviour
 {
-    [Serializable]
-    public class Clip
-    {
-        [Tooltip("Animation names to try in order; the first one the rig has is used. None found = skipped.")]
-        public string[] names = new string[0];
-
-        [Tooltip("Where in the animation to begin, seconds. Skips a wind-up that would make a reaction land late.")]
-        public float from;
-
-        [Tooltip("Where to stop, seconds. 0 plays to the end.")]
-        public float to;
-
-        [Tooltip("Playback speed.")]
-        public float speed = 1f;
-
-        [Tooltip("Seconds to cross-fade in. Short: the next hit is often 0.2s away.")]
-        public float blend = 0.04f;
-
-        public Clip() { }
-
-        public Clip(float from, float to, float speed, params string[] names)
-        {
-            this.from = from;
-            this.to = to;
-            this.speed = speed;
-            this.names = names;
-        }
-    }
-
     [Header("Placement")]
-    [Tooltip("How tall the operator stands on screen, in world units.")]
+    [Tooltip("How tall the operator stands on screen, in world units - feet to the top of the visible figure.")]
     public float targetHeight = 3.8f;
 
     [Tooltip("From this object, in world units.")]
@@ -112,8 +89,19 @@ public class CharacterPresenter : MonoBehaviour
     [Tooltip("Seconds to blend between reactions when a clip does not say.")]
     public float defaultBlend = 0.06f;
 
+    [Header("Flinch")]
+    [Tooltip("For a rig with no miss clip of its own: it shakes and reddens instead.")]
+    public Color flinchTint = new Color(1f, 0.55f, 0.55f, 1f);
+
+    public float flinchSeconds = 0.3f;
+
+    [Tooltip("How far the shake goes, in world units.")]
+    public float flinchShake = 0.08f;
+
     private SkeletonAnimation operatorRig;
+    private OperatorMotion motion;
     private Spine.TrackEntry idleEntry;
+    private float flinchLeft;
     private readonly Dictionary<Clip, Spine.Animation> resolved = new Dictionary<Clip, Spine.Animation>();
 
     private int holdsDown;
@@ -126,6 +114,23 @@ public class CharacterPresenter : MonoBehaviour
     public bool HasOperator
     {
         get { return operatorRig != null; }
+    }
+
+    // 干员自己的优先 / The operator's own clip where it sets one, this stage's default where it does not.
+    private Clip Idle => Use(idle, motion != null ? motion.idle : null);
+    private Clip Enter => Use(enter, motion != null ? motion.enter : null);
+    private Clip Tap => Use(tap, motion != null ? motion.tap : null);
+    private Clip Twin => Use(twin, motion != null ? motion.twin : null);
+    private Clip HoldLoop => Use(holdLoop, motion != null ? motion.holdLoop : null);
+    private Clip HoldEnd => Use(holdEnd, motion != null ? motion.holdEnd : null);
+    private Clip Miss => Use(miss, motion != null ? motion.miss : null);
+    private Clip Fever => Use(fever, motion != null ? motion.fever : null);
+    private Clip Fail => Use(fail, motion != null ? motion.fail : null);
+    private Clip Win => Use(win, motion != null ? motion.win : null);
+
+    private static Clip Use(Clip stageDefault, Clip own)
+    {
+        return own != null && own.IsSet ? own : stageDefault;
     }
 
     /// <summary>
@@ -169,15 +174,20 @@ public class CharacterPresenter : MonoBehaviour
 
         operatorRig = SkeletonAnimation.NewSkeletonAnimationGameObject(rig);
         operatorRig.gameObject.name = "Operator (" + meta.name + ")";
+        motion = meta.GetBattleMotion();
+        resolved.Clear();
 
         Transform t = operatorRig.transform;
         t.SetParent(transform, false);
         t.localPosition = new Vector3(offset.x, offset.y, 0f);
 
-        // 按高度缩放 / Scaled by height, so a rig drawn at another size still stands as tall as this
-        // one. A rig with no bounds (height 0) keeps its own scale.
-        float height = data.Height * rig.scale;
-        float scale = height > 0.01f ? targetHeight / height : 1f;
+        // 按高度缩放 / Scaled by the visible height of the idle pose, so a rig drawn at another size
+        // still stands as tall as the rest. Falls back to the export's own height for a rig with nothing
+        // visible to measure.
+        float height = VisibleTop();
+        if (height <= 0.01f) height = data.Height * rig.scale;
+        float heightScale = motion != null && motion.heightScale > 0f ? motion.heightScale : 1f;
+        float scale = height > 0.01f ? targetHeight * heightScale / height : 1f;
         t.localScale = new Vector3(scale, scale, 1f);
 
         MeshRenderer meshRenderer = operatorRig.GetComponent<MeshRenderer>();
@@ -185,8 +195,48 @@ public class CharacterPresenter : MonoBehaviour
 
         operatorRig.AnimationState.Data.DefaultMix = defaultBlend;
 
-        resolved.Clear();
         Begin();
+    }
+
+    // The top of everything drawn in the first frame of idle, above the rig's origin - its feet - in
+    // the rig's own units. Attachments at zero alpha are effects waiting their turn and do not count;
+    // neither does anything hanging below the feet, like a weapon held low.
+    private float VisibleTop()
+    {
+        Spine.Animation pose = Resolve(Idle);
+        if (pose != null)
+        {
+            operatorRig.AnimationState.SetAnimation(0, pose, false);
+            operatorRig.Update(0f);
+        }
+
+        float top = 0f;
+        float[] vertices = new float[256];
+        foreach (Spine.Slot slot in operatorRig.Skeleton.DrawOrder)
+        {
+            if (!slot.Bone.Active) continue;
+
+            int count;
+            if (slot.Attachment is Spine.RegionAttachment region)
+            {
+                if (slot.A * region.A <= 0.02f) continue;
+                region.ComputeWorldVertices(slot.Bone, vertices, 0);
+                count = 8;
+            }
+            else if (slot.Attachment is Spine.MeshAttachment mesh)
+            {
+                if (slot.A * mesh.A <= 0.02f) continue;
+                count = mesh.WorldVerticesLength;
+                if (vertices.Length < count) vertices = new float[count];
+                mesh.ComputeWorldVertices(slot, vertices);
+            }
+            else continue;
+
+            for (int i = 1; i < count; i += 2) top = Mathf.Max(top, vertices[i]);
+        }
+
+        operatorRig.AnimationState.ClearTracks();
+        return top;
     }
 
     // 编辑器里加组件时调用 / Called by Unity when the component is added or Reset from its menu.
@@ -212,6 +262,9 @@ public class CharacterPresenter : MonoBehaviour
         feverTint = new Color(1f, 0.7f, 0.86f, 1f);
         tintSpeed = 6f;
         defaultBlend = 0.06f;
+        flinchTint = new Color(1f, 0.55f, 0.55f, 1f);
+        flinchSeconds = 0.3f;
+        flinchShake = 0.08f;
 
         FillDefaults(true);
     }
@@ -245,7 +298,9 @@ public class CharacterPresenter : MonoBehaviour
         if (operatorRig != null) Destroy(operatorRig.gameObject);
 
         operatorRig = null;
+        motion = null;
         idleEntry = null;
+        flinchLeft = 0f;
         holdsDown = 0;
         feverOn = false;
         failed = false;
@@ -265,7 +320,7 @@ public class CharacterPresenter : MonoBehaviour
         operatorRig.Skeleton.SetToSetupPose();
         Face(false);
 
-        Spine.TrackEntry entrance = Play(enter, false, false);
+        Spine.TrackEntry entrance = Play(Enter, false, false);
         if (entrance == null) idleEntry = PlayIdle(false);
         else idleEntry = PlayIdle(true);
     }
@@ -284,7 +339,7 @@ public class CharacterPresenter : MonoBehaviour
         {
             holdsDown++;
             Face(IsLeft(lane));
-            Play(holdLoop, true, false);
+            Play(HoldLoop, true, false);
             return;
         }
 
@@ -292,12 +347,12 @@ public class CharacterPresenter : MonoBehaviour
         {
             if (Time.frameCount == lastTwinFrame) return;
             lastTwinFrame = Time.frameCount;
-            Play(twin, false, true);
+            Play(Twin, false, true);
             return;
         }
 
         Face(IsLeft(lane));
-        Play(tap, false, true);
+        Play(Tap, false, true);
     }
 
     /// <summary>A hold was carried to its end.</summary>
@@ -308,7 +363,7 @@ public class CharacterPresenter : MonoBehaviour
         holdsDown = Mathf.Max(0, holdsDown - 1);
         if (holdsDown > 0) return;
 
-        if (Play(holdEnd, false, true) == null) PlayIdle(false);
+        if (Play(HoldEnd, false, true) == null) PlayIdle(false);
     }
 
     /// <summary>A hold was let go early.</summary>
@@ -319,7 +374,11 @@ public class CharacterPresenter : MonoBehaviour
         holdsDown = Mathf.Max(0, holdsDown - 1);
         if (holdsDown > 0) return;
 
-        if (Play(miss, false, true) == null) PlayIdle(false);
+        if (Play(Miss, false, true) == null)
+        {
+            Flinch();
+            PlayIdle(false);
+        }
     }
 
     /// <summary>A note ran out of window unplayed.</summary>
@@ -327,7 +386,7 @@ public class CharacterPresenter : MonoBehaviour
     {
         if (operatorRig == null || failed) return;
 
-        if (holdsDown == 0) Play(miss, false, true);
+        if (holdsDown == 0 && Play(Miss, false, true) == null) Flinch();
     }
 
     /// <summary>Hurt by something other than a miss.</summary>
@@ -335,7 +394,7 @@ public class CharacterPresenter : MonoBehaviour
     {
         if (operatorRig == null || failed) return;
 
-        Play(miss, false, true);
+        if (Play(Miss, false, true) == null) Flinch();
     }
 
     public void OnFeverStart()
@@ -343,7 +402,7 @@ public class CharacterPresenter : MonoBehaviour
         if (operatorRig == null || failed) return;
 
         feverOn = true;
-        Play(fever, false, true);
+        Play(Fever, false, true);
     }
 
     public void OnFeverEnd()
@@ -359,7 +418,7 @@ public class CharacterPresenter : MonoBehaviour
         failed = true;
         holdsDown = 0;
         feverOn = false;
-        Play(fail, false, false);
+        Play(Fail, false, false);
     }
 
     /// <summary>The song ended. A failed run has already fallen over and stays that way.</summary>
@@ -367,7 +426,7 @@ public class CharacterPresenter : MonoBehaviour
     {
         if (operatorRig == null || failed || !won) return;
 
-        Play(win, false, false);
+        Play(Win, false, false);
     }
 
     /// <summary>The board was cleared for another attempt.</summary>
@@ -437,7 +496,7 @@ public class CharacterPresenter : MonoBehaviour
     // find it again.
     private Spine.TrackEntry PlayIdle(bool queued)
     {
-        Spine.Animation animation = Resolve(idle);
+        Spine.Animation animation = Resolve(Idle);
         if (animation == null) return null;
 
         Spine.AnimationState state = operatorRig.AnimationState;
@@ -445,10 +504,10 @@ public class CharacterPresenter : MonoBehaviour
             ? state.AddAnimation(0, animation, true, 0f)
             : state.SetAnimation(0, animation, true);
 
-        float start = Mathf.Clamp(idle.from, 0f, animation.Duration);
+        float start = Mathf.Clamp(Idle.from, 0f, animation.Duration);
         entry.AnimationStart = start;
-        entry.AnimationEnd = idle.to > 0f ? Mathf.Clamp(idle.to, start, animation.Duration) : animation.Duration;
-        entry.TimeScale = idle.speed;
+        entry.AnimationEnd = Idle.to > 0f ? Mathf.Clamp(Idle.to, start, animation.Duration) : animation.Duration;
+        entry.TimeScale = Idle.speed;
         return entry;
     }
 
@@ -460,6 +519,34 @@ public class CharacterPresenter : MonoBehaviour
 
         SyncIdle();
         ApplyTint();
+        ApplyFlinch();
+    }
+
+    // 没有受击动作就抖一下 / A rig with no flinch of its own gets one from here: a short shake and a red
+    // flash, so a miss is never silent.
+    private void Flinch()
+    {
+        flinchLeft = flinchSeconds;
+    }
+
+    private void ApplyFlinch()
+    {
+        Transform t = operatorRig.transform;
+        if (flinchLeft <= 0f)
+        {
+            t.localPosition = new Vector3(offset.x, offset.y, 0f);
+            return;
+        }
+
+        flinchLeft = Mathf.Max(0f, flinchLeft - Time.deltaTime);
+        float k = flinchSeconds > 0f ? flinchLeft / flinchSeconds : 0f;
+        float shake = Mathf.Sin(flinchLeft * 70f) * flinchShake * k;
+        t.localPosition = new Vector3(offset.x + shake, offset.y, 0f);
+
+        Spine.Skeleton skeleton = operatorRig.Skeleton;
+        skeleton.R *= Mathf.Lerp(1f, flinchTint.r, k);
+        skeleton.G *= Mathf.Lerp(1f, flinchTint.g, k);
+        skeleton.B *= Mathf.Lerp(1f, flinchTint.b, k);
     }
 
     // 呼吸跟着拍子走 / The idle breathes with the music. Driven from the Conductor's song time and the
@@ -479,7 +566,7 @@ public class CharacterPresenter : MonoBehaviour
 
         if (chart == null || chart.bpm <= 0f || conductor == null || !conductor.IsPlaying)
         {
-            idleEntry.TimeScale = idle.speed;
+            idleEntry.TimeScale = Idle.speed;
             return;
         }
 
