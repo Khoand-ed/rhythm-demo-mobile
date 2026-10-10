@@ -89,10 +89,16 @@ licence, no secrets. There is no CI that compiles C#; only the Editor can do tha
 | An `Image` with alpha 0 | Still a raycast target. A transparent full-screen container will swallow every click behind it |
 | Retuning a score award, the multiplier ladder, a judge/health/fever value, or an operator's CharMeta or passive | The server checks results against `server/data/ruleset.json`. Update it in the same change: `RulesetParityTests` fails in CI naming the field, and a device on rules the server does not hold has every run rejected as `RULESET_MISMATCH` |
 | A passive that rolls dice | Draw from `RunState.NextRoll()`, never `UnityEngine.Random` - that one is shared with the whole scene, so the server could never draw the same numbers when it replays the run |
+| Committing art from `Assets/Arknights/Resources/LocalArt/`, or pointing a tracked asset into it | The repo is public and that art is another game's, so the folder is gitignored on purpose. A tracked reference into it is a missing reference on every clone. Local art is reached only through `CharArtOverrides`; real art goes in `CharMeta`'s own fields |
+| Importing a Spine atlas | `SpineSettings.asset`'s `defaultShader` must name a shader that exists (`Spine/Skeleton`), or the importer throws on every atlas. An atlas page is premultiplied: import it as Default with Alpha Is Transparency **off** - this project's default texture preset (Sprite, alpha dilation on) puts light speckles round every edge. `Arknights/Art/Install Placeholder Operator Art` does both |
+| Anything in `CharacterPresenter` choosing by chance | It is presentation, and the server replays a run from its seed. Pick from the event (lane, note type), never from `RunState.NextRoll()` or `UnityEngine.Random` |
 
 ## Working here
 
 - `Assets/Arknights/Audio/` and `Assets/StreamingAssets/` are gitignored, so four
   missing-audio errors on boot are expected, not a regression.
+- `Assets/Arknights/Resources/LocalArt/` is gitignored too: the operators' reference art, reinstalled by
+  `Arknights/Art/Install Placeholder Operator Art`. The game runs without it - the operators show their
+  tracked placeholders and the stage and Home screen stay empty.
 - Commit messages follow Conventional Commits (`feat(depot): ...`).
 - Do not commit or push unless asked.
