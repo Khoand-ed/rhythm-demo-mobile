@@ -115,6 +115,12 @@ InitTestScene*.unity*
 /[Aa]ssets/[Aa]rknights/[Aa]udio/
 /[Aa]ssets/[Aa]rknights/[Aa]udio.meta
 
+# Local-only character art: reference sprites that must never be committed to a public repository.
+# Reinstall with Arknights/Art/Install AMIYA Placeholder Art. CharArtOverrides finds it, and a clone
+# without it falls back to the tracked placeholders.
+/[Aa]ssets/[Aa]rknights/[Rr]esources/[Ll]ocal[Aa]rt/
+/[Aa]ssets/[Aa]rknights/[Rr]esources/[Ll]ocal[Aa]rt.meta
+
 # OS junk - Windows thumbnail cache, macOS folder metadata. Regenerated on
 # demand by the OS, changes whenever a folder is browsed, and means nothing
 # to Unity - but Unity will import it as an asset if it has a .meta.

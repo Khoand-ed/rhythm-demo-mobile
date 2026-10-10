@@ -81,6 +81,15 @@ namespace Data.Char {
         [Header("骨骼"), SerializeField]
         private SkeletonDataAsset skeleton;
 
+        // 音游里画的骨骼 / The rigs the rhythm game draws. Kept apart from the tower-defense
+        // `skeleton` above, which belongs to the screens inherited with the front-end. Empty for every
+        // operator without animated art, and whatever draws them has to cope with that.
+        [Header("战斗骨骼"), SerializeField]
+        private SkeletonDataAsset battleRig;
+
+        [Header("主页骨骼"), SerializeField]
+        private SkeletonDataAsset homeRig;
+
         
         public string GetId() => id;
         public string GetChineseName() => chineseName;
@@ -99,10 +108,39 @@ namespace Data.Char {
         public float GetScoreModifier() => scoreModifier;
         public float GetFeverModifier() => feverModifier;
         public PassiveSO GetPassive() => passive;
-        public Sprite GetImage() => image1;
-        public Sprite GetCharImage() => image2;
-        public Sprite GetAvatar() => image3;
+        // 本地美术优先 / Art installed on this machine beats the tracked fields. See
+        // CharArtOverrides for why that registry exists, and why it is the one that points at the
+        // ignored folder rather than this asset.
+        public Sprite GetImage() {
+            CharArtOverrides.Entry local = LocalArt();
+            return local != null && local.portrait != null ? local.portrait : image1;
+        }
+
+        public Sprite GetCharImage() {
+            CharArtOverrides.Entry local = LocalArt();
+            return local != null && local.card != null ? local.card : image2;
+        }
+
+        public Sprite GetAvatar() {
+            CharArtOverrides.Entry local = LocalArt();
+            return local != null && local.avatar != null ? local.avatar : image3;
+        }
+
         public SkeletonDataAsset GetSkeleton() => skeleton;
+
+        public SkeletonDataAsset GetBattleRig() {
+            CharArtOverrides.Entry local = LocalArt();
+            return local != null && local.battleRig != null ? local.battleRig : battleRig;
+        }
+
+        public SkeletonDataAsset GetHomeRig() {
+            CharArtOverrides.Entry local = LocalArt();
+            return local != null && local.homeRig != null ? local.homeRig : homeRig;
+        }
+
+        // id 不序列化, 没经过 CharManager 时是空的 / id is not serialized and stays empty when this
+        // meta did not come through CharManager; the asset's own name is the id either way.
+        private CharArtOverrides.Entry LocalArt() => CharArtOverrides.For(string.IsNullOrEmpty(id) ? name : id);
         
         internal string SetId(string value) => id = value;
         
