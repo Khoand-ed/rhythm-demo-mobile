@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using Data.Char;
 using Tools;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using TMPro;
 using Promuse.Contracts.Runs;
@@ -724,7 +723,7 @@ void Update()
         if (Conductor.instance != null) Conductor.instance.StopSong();
 
         BootIntent.NextUI = SongSelectUI.UIName;
-        SceneManager.LoadScene(SongSelectUI.SelectScene);
+        UI.LoadingScreen.LoadScene(SongSelectUI.SelectScene);
     }
 
     /// <summary>

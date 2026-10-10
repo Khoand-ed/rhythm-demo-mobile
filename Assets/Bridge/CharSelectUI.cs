@@ -11,7 +11,6 @@ using UI;
 using UI.Sub;
 using UnityEngine;
 using UnityEngine.Events;
-using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 // The step between picking a song and playing it: the roster down the left, the
@@ -353,17 +352,18 @@ public class CharSelectUI : UIBase
         // camera off takes the whole front-end out of the way at once; GameStart
         // switches it back on when the player returns.
         //
+        // 盖住以后再关 / The loading screen switches it off only once it fully covers the
+        // screen, so the player never sees a black frame between the two scenes.
+        //
         // 这个闭包不碰实例成员 / The lambda touches no instance member, so destroying
         // this screen while it is pending is safe.
         string operatorId = operatorChosen.GetId();
 
-        Delay.add(() =>
+        LoadingScreen.LoadScene(SongSelectUI.GameplayScene, () =>
         {
             GameObject uiCamera = UIManager.Inst().GetCamera();
             if (uiCamera != null) uiCamera.SetActive(false);
-
-            SceneManager.LoadScene(SongSelectUI.GameplayScene);
-        }, 0.6f);
+        });
 
         Debug.Log($"Starting {starting.stageId} ({starting.name}) with {operatorId}, {playMode}.");
     }

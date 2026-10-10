@@ -140,7 +140,7 @@ above and for device builds.
 |---|---|
 | **`Arknights/`** | Content pipeline — AssetBundles, placeholder art, audio import, local character art, and the Home / Depot screen builders |
 | **`Beatmap/`** | Charting — `Beatmap Studio...` and `Timeline Editor...` author charts; `Import All Beatmaps` turns the JSON under `Assets/Beatmaps/` into `SongChart` assets |
-| **`Tools/Rhythm/`** | Gameplay scene setup — note system, HUD, hit feedback, character stage, skip button, song-select wiring |
+| **`Tools/Rhythm/`** | Gameplay scene setup — note system, HUD, hit feedback, character stage, skip button, song-select wiring, loading screen |
 
 Two conventions these tools all follow, worth knowing before you write another one:
 
