@@ -105,9 +105,10 @@ public class ShopEndpointTests(PromuseApiFactory factory)
 
         var catalog = (await response.Content.ReadFromJsonAsync<ShopCatalog>())!;
 
-        // The six offers seeded from the client's ShopItemDataList.
-        Assert.Equal(6, catalog.Offers.Count);
-        Assert.All(catalog.Offers, o => Assert.Equal(6, o.PriceItemId));
+        // The six offers seeded from the client's ShopItemDataList, priced in Orirock, then the
+        // two priced in the Purchase Certificates a duplicate headhunting result turns into.
+        Assert.Equal(8, catalog.Offers.Count);
+        Assert.Equal([6, 6, 6, 6, 6, 6, 8, 8], catalog.Offers.Select(o => o.PriceItemId));
 
         // 顺序要稳定 / Stable between visits. Without an explicit ORDER BY the row
         // order is whatever the planner felt like, and the shop reshuffles itself

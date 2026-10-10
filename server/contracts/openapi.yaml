@@ -2,11 +2,12 @@ openapi: 3.1.0
 
 info:
   title: Promuse Backend API
-  version: 1.0.0-draft.5
+  version: 1.0.0-draft.6
   summary: Authentication and player state for the Promuse mobile rhythm game.
   description: |
     **Phase 1** authentication, **Phase 2** player state, **Phase 3** the economy -
-    shop, runs and missions, **Phase 4** scored results and leaderboards. Each written
+    shop, runs and missions, **Phase 4** scored results and leaderboards, then headhunting
+    (gacha) with the server rolling the dice. Each written
     before its implementation, so the client and the server are built against one
     agreement rather than the client being written against whatever the server happened
     to return.
@@ -77,6 +78,13 @@ tags:
       Written only by a run's completion, and only once its result was accepted. The
       weekly board is keyed by ISO week on the same Monday 04:00 boundary as the weekly
       missions, so it empties itself without a job.
+  - name: gacha
+    description: |
+      Headhunting, with the server holding the odds, the pity counts and the dice.
+
+      The client's banner asset keeps only presentation - title, text, which operator to
+      draw large. The odds, the guarantee, the price, the schedule and the pool are served
+      from here, so the Details screen can only ever print what the server actually rolls.
   - name: missions
     description: |
       The two mission boards. Phase 3.
@@ -716,6 +724,121 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /v1/gacha/banners:
+    get:
+      tags: [gacha]
+      operationId: getGachaBanners
+      summary: The banners open now or opening later, with the rules the server rolls.
+      description: |
+        Ended banners are not listed. A banner whose rules cannot be kept - odds that do not
+        add up to 10000, a tier with a chance and nobody in it - is withheld and logged
+        rather than served and then failing every pull.
+
+        `pullsSinceFiveStar` is the caller's own count on each banner.
+      responses:
+        '200':
+          description: The banners, in display order.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GachaBannerList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/gacha/pulls:
+    post:
+      tags: [gacha]
+      operationId: pull
+      summary: Headhunt once or ten times.
+      description: |
+        The request names a banner and a count. It cannot name a price, an operator or a
+        rarity.
+
+        Paid in the banner's ticket (a Headhunting Permit) when the player holds enough for
+        the whole request, otherwise in its currency - never a mix of the two.
+
+        Each pull draws a tier from the odds, then an operator uniformly within it. After
+        `pityThreshold` pulls in a row without a 5-star the next one is a 5-star; any 5-star
+        resets the count, and each banner counts on its own. An operator the player already
+        owns becomes its duplicate item instead.
+
+        全有或全无 / The payment, the operators, the duplicates, the pity count, the history
+        and the state version move together or not at all. Idempotent: a retry with the same
+        key replays the first result instead of rolling again, so retrying is never a free
+        reroll.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GachaPullRequest'
+      responses:
+        '201':
+          description: Pulled.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GachaPullResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: '`BANNER_NOT_FOUND` - unknown banner, or retired.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: '`BANNER_CLOSED` (not yet open, or ended), `INSUFFICIENT_FUNDS`, or `IDEMPOTENCY_KEY_CONFLICT`.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/gacha/history:
+    get:
+      tags: [gacha]
+      operationId: getGachaHistory
+      summary: The caller's pulls, newest first, a page at a time.
+      parameters:
+        - name: before
+          in: query
+          required: false
+          description: The `nextBefore` of the previous page. Omitted for the newest page.
+          schema:
+            type: integer
+            format: int64
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+      responses:
+        '200':
+          description: One page.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GachaHistoryPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
   /v1/missions:
     get:
       tags: [missions]
@@ -1238,7 +1361,7 @@ components:
           minimum: 1
         priceItemId:
           type: integer
-          description: What they pay with. Every offer today is priced in 6, Orirock.
+          description: What they pay with - 6 (Orirock), or 8 (Purchase Certificate) for the offers that spend duplicate headhunting results.
         priceAmount:
           type: integer
           minimum: 1
@@ -1627,3 +1750,162 @@ components:
             - type: 'null'
         serverTime:
           $ref: '#/components/schemas/ServerTime'
+
+    GachaPoolEntry:
+      type: object
+      required: [characterId, rarity, duplicateItemId, duplicateAmount]
+      properties:
+        characterId:
+          type: string
+        rarity:
+          type: integer
+          minimum: 3
+          maximum: 5
+          description: The server's rarity - the tier this operator is drawn under.
+        duplicateItemId:
+          type: integer
+          description: What a copy the player already owns becomes. Purchase Certificate (8) today.
+        duplicateAmount:
+          type: integer
+          minimum: 1
+
+    GachaBannerInfo:
+      type: object
+      required: [bannerId, rateFiveStar, rateFourStar, rateThreeStar, pityThreshold, currencyItemId,
+                 costSingle, costMulti, pool, pullsSinceFiveStar]
+      properties:
+        bannerId:
+          type: string
+          description: Stable; the client matches its art to it and pity is keyed by it.
+        startsAt:
+          type: [string, 'null']
+          format: date-time
+        endsAt:
+          type: [string, 'null']
+          format: date-time
+          description: Null for a permanent banner.
+        rateFiveStar:
+          type: integer
+          description: Basis points - 200 is 2.00%. The three rates add up to exactly 10000.
+        rateFourStar:
+          type: integer
+        rateThreeStar:
+          type: integer
+        pityThreshold:
+          type: integer
+          minimum: 1
+        currencyItemId:
+          type: integer
+        costSingle:
+          type: integer
+          minimum: 1
+        costMulti:
+          type: integer
+          minimum: 1
+        ticketItemId:
+          type: [integer, 'null']
+          description: Spent first, one per pull, when the player holds enough for the whole request.
+        pool:
+          type: array
+          description: Rarest first.
+          items:
+            $ref: '#/components/schemas/GachaPoolEntry'
+        pullsSinceFiveStar:
+          type: integer
+          minimum: 0
+
+    GachaBannerList:
+      type: object
+      required: [banners, serverTime]
+      properties:
+        banners:
+          type: array
+          items:
+            $ref: '#/components/schemas/GachaBannerInfo'
+        serverTime:
+          $ref: '#/components/schemas/ServerTime'
+
+    GachaPullRequest:
+      type: object
+      required: [bannerId, times]
+      properties:
+        bannerId:
+          type: string
+        times:
+          type: integer
+          enum: [1, 10]
+
+    GachaPullOutcome:
+      type: object
+      required: [characterId, rarity, isNew, guaranteed]
+      properties:
+        characterId:
+          type: string
+        rarity:
+          type: integer
+        isNew:
+          type: boolean
+          description: The player did not own this operator before.
+        converted:
+          oneOf:
+            - $ref: '#/components/schemas/ItemStack'
+            - type: 'null'
+          description: What the copy became; null when it was new.
+        guaranteed:
+          type: boolean
+          description: Given by the pity count rather than the odds.
+
+    GachaPullResult:
+      type: object
+      required: [batchId, bannerId, pulls, charged, pullsSinceFiveStar, player]
+      properties:
+        batchId:
+          type: string
+          format: uuid
+        bannerId:
+          type: string
+        pulls:
+          type: array
+          items:
+            $ref: '#/components/schemas/GachaPullOutcome'
+        charged:
+          $ref: '#/components/schemas/ItemStack'
+        pullsSinceFiveStar:
+          type: integer
+        player:
+          $ref: '#/components/schemas/PlayerState'
+
+    GachaHistoryEntry:
+      type: object
+      required: [sequence, batchId, bannerId, characterId, rarity, isNew, pulledAt]
+      properties:
+        sequence:
+          type: integer
+          format: int64
+        batchId:
+          type: string
+          format: uuid
+        bannerId:
+          type: string
+        characterId:
+          type: string
+        rarity:
+          type: integer
+        isNew:
+          type: boolean
+        pulledAt:
+          type: string
+          format: date-time
+
+    GachaHistoryPage:
+      type: object
+      required: [entries]
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/GachaHistoryEntry'
+        nextBefore:
+          type: [integer, 'null']
+          format: int64
+          description: Pass as `before` for the next page; null on the last one.

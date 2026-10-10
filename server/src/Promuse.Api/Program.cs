@@ -9,6 +9,7 @@ using Promuse.Api.Auth;
 using Promuse.Api.Infrastructure;
 using System.Text.Json.Serialization;
 using Promuse.Api.Economy;
+using Promuse.Api.Gacha;
 using Promuse.Api.Leaderboards;
 using Promuse.Api.Missions;
 using Promuse.Api.Players;
@@ -80,6 +81,8 @@ builder.Services.AddScoped<Inventory>();
 builder.Services.AddScoped<MissionService>();
 builder.Services.AddSingleton<MissionPeriod>();
 builder.Services.AddScoped<LeaderboardService>();
+builder.Services.AddScoped<GachaService>();
+builder.Services.AddSingleton<IGachaDice, SecureGachaDice>();
 
 builder.Services.AddOptions<GameDataOptions>()
     .Bind(builder.Configuration.GetSection(GameDataOptions.SectionName));
@@ -234,6 +237,7 @@ app.MapEconomyEndpoints();
 app.MapRunEndpoints();
 app.MapMissionEndpoints();
 app.MapLeaderboardEndpoints();
+app.MapGachaEndpoints();
 
 app.Run();
 

@@ -135,6 +135,14 @@ public static class ApiProblems
         Create(409, ErrorCodes.CharacterNotOwned, "Operator not owned",
             $"'{characterId}' is not on this player's roster, so a run cannot be played with it.");
 
+    public static ApiProblem BannerNotFound(string bannerId) =>
+        Create(404, ErrorCodes.BannerNotFound, "No such banner",
+            $"'{bannerId}' is not a headhunting banner, or it has been retired.");
+
+    public static ApiProblem BannerClosed(bool notYetOpen) =>
+        Create(409, ErrorCodes.BannerClosed, "Banner is not open",
+            notYetOpen ? "This banner has not opened yet." : "This banner has ended.");
+
     public static ApiProblem RunNotOpen() =>
         Create(409, ErrorCodes.RunNotOpen, "No such open run",
             "That run is unknown, belongs to someone else, or has already been closed.");

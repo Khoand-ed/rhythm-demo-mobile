@@ -21,17 +21,3 @@ MonoBehaviour:
   description: The permanent pool. Every operator can appear, and its pity is counted
     separately from event banners.
   featuredCharId: 
-  poolCharIds:
-  - AMIYA
-  - NOVA
-  - ECHO
-  - PULSE
-  startsAtUtc: 
-  endsAtUtc: 
-  rateFiveStar: 0.02
-  rateFourStar: 0.1
-  rateThreeStar: 0.88
-  pityThreshold: 30
-  currencyItemId: 1
-  costSingle: 180
-  costMulti: 1800

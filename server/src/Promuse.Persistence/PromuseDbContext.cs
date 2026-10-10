@@ -47,6 +47,27 @@ public class PromuseDbContext(DbContextOptions<PromuseDbContext> options) : DbCo
 
     public DbSet<LeaderboardScore> LeaderboardScores => Set<LeaderboardScore>();
 
+    public DbSet<GachaBanner> GachaBanners => Set<GachaBanner>();
+
+    public DbSet<GachaPoolEntry> GachaPoolEntries => Set<GachaPoolEntry>();
+
+    public DbSet<GachaPity> GachaPity => Set<GachaPity>();
+
+    public DbSet<GachaPull> GachaPulls => Set<GachaPull>();
+
+    // 卡池内容 / The four playable operators and their rarities (AMIYA.asset and friends), and
+    // what a second copy is worth. Both seeded banners roll the same pool.
+    private static readonly (string Id, int Rarity, int Duplicate)[] SeedPool =
+    [
+        ("AMIYA", 5, 20),
+        ("NOVA", 4, 5),
+        ("ECHO", 4, 5),
+        ("PULSE", 3, 1),
+    ];
+
+    /// <summary>Purchase Certificate - what a duplicate operator turns into.</summary>
+    private const int CertificateItemId = 8;
+
     /// <summary>
     /// Readable, stable ids for the seeded catalogue - obviously seed data at a
     /// glance in psql, and identical on every machine.
@@ -60,6 +81,32 @@ public class PromuseDbContext(DbContextOptions<PromuseDbContext> options) : DbCo
         PriceAmount = price.Amount,
         IsActive = true,
         SortOrder = n,
+    };
+
+    private static GachaBanner Banner(string id, int order, DateTimeOffset? starts, DateTimeOffset? ends) => new()
+    {
+        BannerId = id,
+        StartsAt = starts,
+        EndsAt = ends,
+        RateFiveStar = 200,
+        RateFourStar = 1000,
+        RateThreeStar = 8800,
+        PityThreshold = 30,
+        CurrencyItemId = 1,
+        CostSingle = 180,
+        CostMulti = 1800,
+        TicketItemId = 10,
+        IsActive = true,
+        SortOrder = order,
+    };
+
+    private static GachaPoolEntry Pool(string bannerId, (string Id, int Rarity, int Duplicate) entry) => new()
+    {
+        BannerId = bannerId,
+        CharacterId = entry.Id,
+        Rarity = entry.Rarity,
+        DuplicateItemId = CertificateItemId,
+        DuplicateAmount = entry.Duplicate,
     };
 
     private static MissionDefinition Mission(
@@ -305,13 +352,106 @@ public class PromuseDbContext(DbContextOptions<PromuseDbContext> options) : DbCo
             // 固定 GUID / Fixed ids rather than generated ones, because HasData
             // goes into the migration: a new Guid on every scaffold would produce
             // a migration that deletes and recreates the catalogue each time.
+            //
+            // 7 和 8 用采购凭证 / Offers 7 and 8 are priced in Purchase Certificates, the currency a
+            // duplicate headhunting result turns into - without them the certificates bought
+            // nothing. They sit under the shop's existing Certificate tab.
             entity.HasData(
                 Offer(1, sell: (10, 1), price: (6, 240)),
                 Offer(2, sell: (2, 4000), price: (6, 10)),
                 Offer(3, sell: (11, 1), price: (6, 10)),
                 Offer(4, sell: (1, 100), price: (6, 40)),
                 Offer(5, sell: (12, 1), price: (6, 8)),
-                Offer(6, sell: (13, 1), price: (6, 12)));
+                Offer(6, sell: (13, 1), price: (6, 12)),
+                Offer(7, sell: (10, 1), price: (CertificateItemId, 40)),
+                Offer(8, sell: (2, 2000), price: (CertificateItemId, 5)));
+        });
+
+        modelBuilder.Entity<GachaBanner>(entity =>
+        {
+            entity.ToTable("gacha_banners");
+            entity.HasKey(b => b.BannerId);
+            entity.Property(b => b.BannerId).HasMaxLength(64);
+            entity.HasIndex(b => b.SortOrder);
+
+            // 概率合计必须正好 10000 / The tiers must add up to exactly 100.00%, enforced where
+            // a hand-written UPDATE cannot get round it. A banner whose odds sum to 99% would
+            // otherwise hand the missing 1% to whichever tier the roll falls through to.
+            entity.ToTable(t =>
+            {
+                t.HasCheckConstraint("ck_gacha_banners_rates",
+                    "rate_five_star >= 0 AND rate_four_star >= 0 AND rate_three_star >= 0 " +
+                    "AND rate_five_star + rate_four_star + rate_three_star = 10000");
+                t.HasCheckConstraint("ck_gacha_banners_positive",
+                    "pity_threshold > 0 AND cost_single > 0 AND cost_multi > 0");
+                t.HasCheckConstraint("ck_gacha_banners_window",
+                    "starts_at IS NULL OR ends_at IS NULL OR starts_at < ends_at");
+            });
+
+            // GDD 的数字 / The GDD's numbers, which the banner assets advertised before the
+            // server rolled anything: 2 / 10 / 88, pity at 30, 180 Orundum a pull, and a
+            // Headhunting Permit (10) spent instead when the player holds enough.
+            entity.HasData(
+                Banner("event_amiya", 1,
+                    new DateTimeOffset(2026, 10, 1, 0, 0, 0, TimeSpan.Zero),
+                    new DateTimeOffset(2026, 12, 31, 23, 59, 59, TimeSpan.Zero)),
+                Banner("standard", 2, null, null));
+        });
+
+        modelBuilder.Entity<GachaPoolEntry>(entity =>
+        {
+            entity.ToTable("gacha_pool_entries");
+            entity.HasKey(p => new { p.BannerId, p.CharacterId });
+            entity.Property(p => p.BannerId).HasMaxLength(64);
+            entity.Property(p => p.CharacterId).HasMaxLength(32);
+
+            entity.ToTable(t => t.HasCheckConstraint("ck_gacha_pool_entries_values",
+                "rarity BETWEEN 3 AND 5 AND duplicate_amount > 0"));
+
+            entity.HasOne(p => p.Banner)
+                  .WithMany(b => b.Pool)
+                  .HasForeignKey(p => p.BannerId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasData(
+                SeedPool.Select(p => Pool("event_amiya", p))
+                        .Concat(SeedPool.Select(p => Pool("standard", p)))
+                        .ToArray());
+        });
+
+        modelBuilder.Entity<GachaPity>(entity =>
+        {
+            entity.ToTable("gacha_pity");
+            entity.HasKey(p => new { p.AccountId, p.BannerId });
+            entity.Property(p => p.BannerId).HasMaxLength(64);
+
+            entity.ToTable(t => t.HasCheckConstraint("ck_gacha_pity_not_negative", "pulls_since_five_star >= 0"));
+
+            entity.HasOne(p => p.Player).WithMany()
+                  .HasForeignKey(p => p.AccountId).OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne<GachaBanner>().WithMany()
+                  .HasForeignKey(p => p.BannerId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<GachaPull>(entity =>
+        {
+            entity.ToTable("gacha_pulls");
+            entity.HasKey(p => p.Id);
+            entity.Property(p => p.Id).UseIdentityAlwaysColumn();
+            entity.Property(p => p.BannerId).HasMaxLength(64).IsRequired();
+            entity.Property(p => p.CharacterId).HasMaxLength(32).IsRequired();
+
+            // The history is read "this player, newest first, below a cursor" - exactly this.
+            entity.HasIndex(p => new { p.AccountId, p.Id });
+
+            entity.HasOne(p => p.Player).WithMany()
+                  .HasForeignKey(p => p.AccountId).OnDelete(DeleteBehavior.Cascade);
+
+            // 不是 Cascade / Restrict, like a purchase's offer: retiring a banner must not erase
+            // the record of what people pulled on it. IsActive is how a banner leaves.
+            entity.HasOne<GachaBanner>().WithMany()
+                  .HasForeignKey(p => p.BannerId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<Purchase>(entity =>

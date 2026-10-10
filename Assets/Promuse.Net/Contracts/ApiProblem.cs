@@ -120,6 +120,12 @@ namespace Promuse.Contracts
         /// <summary>A run was opened with an operator this player does not own.</summary>
         public const string CharacterNotOwned = "CHARACTER_NOT_OWNED";
 
+        /// <summary>No such headhunting banner, or it has been retired.</summary>
+        public const string BannerNotFound = "BANNER_NOT_FOUND";
+
+        /// <summary>The banner exists but is not open right now - not yet started, or ended.</summary>
+        public const string BannerClosed = "BANNER_CLOSED";
+
         public const string RateLimited = "RATE_LIMITED";
         public const string InternalError = "INTERNAL_ERROR";
     }
