@@ -107,6 +107,22 @@ To add menu music: drop your own audio anywhere in the project, run
 `Arknights/Audio/Set Login Music...` (and the Home / Battle / Shop variants), then
 `Arknights/AssetBundles/Build For Active Target`.
 
+### The operator art is local-only too
+
+AMIYA's animated art and portraits are reference sprites from another game, used while this one
+is built. The repository is public, so they are **gitignored** under
+`Assets/Arknights/Resources/LocalArt/` and never committed. Without them the game runs exactly as
+before: every operator shows its tracked placeholder, and the rhythm stage and the Home screen
+simply have nobody standing on them.
+
+To put the art on your machine run `Arknights/Art/Install AMIYA Placeholder Art`. It remembers
+where the source sprites are; `Choose AMIYA Source Folder...` changes that, and
+`Remove Local Character Art` takes it all off again. The installer needs the default shader in
+`Assets/Editor/SpineSettings.asset` to be `Spine/Skeleton`, which is what the repository carries.
+
+When you have art of your own, put it in the operator's `CharMeta` (tracked) and remove the local
+folder. No code changes: `CharMeta` asks the local registry first and falls back to its own fields.
+
 ### You do not need to build AssetBundles to run the game
 
 `Asset.Load` falls back to `Resources`, and every UI prefab is committed under
@@ -119,9 +135,9 @@ above and for device builds.
 
 | Menu | What lives there |
 |---|---|
-| **`Arknights/`** | Content pipeline — AssetBundles, placeholder art, audio import, and the Home / Depot screen builders |
+| **`Arknights/`** | Content pipeline — AssetBundles, placeholder art, audio import, local character art, and the Home / Depot screen builders |
 | **`Beatmap/`** | Charting — `Beatmap Studio...` and `Timeline Editor...` author charts; `Import All Beatmaps` turns the JSON under `Assets/Beatmaps/` into `SongChart` assets |
-| **`Tools/Rhythm/`** | Gameplay scene setup — note system, HUD, hit feedback, skip button, song-select wiring |
+| **`Tools/Rhythm/`** | Gameplay scene setup — note system, HUD, hit feedback, character stage, skip button, song-select wiring |
 
 Two conventions these tools all follow, worth knowing before you write another one:
 
