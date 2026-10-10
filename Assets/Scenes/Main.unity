@@ -1214,6 +1214,135 @@ MonoBehaviour:
   m_hasFontAssetChanged: 0
   m_baseMaterial: {fileID: 0}
   m_maskOffset: {x: 0, y: 0, z: 0, w: 0}
+--- !u!1 &255788178
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 255788180}
+  - component: {fileID: 255788179}
+  m_Layer: 0
+  m_Name: CharacterStage
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &255788179
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 255788178}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: efc378c5008121140b977977b7d46c3e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CharacterPresenter
+  targetHeight: 3.8
+  offset: {x: 0, y: 0}
+  sortingOrder: -5
+  facesRight: 1
+  leftLane: 0
+  previewOperatorId: AMIYA
+  idle:
+    names:
+    - Idle
+    - Relax
+    - Default
+    from: 0
+    to: 0
+    speed: 1
+    blend: 0.04
+  enter:
+    names:
+    - Start
+    from: 0
+    to: 0
+    speed: 1
+    blend: 0.04
+  tap:
+    names:
+    - Attack
+    - Skill_2
+    from: 0.45
+    to: 0.95
+    speed: 2.2
+    blend: 0.04
+  twin:
+    names:
+    - Skill_2
+    - Skill
+    from: 0
+    to: 0.4
+    speed: 1.3
+    blend: 0.04
+  holdLoop:
+    names:
+    - Skill_2
+    from: 0.15
+    to: 0.4
+    speed: 1
+    blend: 0.04
+  holdEnd:
+    names:
+    - Attack_End
+    from: 0
+    to: 0
+    speed: 1.6
+    blend: 0.04
+  miss:
+    names:
+    - Stun
+    from: 0
+    to: 0.5
+    speed: 2
+    blend: 0.04
+  fever:
+    names:
+    - Skill
+    from: 0
+    to: 0
+    speed: 1.4
+    blend: 0.04
+  fail:
+    names:
+    - Die
+    from: 0
+    to: 0
+    speed: 1
+    blend: 0.04
+  win:
+    names:
+    - Start
+    from: 0
+    to: 0
+    speed: 1
+    blend: 0.04
+  beatsPerIdleLoop: 1
+  lockIdleToBeat: 1
+  feverTint: {r: 1, g: 0.7, b: 0.86, a: 1}
+  tintSpeed: 6
+  defaultBlend: 0.06
+--- !u!4 &255788180
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 255788178}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &275295385
 GameObject:
   m_ObjectHideFlags: 0
@@ -1277,6 +1406,7 @@ MonoBehaviour:
   goodEffect: {fileID: 3364674698484490490, guid: 57b8637ab2945d041ade395147b3c79d, type: 3}
   perfectEffect: {fileID: 7212143303192852354, guid: 605f01615bfa54d49b7688f1863db1b1, type: 3}
   feedback: {fileID: 348329763}
+  character: {fileID: 255788179}
   judge: {fileID: 11400000, guid: 22f96ced1cb6d7248a1b3144b326f86a, type: 2}
   health: {fileID: 11400000, guid: 14e7b238c82e812449792530ccf32d18, type: 2}
   fever: {fileID: 11400000, guid: fdab5439ad9b65844be3a09d6bf2f5bc, type: 2}
@@ -9509,3 +9639,4 @@ SceneRoots:
   - {fileID: 46328640}
   - {fileID: 1454529164}
   - {fileID: 348329764}
+  - {fileID: 255788180}

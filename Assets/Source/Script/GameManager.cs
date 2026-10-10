@@ -72,6 +72,11 @@ public class GameManager : MonoBehaviour
              "left empty, hits fall back to the three effect prefabs above.")]
     public HitFeedback feedback;
 
+    [Tooltip("The operator standing in the middle. Purely cosmetic: it reacts to what the judge decided and " +
+             "never feeds back into it. Built by Tools/Rhythm/Set Up Character Stage; left empty, nobody " +
+             "stands there.")]
+    public CharacterPresenter character;
+
     // 三份调参资产 / The three tuning assets. Assign them here; Tools/Rhythm/Create Tuning
     // Assets makes them at their default values if they do not exist yet.
     //
@@ -114,6 +119,10 @@ public class GameManager : MonoBehaviour
     private float operatorFeverModifier = 1f;
     private int operatorMaxHp;
     private PassiveSO operatorPassive;
+
+    // 整份 meta 留着, 舞台要用它找骨骼 / The whole meta is kept as well, because the stage needs it to
+    // find the operator's rig - and by then SongSession has been cleared.
+    private CharMeta operatorMeta;
 
     // 同样的理由 / Same reason, same place: the run id is read off SongSession before the chart
     // handover clears it. Empty means there is nothing to close.
@@ -232,6 +241,9 @@ public class GameManager : MonoBehaviour
         CaptureOperator();
         CaptureRun();
 
+        // 没有舞台或没有骨骼就什么都不画 / No stage, or an operator without a rig, draws nothing.
+        if (character != null) character.Show(operatorMeta);
+
         if (noticeRoot != null) noticeRoot.SetActive(false);
 
         scoreText.text = "Score: 0";
@@ -299,6 +311,8 @@ void Update()
                 // which is what lets a second run count again - but the run id is not reissued
                 // by a restart, so the report is keyed on it and a replayed one is refused.
                 ReportRun(!state.failed);
+
+                if (character != null) character.OnFinish(!state.failed);
 
                 normalsText.text = "" + state.normalHits;
                 goodsText.text = state.goodHits.ToString();
@@ -522,6 +536,9 @@ void Update()
             SpawnLegacyEffect(judgement, hitAt);
         }
 
+        // 先动作后狂热 / Before AddFever, so a hit that opens fever lets the fever pose win.
+        if (character != null) character.OnHit(laneIndex, judgement, note.Data.type, note.IsHold);
+
         AddFever(fever.GainFor(judgement));
     }
 
@@ -567,6 +584,7 @@ void Update()
             {
                 hold.MarkDropped(songTime);
                 HoldDropped();
+                if (character != null) character.OnHoldDropped(laneIndex);
                 if (feedback != null) feedback.OnMiss(laneIndex, LaneButtonPos(laneIndex));
             }
         }
@@ -583,6 +601,8 @@ void Update()
         if (feedback != null) feedback.OnHoldEnd(laneIndex, LaneButtonPos(laneIndex), judgement);
         else SpawnLegacyEffect(judgement, at);
 
+        if (character != null) character.OnHoldEnd(laneIndex);
+
         AddFever(fever.GainFor(judgement));
     }
 
@@ -590,6 +610,9 @@ void Update()
     // miss can be shown in the lane it happened in.
     public void NoteMissedInLane(NoteType type, int laneIndex)
     {
+        // 先反应后结算 / Before NoteMissed, which can end the run: the fall must be the last thing said.
+        if (character != null) character.OnMiss(laneIndex);
+
         NoteMissed(type);
 
         if (feedback != null && noteSpawner != null && laneIndex >= 0 && laneIndex < noteSpawner.lanes.Length)
@@ -751,6 +774,8 @@ void Update()
         state.Reset();
         BeginTrace();
 
+        if (character != null) character.OnReset();
+
         if (failedText != null) failedText.SetActive(false);
         PushGauges();
 
@@ -779,6 +804,8 @@ void Update()
 
     public void Damage(int amount)
     {
+        if (character != null) character.OnDamage();
+
         bool justFailed = state.Damage(amount);
 
         PushGauges();
@@ -797,6 +824,7 @@ void Update()
     private void FailRun()
     {
         if (failedText != null) failedText.SetActive(true);
+        if (character != null) character.OnFail();
 
         if (!useLegacyNoteHolders && Conductor.instance != null)
         {
@@ -831,6 +859,8 @@ void Update()
         float extra = state.passive != null ? state.passive.ExtraFeverSeconds(state) : 0f;
 
         feverEndsAtSongTime = SongTimeNow() + fever.feverDuration + extra;
+
+        if (character != null) character.OnFeverStart();
     }
 
     // 用歌曲时间的增量 / Song-time delta, not Time.deltaTime. A passive on a timer has to
@@ -863,6 +893,9 @@ void Update()
         }
 
         state.TickFever(feverEndsAtSongTime - SongTimeNow());
+
+        // RunState decides when fever ends, so the stage learns it by looking.
+        if (!state.feverActive && character != null) character.OnFeverEnd();
 
         PushGauges();
     }
@@ -1288,6 +1321,8 @@ void Update()
                                  "playing without its modifiers.");
                 return;
             }
+
+            operatorMeta = meta;
 
             // 0 说明这份 meta 是模板升级前生成的 / A zero means the asset predates the rhythm
             // fields, not that the operator is meant to score nothing. Fall back to neutral.
