@@ -21,7 +21,7 @@ namespace Data.Char {
     /// 换成自己的美术 / When real art exists: put it in CharMeta's own fields (tracked) and delete
     /// the local folder - Arknights/Art/Remove Local Character Art. No code changes.
     ///
-    /// Written by Arknights/Art/Install AMIYA Placeholder Art.
+    /// Written by Arknights/Art/Install Placeholder Operator Art.
     /// </summary>
     public class CharArtOverrides : ScriptableObject {
         public const string ResourcePath = "LocalArt/CharArtOverrides";

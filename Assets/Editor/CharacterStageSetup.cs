@@ -7,8 +7,8 @@ using UnityEngine.SceneManagement;
 // CharacterPresenter, wired to GameManager.character. Find-or-create throughout, so re-running never
 // moves or retunes a stage you have already adjusted - use Reset Character Stage To Default for that.
 //
-// The stage is empty until an operator with a battle rig is chosen (Arknights/Art/Install AMIYA
-// Placeholder Art gives AMIYA one), so a clone without that art plays exactly as before.
+// The stage is empty until an operator with a battle rig is chosen (Arknights/Art/Install
+// Placeholder Operator Art gives all four one), so a clone without that art plays exactly as before.
 public class CharacterStageSetup
 {
     private const string StageName = "CharacterStage";

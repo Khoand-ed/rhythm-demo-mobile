@@ -109,15 +109,18 @@ To add menu music: drop your own audio anywhere in the project, run
 
 ### The operator art is local-only too
 
-AMIYA's animated art and portraits are reference sprites from another game, used while this one
-is built. The repository is public, so they are **gitignored** under
+The operators' animated art and portraits are reference sprites from another game, used while this
+one is built - AMIYA as herself, and three stand-ins for NOVA, ECHO and PULSE. The repository is public, so they are **gitignored** under
 `Assets/Arknights/Resources/LocalArt/` and never committed. Without them the game runs exactly as
 before: every operator shows its tracked placeholder, and the rhythm stage and the Home screen
 simply have nobody standing on them.
 
-To put the art on your machine run `Arknights/Art/Install AMIYA Placeholder Art`. It remembers
-where the source sprites are; `Choose AMIYA Source Folder...` changes that, and
-`Remove Local Character Art` takes it all off again. The installer needs the default shader in
+To put the art on your machine run `Arknights/Art/Install Placeholder Operator Art`. It remembers
+where the source sprites are (the folder holding `AMIYA/` and `ART/`);
+`Choose Placeholder Art Source Folder...` changes that, and `Remove Local Character Art` takes it
+all off again. Each operator's motion table - which animation answers a tap, a hold, a miss - is
+installed beside its rig as `<ID>_Motion.asset` and can be tuned in the Inspector; re-running the
+installer keeps it. The installer needs the default shader in
 `Assets/Editor/SpineSettings.asset` to be `Spine/Skeleton`, which is what the repository carries.
 
 When you have art of your own, put it in the operator's `CharMeta` (tracked) and remove the local

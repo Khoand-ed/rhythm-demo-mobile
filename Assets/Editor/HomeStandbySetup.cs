@@ -9,7 +9,7 @@ using UnityEngine;
 //
 // The node holds no art - only who to show (HomeStandby.operatorId) and the shared SkeletonGraphic
 // material - so the tracked prefab stays valid on a clone that has no local art. The figure appears
-// when the operator has a Home rig (Arknights/Art/Install AMIYA Placeholder Art gives AMIYA one).
+// when the operator has a Home rig (Arknights/Art/Install Placeholder Operator Art gives all four one).
 //
 // Edits HomeUI.prefab in place. Do not run Arknights/Placeholders/Generate Bootstrap Assets to
 // "fix" Home: it rebuilds the prefab from nothing and drops this node, the three OpenUIButtons and
