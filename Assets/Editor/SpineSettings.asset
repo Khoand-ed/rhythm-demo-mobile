@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   defaultScale: 0.01
   defaultMix: 0.2
-  defaultShader: Plugins/Spine/Skeleton
+  defaultShader: Spine/Skeleton
   defaultZSpacing: 0
   defaultInstantiateLoop: 1
   showHierarchyIcons: 1
