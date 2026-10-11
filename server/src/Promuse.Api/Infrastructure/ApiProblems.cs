@@ -143,6 +143,23 @@ public static class ApiProblems
         Create(409, ErrorCodes.BannerClosed, "Banner is not open",
             notYetOpen ? "This banner has not opened yet." : "This banner has ended.");
 
+    public static ApiProblem EventNotFound(string eventId) =>
+        Create(404, ErrorCodes.EventNotFound, "No such event",
+            $"'{eventId}' is not an event, or it has been switched off.");
+
+    public static ApiProblem EventClosed(bool notYetOpen) =>
+        Create(409, ErrorCodes.EventClosed, "Event is not running",
+            notYetOpen ? "This event has not started yet." : "This event has ended.");
+
+    public static ApiProblem OutOfStock(string offerId, int remaining) =>
+        Create(409, ErrorCodes.OutOfStock, "Sold out",
+            remaining <= 0
+                ? $"You have already bought all of '{offerId}' this event allows."
+                : $"Only {remaining} more of '{offerId}' can be bought this event.");
+
+    public static ApiProblem NothingToClaim(string detail) =>
+        Create(409, ErrorCodes.NothingToClaim, "Nothing to claim", detail);
+
     public static ApiProblem Maintenance(string? message, DateTimeOffset? endsAt) =>
         Create(503, ErrorCodes.Maintenance, "Under maintenance",
             !string.IsNullOrWhiteSpace(message)

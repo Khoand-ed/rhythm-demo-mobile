@@ -55,6 +55,19 @@ public static class SongSession
     /// <summary>Ranked unless the player chose Practice; see <see cref="PlayMode"/>.</summary>
     public static PlayMode Mode { get; private set; }
 
+    /// <summary>
+    /// 打完回哪里 / The screen to come back to after the song - the event screen for an event
+    /// stage, null for the song list. Set by whoever opened the operator picker, and deliberately
+    /// not reset by <see cref="Clear"/>: gameplay clears the session the moment it starts, and this
+    /// is read when it ends.
+    /// </summary>
+    public static string ReturnUI { get; private set; }
+
+    public static void SetReturn(string uiName)
+    {
+        ReturnUI = uiName;
+    }
+
     public static bool HasRun
     {
         get { return RunId != System.Guid.Empty; }

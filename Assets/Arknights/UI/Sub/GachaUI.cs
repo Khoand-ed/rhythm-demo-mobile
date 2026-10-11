@@ -182,8 +182,24 @@ namespace UI.Sub {
             }
 
             RebuildTabs();
+
+            // 指定了卡池就停在它上面 / Opened for one banner (from an event): land on it.
+            if (pendingBanner != null) {
+                int wanted = shown.FindIndex(b => b.bannerId == pendingBanner);
+                if (wanted >= 0) current = wanted;
+                pendingBanner = null;
+            }
+
             current = Mathf.Clamp(current, 0, Mathf.Max(0, shown.Count - 1));
             Draw();
+        }
+
+        private static string pendingBanner;
+
+        /// <summary>Opens headhunting on one banner - the way an event points at its own.</summary>
+        public static void OpenOn(string bannerId) {
+            pendingBanner = bannerId;
+            UIManager.Inst().Show(UIName);
         }
 
         private GachaBanner Current => BannerAt(current);

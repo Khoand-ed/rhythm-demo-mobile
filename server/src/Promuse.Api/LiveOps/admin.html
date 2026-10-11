@@ -38,6 +38,19 @@
   th { color: var(--dim); font-weight: 500; }
   .muted { color: var(--dim); }
   .top { display: flex; justify-content: space-between; align-items: center; }
+  .nav { display: flex; gap: 8px; margin-top: 16px; }
+  .nav button { background: transparent; border: 1px solid var(--edge); color: var(--dim); }
+  .nav button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  h3 { font-size: 13px; margin: 0; color: var(--text); letter-spacing: .5px; }
+  .module { border-top: 1px solid var(--edge); padding-top: 12px; margin-top: 14px; }
+  .module .top { margin-bottom: 8px; }
+  table.grid input, table.grid select { width: 100%; min-width: 64px; padding: 5px 6px; font-size: 13px;
+    background: var(--bg); color: var(--text); border: 1px solid var(--edge); border-radius: 5px; }
+  table.grid td { padding: 4px 4px; }
+  table.grid td.wide input { min-width: 220px; }
+  table.grid td.sel select { min-width: 140px; }
+  select { background: var(--bg); color: var(--text); border: 1px solid var(--edge); border-radius: 6px; padding: 7px 9px; font: inherit; }
+  .small { font-size: 12px; }
   @media (max-width: 640px) { label { min-width: 100%; } }
 </style>
 </head>
@@ -46,10 +59,15 @@
   <div class="top">
     <div>
       <h1>Promuse LiveOps</h1>
-      <div class="muted">Remote config - maintenance, minimum version, feature flags, announcement.</div>
+      <div class="muted">Remote config and live events, changed without a build or a restart.</div>
     </div>
     <button id="signOut" class="ghost" hidden>Sign out</button>
   </div>
+
+  <nav id="nav" class="nav" hidden>
+    <button id="tabConfig" type="button" class="on">Remote config</button>
+    <button id="tabEvents" type="button">Events</button>
+  </nav>
 
   <!-- Sign in with an administrator account. The page holds the access token for this tab only. -->
   <section id="login" class="panel">
@@ -70,7 +88,7 @@
     <div class="row"><label for="mMessage">Maintenance message</label><textarea id="mMessage" maxlength="300" placeholder="Shown to players. Empty for a generic message."></textarea></div>
     <div class="row">
       <label for="mEnds">Expected end (your local time)</label>
-      <input id="mEnds" type="datetime-local">
+      <input id="mEnds" type="datetime-local" step="1">
       <button id="mEndsClear" class="ghost" type="button">Clear</button>
     </div>
 
@@ -102,6 +120,44 @@
       <tbody id="rows"></tbody>
     </table>
     </div>
+  </section>
+
+  <section id="events" class="panel" hidden>
+    <div class="top"><h2>Events</h2><button id="newEvent" type="button">New event</button></div>
+    <div class="scroll">
+    <table>
+      <thead><tr><th>Id</th><th>Title</th><th>Window (your time)</th><th>Status</th><th>Modules</th><th>v</th><th></th></tr></thead>
+      <tbody id="eventRows"></tbody>
+    </table>
+    </div>
+    <div id="eventsStatus" class="status"></div>
+  </section>
+
+  <section id="eventEditor" class="panel" hidden>
+    <h2 id="eventEditorTitle">New event</h2>
+
+    <div class="row"><label for="eId">Id</label><input id="eId" type="text" maxlength="64" placeholder="summer_2026 - lower-case, digits, underscores"></div>
+    <div class="row"><label for="eTitle">Title</label><input id="eTitle" type="text" maxlength="60"></div>
+    <div class="row"><label for="eSubtitle">Subtitle</label><input id="eSubtitle" type="text" maxlength="60"></div>
+    <div class="row"><label for="eDescription">Description</label><textarea id="eDescription" maxlength="500"></textarea></div>
+    <div class="row"><label for="eStarts">Starts (your time)</label><input id="eStarts" type="datetime-local" step="1"></div>
+    <div class="row"><label for="eEnds">Ends (your time)</label><input id="eEnds" type="datetime-local" step="1"></div>
+    <div class="row">
+      <label>Status</label>
+      <label style="min-width:0;color:var(--text)"><input id="eActive" type="checkbox"> Active - off hides the event whatever its dates</label>
+    </div>
+    <div class="row"><label for="eCurrency">Currency item id</label><input id="eCurrency" type="text" placeholder="Needed for a shop or stages - 20 is Event Token"></div>
+    <div class="row"><label for="eBanner">Headhunting banner</label><select id="eBanner"></select></div>
+    <div class="muted small">Items: 0 Originite Prime · 1 Orundum · 2 LMD · 6 Orirock · 7 Sugar Substitute · 8 Purchase Certificate ·
+      10 Headhunting Permit · 11 Basic Battle Record · 12 Recruitment Permit · 13 Skill Summary · 20 Event Token</div>
+
+    <div id="modules"></div>
+
+    <div style="margin-top:16px">
+      <button id="eventSave" type="button">Save</button>
+      <button id="eventCancel" class="ghost" type="button">Cancel</button>
+    </div>
+    <div id="eventStatus" class="status"></div>
   </section>
 </main>
 
@@ -161,15 +217,24 @@
   function signOut(message) {
     sessionStorage.removeItem(TOKEN);
     $('login').hidden = false;
-    $('editor').hidden = $('history').hidden = $('signOut').hidden = true;
+    for (const id of ['editor', 'history', 'signOut', 'nav', 'events', 'eventEditor']) $(id).hidden = true;
     if (message) show($('loginStatus'), message, false);
   }
 
   async function enter() {
     $('login').hidden = true;
-    $('editor').hidden = $('history').hidden = $('signOut').hidden = false;
+    $('signOut').hidden = $('nav').hidden = false;
     $('loginStatus').textContent = '';
-    await load();
+    await view('config');
+  }
+
+  async function view(which) {
+    $('tabConfig').className = which === 'config' ? 'on' : '';
+    $('tabEvents').className = which === 'events' ? 'on' : '';
+    $('editor').hidden = $('history').hidden = which !== 'config';
+    $('events').hidden = which !== 'events';
+    $('eventEditor').hidden = true;
+    if (which === 'config') await load(); else await loadEvents();
   }
 
   // ------------------------------------------------------------------ config
@@ -178,7 +243,9 @@
     if (!iso) return '';
     const d = new Date(iso);
     const pad = n => String(n).padStart(2, '0');
-    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+    // 带秒 / With seconds: an end at 23:59:59 saved back through a minutes-only field would move.
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + 'T' +
+           pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
   }
 
   function fill(doc) {
@@ -288,6 +355,239 @@
     }
   }
 
+
+  // ------------------------------------------------------------------ events
+
+  const GOALS = ['PlaySong', 'BuyShopItem', 'ClearStage', 'ReachScore', 'Headhunt'];
+  const OPTIONAL = new Set(['minScore', 'limit']);
+  let catalog = { stageIds: [], bannerIds: [] };
+  let editing = null; // { id, version } or null for a new event
+
+  // 每个模块一张表 / One editable table per module. `flat` and `deep` convert between the rows
+  // the table edits and the shape the API takes.
+  const MODULES = {
+    checkIn: {
+      title: 'Check-in days', add: 'Add day', hint: 'Day 1, 2, 3... in row order; one claim per server day.',
+      cols: [['itemId', 'Item id', 'number'], ['amount', 'Amount', 'number']],
+      flat: d => ({ itemId: d.reward.itemId, amount: d.reward.amount }),
+      deep: (r, i) => ({ day: i + 1, reward: { itemId: r.itemId, amount: r.amount } }),
+    },
+    missions: {
+      title: 'Missions', add: 'Add mission', hint: 'Points are paid on claim; milestones are reached with them. ClearStage needs a stage, ReachScore a min score.',
+      cols: [['missionId', 'Id', 'text'], ['description', 'Description', 'text', 'wide'], ['goal', 'Goal', 'goal'],
+             ['target', 'Target', 'number'], ['points', 'Points', 'number'], ['stageId', 'Stage', 'stage'], ['minScore', 'Min score', 'number']],
+      flat: m => ({ ...m }),
+      deep: r => ({ ...r }),
+    },
+    milestones: {
+      title: 'Milestones', add: 'Add milestone', hint: 'Claimable once the player holds this many points.',
+      cols: [['rewardId', 'Id', 'text'], ['requiredPoints', 'Points', 'number'], ['itemId', 'Item id', 'number'], ['amount', 'Amount', 'number']],
+      flat: r => ({ rewardId: r.rewardId, requiredPoints: r.requiredPoints, itemId: r.reward.itemId, amount: r.reward.amount }),
+      deep: r => ({ rewardId: r.rewardId, requiredPoints: r.requiredPoints, reward: { itemId: r.itemId, amount: r.amount } }),
+    },
+    shop: {
+      title: 'Event shop', add: 'Add offer', hint: 'Priced in the event currency. Leave the limit empty for no limit.',
+      cols: [['offerId', 'Id', 'text'], ['itemId', 'Item id', 'number'], ['amount', 'Amount', 'number'], ['price', 'Price', 'number'], ['limit', 'Limit', 'number']],
+      flat: o => ({ offerId: o.offerId, itemId: o.sell.itemId, amount: o.sell.amount, price: o.price, limit: o.limit }),
+      deep: r => ({ offerId: r.offerId, sell: { itemId: r.itemId, amount: r.amount }, price: r.price, limit: r.limit }),
+    },
+    stages: {
+      title: 'Event stages', add: 'Add stage', hint: 'Each clear while the event runs pays this much currency.',
+      cols: [['stageId', 'Stage', 'stage'], ['currencyPerClear', 'Currency per clear', 'number']],
+      flat: s => ({ ...s }),
+      deep: r => ({ ...r }),
+    },
+  };
+
+  function cellInput(kind, value) {
+    let el;
+    if (kind === 'goal' || kind === 'stage') {
+      el = document.createElement('select');
+      const options = kind === 'goal' ? GOALS : ['', ...catalog.stageIds];
+      for (const o of options) {
+        const opt = document.createElement('option');
+        opt.value = o; opt.textContent = o === '' ? '(none)' : o;
+        el.appendChild(opt);
+      }
+      el.value = value ?? (kind === 'goal' ? 'PlaySong' : '');
+    } else {
+      el = document.createElement('input');
+      el.type = kind === 'number' ? 'number' : 'text';
+      el.value = value ?? '';
+    }
+    el.dataset.kind = kind;
+    return el;
+  }
+
+  function addRow(name, row) {
+    const spec = MODULES[name];
+    const tr = document.createElement('tr');
+    for (const [key, , kind, width] of spec.cols) {
+      const td = document.createElement('td');
+      if (width) td.className = width;
+      else if (kind === 'goal' || kind === 'stage') td.className = 'sel';
+      const input = cellInput(kind, row ? row[key] : null);
+      input.dataset.key = key;
+      td.appendChild(input);
+      tr.appendChild(td);
+    }
+    const td = document.createElement('td');
+    const remove = document.createElement('button');
+    remove.className = 'ghost'; remove.type = 'button'; remove.textContent = '×';
+    remove.onclick = () => tr.remove();
+    td.appendChild(remove);
+    tr.appendChild(td);
+    $('rows_' + name).appendChild(tr);
+  }
+
+  function buildModules(definition) {
+    const host = $('modules');
+    host.replaceChildren();
+    for (const [name, spec] of Object.entries(MODULES)) {
+      const block = document.createElement('div');
+      block.className = 'module';
+      const head = spec.cols.map(([, label]) => '<th>' + label + '</th>').join('') + '<th></th>';
+      block.innerHTML =
+        '<div class="top"><h3></h3><button class="ghost" type="button"></button></div>' +
+        '<div class="muted small"></div>' +
+        '<div class="scroll"><table class="grid"><thead><tr>' + head + '</tr></thead><tbody id="rows_' + name + '"></tbody></table></div>';
+      block.querySelector('h3').textContent = spec.title;
+      block.querySelector('.muted').textContent = spec.hint;
+      const add = block.querySelector('button');
+      add.textContent = spec.add;
+      add.onclick = () => addRow(name, null);
+      host.appendChild(block);
+      for (const item of (definition[name] || [])) addRow(name, spec.flat(item));
+    }
+  }
+
+  function readModule(name) {
+    const spec = MODULES[name];
+    return [...$('rows_' + name).children].map((tr, i) => {
+      const row = {};
+      for (const input of tr.querySelectorAll('[data-key]')) {
+        const raw = input.value.trim();
+        // 只有可空的数字能留空 / Only the optional numbers may be left empty; a required one
+        // goes as 0 so the server answers with which field is wrong, not with a JSON error.
+        row[input.dataset.key] = input.dataset.kind === 'number'
+          ? (raw === '' ? (OPTIONAL.has(input.dataset.key) ? null : 0) : Number(raw))
+          : (raw === '' ? null : raw);
+      }
+      return spec.deep(row, i);
+    });
+  }
+
+  function openEditor(evt) {
+    editing = evt ? { id: evt.eventId, version: evt.version } : null;
+    const now = new Date();
+    const d = evt ? evt.definition : {
+      title: '', subtitle: null, description: null,
+      startsAt: now.toISOString(), endsAt: new Date(now.getTime() + 14 * 864e5).toISOString(),
+      isActive: true, currencyItemId: null, bannerId: null,
+      checkIn: [], missions: [], milestones: [], shop: [], stages: [],
+    };
+
+    $('eventEditorTitle').textContent = evt ? 'Edit ' + evt.eventId + ' (v' + evt.version + ')' : 'New event';
+    $('eId').value = evt ? evt.eventId : '';
+    $('eId').disabled = !!evt;
+    $('eTitle').value = d.title || '';
+    $('eSubtitle').value = d.subtitle || '';
+    $('eDescription').value = d.description || '';
+    $('eStarts').value = toLocalInput(d.startsAt);
+    $('eEnds').value = toLocalInput(d.endsAt);
+    $('eActive').checked = d.isActive;
+    $('eCurrency').value = d.currencyItemId ?? '';
+
+    const banner = $('eBanner');
+    banner.replaceChildren();
+    for (const id of ['', ...catalog.bannerIds]) {
+      const opt = document.createElement('option');
+      opt.value = id; opt.textContent = id === '' ? '(none)' : id;
+      banner.appendChild(opt);
+    }
+    banner.value = d.bannerId || '';
+
+    buildModules(d);
+    $('eventStatus').textContent = '';
+    $('eventEditor').hidden = false;
+    $('eventEditor').scrollIntoView({ behavior: 'smooth' });
+  }
+
+  async function saveEvent() {
+    const id = $('eId').value.trim();
+    if (!$('eStarts').value || !$('eEnds').value) return show($('eventStatus'), 'Set both the start and the end.', false);
+    const text = el => { const v = $(el).value.trim(); return v === '' ? null : v; };
+    const definition = {
+      title: $('eTitle').value.trim(),
+      subtitle: text('eSubtitle'),
+      description: text('eDescription'),
+      startsAt: $('eStarts').value ? new Date($('eStarts').value).toISOString() : null,
+      endsAt: $('eEnds').value ? new Date($('eEnds').value).toISOString() : null,
+      isActive: $('eActive').checked,
+      currencyItemId: $('eCurrency').value.trim() === '' ? null : Number($('eCurrency').value),
+      bannerId: $('eBanner').value || null,
+    };
+    for (const name of Object.keys(MODULES)) definition[name] = readModule(name);
+
+    $('eventSave').disabled = true;
+    const result = await api('PUT', '/v1/admin/events/' + encodeURIComponent(id), { definition }, editing ? editing.version : undefined);
+    $('eventSave').disabled = false;
+
+    if (!result.ok) return show($('eventStatus'), problemText(result), false);
+
+    await loadEvents();
+    openEditor(result.data);
+    show($('eventStatus'), 'Saved as version ' + result.data.version + '. Players see it on their next refresh.', true);
+  }
+
+  function modulesOf(d) {
+    const parts = [];
+    if (d.checkIn.length) parts.push(d.checkIn.length + ' check-in');
+    if (d.missions.length) parts.push(d.missions.length + ' missions');
+    if (d.milestones.length) parts.push(d.milestones.length + ' milestones');
+    if (d.shop.length) parts.push(d.shop.length + ' offers');
+    if (d.stages.length) parts.push(d.stages.length + ' stages');
+    if (d.bannerId) parts.push('banner');
+    return parts.join(' · ') || 'empty';
+  }
+
+  function statusOf(d) {
+    const now = Date.now();
+    if (!d.isActive) return 'off';
+    if (now < Date.parse(d.startsAt)) return 'upcoming';
+    if (now >= Date.parse(d.endsAt)) return 'ended';
+    return 'running';
+  }
+
+  async function loadEvents() {
+    const [list, cat] = await Promise.all([api('GET', '/v1/admin/events'), api('GET', '/v1/admin/events/catalog')]);
+    if (!list.ok) return show($('eventsStatus'), problemText(list), false);
+    if (cat.ok) catalog = cat.data;
+
+    const rows = $('eventRows');
+    rows.replaceChildren();
+    for (const e of list.data.events) {
+      const d = e.definition;
+      const tr = document.createElement('tr');
+      const cell = t => { const td = document.createElement('td'); td.textContent = t; tr.appendChild(td); return td; };
+      cell(e.eventId);
+      cell(d.title);
+      cell(new Date(d.startsAt).toLocaleString() + ' → ' + new Date(d.endsAt).toLocaleString());
+      const status = statusOf(d);
+      cell('').innerHTML = '<span class="badge ' + (status === 'running' ? 'off' : status === 'off' ? 'on' : '') + '">' + status + '</span>';
+      cell(modulesOf(d));
+      cell('v' + e.version);
+      const action = document.createElement('td');
+      const button = document.createElement('button');
+      button.className = 'ghost'; button.type = 'button'; button.textContent = 'Edit';
+      button.onclick = () => openEditor(e);
+      action.appendChild(button);
+      tr.appendChild(action);
+      rows.appendChild(tr);
+    }
+    $('eventsStatus').textContent = list.data.events.length ? '' : 'No events yet.';
+  }
+
   // ------------------------------------------------------------------ wiring
 
   $('signIn').onclick = signIn;
@@ -296,6 +596,11 @@
   $('save').onclick = save;
   $('reload').onclick = load;
   $('mEndsClear').onclick = () => { $('mEnds').value = ''; };
+  $('tabConfig').onclick = () => view('config');
+  $('tabEvents').onclick = () => view('events');
+  $('newEvent').onclick = () => openEditor(null);
+  $('eventSave').onclick = saveEvent;
+  $('eventCancel').onclick = () => { $('eventEditor').hidden = true; };
 
   if (sessionStorage.getItem(TOKEN)) enter(); else signOut();
 })();

@@ -57,6 +57,16 @@ public class PromuseDbContext(DbContextOptions<PromuseDbContext> options) : DbCo
 
     public DbSet<RemoteConfigVersion> RemoteConfigVersions => Set<RemoteConfigVersion>();
 
+    public DbSet<GameEvent> GameEvents => Set<GameEvent>();
+
+    public DbSet<EventCounter> EventCounters => Set<EventCounter>();
+
+    public DbSet<EventClaim> EventClaims => Set<EventClaim>();
+
+    public DbSet<EventCheckIn> EventCheckIns => Set<EventCheckIn>();
+
+    public DbSet<EventPurchase> EventPurchases => Set<EventPurchase>();
+
     /// <summary>
     /// 第一版 / Version 1: no maintenance, every build accepted, every feature on, nothing
     /// announced - the game exactly as it behaved before remote config existed. Written as the
@@ -378,6 +388,85 @@ public class PromuseDbContext(DbContextOptions<PromuseDbContext> options) : DbCo
                 Offer(6, sell: (13, 1), price: (6, 12)),
                 Offer(7, sell: (10, 1), price: (CertificateItemId, 40)),
                 Offer(8, sell: (2, 2000), price: (CertificateItemId, 5)));
+        });
+
+        modelBuilder.Entity<GameEvent>(entity =>
+        {
+            entity.ToTable("game_events");
+            entity.HasKey(e => e.EventId);
+            entity.Property(e => e.EventId).HasMaxLength(64);
+            entity.Property(e => e.Definition).HasColumnType("jsonb").IsRequired();
+            // 两个管理员同时保存 / Two admins saving the same version: the second UPDATE carries the old
+            // version in its WHERE, changes nothing, and is answered with 412.
+            entity.Property(e => e.Version).IsConcurrencyToken();
+
+            // "Which events are running now" is asked on every song cleared and every pull.
+            entity.HasIndex(e => new { e.IsActive, e.StartsAt, e.EndsAt });
+
+            entity.ToTable(t => t.HasCheckConstraint("ck_game_events_window", "starts_at < ends_at"));
+
+            entity.HasOne<Account>().WithMany()
+                  .HasForeignKey(e => e.UpdatedBy).OnDelete(DeleteBehavior.SetNull);
+
+            Contracts.Events.EventDefinition dawn = SeedEvents.ResonantDawn();
+            entity.HasData(new GameEvent
+            {
+                EventId = SeedEvents.ResonantDawnId,
+                Version = 1,
+                Definition = System.Text.Json.JsonSerializer.Serialize(dawn, SeedEvents.Json),
+                StartsAt = dawn.StartsAt,
+                EndsAt = dawn.EndsAt,
+                IsActive = dawn.IsActive,
+                CreatedAt = new DateTimeOffset(2026, 10, 11, 0, 0, 0, TimeSpan.Zero),
+                UpdatedAt = new DateTimeOffset(2026, 10, 11, 0, 0, 0, TimeSpan.Zero),
+            });
+        });
+
+        // 玩家在活动里的进度 / What players do in events. All keyed by (account, event, ...), and
+        // all cascade with the player: a deleted account takes its progress with it, while an event
+        // retired by switching it off keeps everyone's history.
+
+        modelBuilder.Entity<EventCounter>(entity =>
+        {
+            entity.ToTable("event_counters");
+            entity.HasKey(c => new { c.AccountId, c.EventId, c.MissionId });
+            entity.Property(c => c.EventId).HasMaxLength(64);
+            entity.Property(c => c.MissionId).HasMaxLength(64);
+            entity.HasOne<Player>().WithMany().HasForeignKey(c => c.AccountId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<EventClaim>(entity =>
+        {
+            entity.ToTable("event_claims");
+            entity.HasKey(c => new { c.AccountId, c.EventId, c.Kind, c.Key });
+            entity.Property(c => c.EventId).HasMaxLength(64);
+            entity.Property(c => c.Kind).HasMaxLength(16);
+            entity.Property(c => c.Key).HasMaxLength(64);
+            entity.HasOne<Player>().WithMany().HasForeignKey(c => c.AccountId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<EventCheckIn>(entity =>
+        {
+            entity.ToTable("event_check_ins");
+            entity.HasKey(c => new { c.AccountId, c.EventId, c.Day });
+            entity.Property(c => c.EventId).HasMaxLength(64);
+            entity.Property(c => c.PeriodKey).HasMaxLength(16);
+
+            // 一天一次 / One check-in per server day, enforced by the database: two taps on a slow
+            // connection race to the same day key and the second insert is refused.
+            entity.HasIndex(c => new { c.AccountId, c.EventId, c.PeriodKey }).IsUnique();
+
+            entity.HasOne<Player>().WithMany().HasForeignKey(c => c.AccountId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<EventPurchase>(entity =>
+        {
+            entity.ToTable("event_purchases");
+            entity.HasKey(p => new { p.AccountId, p.EventId, p.OfferId });
+            entity.Property(p => p.EventId).HasMaxLength(64);
+            entity.Property(p => p.OfferId).HasMaxLength(64);
+            entity.ToTable(t => t.HasCheckConstraint("ck_event_purchases_bought", "bought > 0"));
+            entity.HasOne<Player>().WithMany().HasForeignKey(p => p.AccountId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<RemoteConfigVersion>(entity =>

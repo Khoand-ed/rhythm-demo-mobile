@@ -106,6 +106,19 @@ Every save is a new version with your note beside it, and any old version can be
 from the history. A save is live on the next request through the same API instance, and
 within five seconds on any other.
 
+### Live events
+
+The same page's **Events** tab creates and edits events. An event is built from optional
+modules - check-in days, missions with point milestones, an event currency with its own shop,
+event stages that pay that currency per clear, and a headhunting banner to link to - so a
+check-in-only event and a full festival are the same thing with different parts filled in.
+The database starts with one, `resonant_dawn`, using every module.
+
+Players reach events from the little news screen on Home, through the mode select screen
+(STORY is shown as coming soon). The screens are built by `Arknights/Events/Build Event UI`,
+which also creates the Event Token item (id 20). An event's currency and rewards can be any
+item id, but only items with an `ItemMeta` under `Resources/Meta/Item` show a name and icon.
+
 ### Four red errors on boot are expected
 
 ```

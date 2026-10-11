@@ -722,7 +722,9 @@ void Update()
 
         if (Conductor.instance != null) Conductor.instance.StopSong();
 
-        BootIntent.NextUI = SongSelectUI.UIName;
+        // 从活动来就回活动 / Back to where the song was picked: the event screen for an event
+        // stage, the song list otherwise.
+        BootIntent.NextUI = SongSession.ReturnUI ?? SongSelectUI.UIName;
         UI.LoadingScreen.LoadScene(SongSelectUI.SelectScene);
     }
 

@@ -23,7 +23,8 @@ public sealed class EconomyService(
     TimeProvider clock,
     PlayerService players,
     Inventory inventory,
-    MissionService missions)
+    MissionService missions,
+    Events.EventProgress events)
 {
     /// <summary>Matches the client's own cap on a single checkout.</summary>
     public const int MaxQuantity = 99;
@@ -103,6 +104,7 @@ public sealed class EconomyService(
         // of something does not clear a "purchase 3 times" mission on its own.
         // Inside the transaction, so a rollback takes the tick with it.
         await missions.NotifyAsync(accountId, MissionGoal.BuyShopItem, ct);
+        await events.OnShopCheckoutAsync(accountId, now, ct);
 
         await transaction.CommitAsync(ct);
 
