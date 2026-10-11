@@ -114,37 +114,55 @@ namespace UI.Sub {
                 // first is in flight is a second sign-in, and on a slow
                 // connection that is easy to do by accident.
                 login_enter.interactable = false;
-
-                // 真等待才盖加载画面 / The loading screen covers the real wait - signing in and
-                // fetching the player's state - instead of the old fixed five-second bar, which
-                // only started once that wait was already over. loadingPanel and the two
-                // loading_bar nodes stay in the prefab, unused, so going back is one revert.
-                LoadingScreen.Begin();
                 ApiResult<PlayerData> result = await PlayerManager.Inst().LoginAsync(userName, password);
                 login_enter.interactable = true;
 
                 if (!result.IsSuccess) {
-                    // 失败马上撤 / Lift at once on a failure: the player is about to be told
-                    // why, and a minimum display time would only hold that back.
-                    LoadingScreen.Abort();
-
                     // 服务端的措辞 / The server's own wording, including for a
                     // failure that never reached it. One dialog, whatever broke.
                     CommonDialogUI.Message(CommonDialogUI.GroundType.BLACK, result.Message);
                     return;
                 }
+                // 登陆界面消失
+                lowerRightPanel.DOFade(0,0.5f);
+                
+                loginPanel.DOFade(0,0.5f).OnComplete(() => {
+                    // LoadingPanel界面显示
+                    lowerRightPanel.gameObject.SetActive(false);
+                    loadingPanel.alpha = 0f;
+                    loadingPanel.gameObject.SetActive(true);
+                    loadingPanel.DOFade(1,0.5f);
+                    Text bar1Text = loading_bar1.transform.GetComponentInChildren<Text>();
+                    Text bar2Text = loading_bar2.transform.GetComponentInChildren<Text>();
+                    float value = 0.02f;
+                    bar1Text.text = $"{value * 200:0.##}%";
+                    bar2Text.text = $"{value * 200:0.##}%";
+                    // 球移动
+                    
+                    // sphere.DOLocalMove(new Vector3(0,10,-700),1f).SetEase(Ease.Linear).OnComplete(() => {
+                    sphere.DOScale(0.8f,1f).SetEase(Ease.Linear);
+                    sphere.DOAnchorPosY(-540, 1f).SetEase(Ease.Linear).OnComplete(() => {
+                        // 进度条移动
+                        DOTween.To(() => value,v => value = v,0.5f,3f).SetEase(Ease.InQuint)
+                            .OnUpdate(() => {
+                                Vector2 vector = loading_bar1.anchorMax;
+                                vector.x = value;
+                                loading_bar1.anchorMax = vector;
+                                vector = loading_bar2.anchorMin;
+                                vector.x = 1 - value;
+                                loading_bar2.anchorMin = vector;
 
-                // 在画面底下换界面 / Swap screens underneath it. HomeUI opens on top of this
-                // one and its backdrop is opaque, so the login screen's own slow fade-out is
-                // never seen.
-                // finally: HomeUI is Lua-driven and can throw, and a throw must not leave the
-                // player under a loading screen that never lifts.
-                try {
-                    UIManager.Inst().Show("HomeUI");
-                    UIManager.Inst().Hide(Name, true);
-                } finally {
-                    LoadingScreen.End();
-                }
+                                bar1Text.text = $"{value * 200:0.##}%";
+                                bar2Text.text = $"{value * 200:0.##}%";
+                            })
+                            .OnComplete(() => {
+                                DOTween.To(() => value,z => value = z,0f,0.5f).OnComplete(() => {
+                                    Delay.add(() => UIManager.Inst().Show("HomeUI"), 2);
+                                    UIManager.Inst().Hide(Name, true);
+                                });
+                            });
+                    });
+                });
             });
             
             register_enter.onClick.AddListener(async () => {

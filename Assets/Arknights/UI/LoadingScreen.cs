@@ -9,8 +9,11 @@ using UnityEngine.UI;
 
 namespace UI {
     /// <summary>
-    /// 加载画面 / The one loading screen every transition uses: a random background, a rippling
-    /// LOADING, and a thin bar that reads the real progress when there is one.
+    /// 加载画面 / The loading screen for the two scene changes - into a song and back out: a
+    /// random background, a rippling LOADING, and a thin bar that reads the real progress.
+    ///
+    /// 登录不用它 / Signing in keeps LoginUI's own Arknights-style bar. This screen covered that
+    /// step too for a while and was taken off it by choice; it is only for scene loads now.
     ///
     /// 不是 UIBase / Not a UIBase on purpose. UIManager's canvas renders through the UI camera,
     /// and that camera is switched off for the whole of the gameplay scene - a screen under it
@@ -18,10 +21,10 @@ namespace UI {
     /// Overlay canvas, which needs no camera and sorts above everything, and it outlives every
     /// scene change.
     ///
-    /// 放在 Arknights 程序集 / Lives in the Arknights assembly because all three callers can see
-    /// it from there: LoginUI (Arknights), CharSelectUI (Bridge) and GameManager / PauseMenu
-    /// (default). In the default assembly LoginUI could not reach it - an asmdef never references
-    /// the default assembly.
+    /// 放在 Arknights 程序集 / Lives in the Arknights assembly so that both halves can see it:
+    /// CharSelectUI (Bridge) and GameManager / PauseMenu (default) reference it, and anything in
+    /// the front-end could too. An asmdef never references the default assembly, so a screen
+    /// living there would be out of the front-end's reach.
     ///
     /// 至少一秒, 但一定等真活干完 / Held for at least <see cref="minimumSeconds"/> so the art does
     /// not just flicker past on a fast machine, and never dropped before the real work is done.
@@ -54,9 +57,6 @@ namespace UI {
         public float wavePhase = 0.55f;
         [Range(0f, 1f)] public float dimAlpha = 0.45f;
 
-        // 不定进度时那一段滑块的宽度 / Width of the sliding segment when progress is unknown.
-        private const float SegmentWidth = 0.25f;
-
         private static LoadingScreen inst;
         private static bool missingReported;
 
@@ -67,7 +67,6 @@ namespace UI {
         private static Sprite[] backgrounds;
 
         private bool visible;
-        private bool determinate;
         private float progress;
         private float shown;
         private float since;
@@ -99,37 +98,8 @@ namespace UI {
             }
 
             // 先激活再开协程 / Open first: a coroutine cannot start on an inactive object.
-            screen.Open(true);
+            screen.Open();
             screen.running = screen.StartCoroutine(screen.LoadRoutine(scene, beforeLoad));
-        }
-
-        /// <summary>
-        /// Covers the screen for work that is not a scene load - signing in. Progress is unknown,
-        /// so the bar slides instead of filling. Close with <see cref="End"/> or <see cref="Abort"/>.
-        /// </summary>
-        public static void Begin() {
-            LoadingScreen screen = Inst();
-            if (screen == null || screen.running != null) return;
-
-            screen.Open(false);
-            screen.StartCoroutine(screen.Fade(1f, screen.fadeInSeconds));
-        }
-
-        /// <summary>The work succeeded: uncover once the minimum time has passed.</summary>
-        public static void End() {
-            if (inst == null || !inst.visible || inst.running != null) return;
-            inst.running = inst.StartCoroutine(inst.EndRoutine());
-        }
-
-        /// <summary>
-        /// The work failed: uncover now, without waiting out the minimum - the player is about to
-        /// be told why, and holding that back for the sake of a background is the wrong trade.
-        /// </summary>
-        public static void Abort() {
-            if (inst == null || !inst.visible) return;
-
-            inst.StopAllCoroutines();
-            inst.running = inst.StartCoroutine(inst.CloseRoutine());
         }
 
         // ------------------------------------------------------------------ sequence
@@ -174,16 +144,6 @@ namespace UI {
             yield return CloseRoutine();
         }
 
-        private IEnumerator EndRoutine() {
-            // 淡入没完就别开始淡出 / Let Begin's fade-in finish first, or two fades fight over alpha.
-            while (group.alpha < 1f || Time.unscaledTime - since < minimumSeconds) yield return null;
-
-            // 被盖住的界面刚建好 / Whatever was opened under the screen gets one frame to lay out.
-            yield return null;
-
-            yield return CloseRoutine();
-        }
-
         private IEnumerator CloseRoutine() {
             yield return Fade(0f, fadeOutSeconds);
 
@@ -192,11 +152,10 @@ namespace UI {
             gameObject.SetActive(false);
         }
 
-        private void Open(bool knownProgress) {
+        private void Open() {
             gameObject.SetActive(true);
 
             visible = true;
-            determinate = knownProgress;
             progress = 0f;
             shown = 0f;
             since = Time.unscaledTime;
@@ -207,7 +166,6 @@ namespace UI {
             group.blocksRaycasts = true;
 
             PickBackground();
-            if (percent != null) percent.gameObject.SetActive(knownProgress);
             DrawBar();
         }
 
@@ -245,16 +203,9 @@ namespace UI {
         private void DrawBar() {
             if (barFill == null) return;
 
-            if (determinate) {
-                barFill.anchorMin = new Vector2(0f, 0f);
-                barFill.anchorMax = new Vector2(shown, 1f);
-                if (percent != null) percent.text = Mathf.RoundToInt(shown * 100f) + "%";
-                return;
-            }
-
-            float x = Mathf.PingPong(Time.unscaledTime * 0.9f, 1f - SegmentWidth);
-            barFill.anchorMin = new Vector2(x, 0f);
-            barFill.anchorMax = new Vector2(x + SegmentWidth, 1f);
+            barFill.anchorMin = new Vector2(0f, 0f);
+            barFill.anchorMax = new Vector2(shown, 1f);
+            if (percent != null) percent.text = Mathf.RoundToInt(shown * 100f) + "%";
         }
 
         /// <summary>
