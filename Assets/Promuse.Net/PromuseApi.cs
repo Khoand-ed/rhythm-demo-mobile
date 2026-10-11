@@ -17,6 +17,9 @@ using Promuse.Contracts.Players;
 using Promuse.Contracts.Runs;
 using Promuse.Contracts.Shop;
 using Promuse.Contracts.Stories;
+using Promuse.Contracts.Mail;
+using Promuse.Contracts.Notices;
+using Promuse.Contracts.SignIn;
 using UnityEngine;
 using UnityEngine.Networking;
 
@@ -97,6 +100,9 @@ namespace Promuse.Net
         }
 
         public TokenStore Tokens => _tokens;
+
+        /// <summary>The server's root, for what is fetched outside this class - a notice banner, say.</summary>
+        public string BaseUrl => _config.baseUrl;
 
         /// <summary>Results that could not be sent when their run ended. See <see cref="FlushPendingRunsAsync"/>.</summary>
         public PendingRunResults Pending { get; }
@@ -312,6 +318,58 @@ namespace Promuse.Net
             }
 
             StoryPatches.Store(result.Value);
+            return result;
+        }
+
+        // ----------------------------------------------------------------- mail
+
+        public Task<ApiResult<MailBox>> GetMailAsync() =>
+            SendAsync<MailBox>(UnityWebRequest.kHttpVerbGET, "/v1/mail", body: null, authenticate: true);
+
+        /// <summary>Opens a mail: reads it and collects what it carries.</summary>
+        public Task<ApiResult<MailActionResult>> OpenMailAsync(Guid mailId) =>
+            MailActionAsync("/v1/mail/" + mailId.ToString("D") + "/open");
+
+        public Task<ApiResult<MailActionResult>> CollectAllMailAsync() => MailActionAsync("/v1/mail/collect-all");
+
+        public Task<ApiResult<MailActionResult>> DeleteOpenedMailAsync() => MailActionAsync("/v1/mail/delete-opened");
+
+        private async Task<ApiResult<MailActionResult>> MailActionAsync(string path)
+        {
+            ApiResult<MailActionResult> result = await SendAsync<MailActionResult>(
+                UnityWebRequest.kHttpVerbPOST, path, body: null,
+                authenticate: true,
+                idempotencyKey: Guid.NewGuid().ToString());
+
+            if (result.IsSuccess) _playerETag = ETagFor(result.Value!.Player);
+
+            return result;
+        }
+
+        // -------------------------------------------------------------- notices
+
+        public Task<ApiResult<NoticeList>> GetNoticesAsync() =>
+            SendAsync<NoticeList>(UnityWebRequest.kHttpVerbGET, "/v1/notices", body: null, authenticate: true);
+
+        /// <summary>Clears a notice's unread dot. Answers with nothing.</summary>
+        public Task<ApiResult<object>> ReadNoticeAsync(Guid noticeId) =>
+            SendAsync<object>(UnityWebRequest.kHttpVerbPOST, "/v1/notices/" + noticeId.ToString("D") + "/read",
+                body: null, authenticate: true);
+
+        // -------------------------------------------------------------- sign-in
+
+        public Task<ApiResult<SignInMonth>> GetSignInAsync() =>
+            SendAsync<SignInMonth>(UnityWebRequest.kHttpVerbGET, "/v1/sign-in", body: null, authenticate: true);
+
+        public async Task<ApiResult<SignInResult>> SignInTodayAsync()
+        {
+            ApiResult<SignInResult> result = await SendAsync<SignInResult>(
+                UnityWebRequest.kHttpVerbPOST, "/v1/sign-in", body: null,
+                authenticate: true,
+                idempotencyKey: Guid.NewGuid().ToString());
+
+            if (result.IsSuccess) _playerETag = ETagFor(result.Value!.Player);
+
             return result;
         }
 

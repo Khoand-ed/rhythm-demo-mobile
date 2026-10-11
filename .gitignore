@@ -157,6 +157,9 @@ InitTestScene*.unity*
 # Local-only configuration. The development connection string lives here, so
 # this must never be committed. appsettings.json itself is source and is kept.
 /server/**/appsettings.*.Local.json
+
+# Uploaded notice banners - data written by the running API, not source.
+/server/**/App_Data/
 /server/**/secrets.json
 
 # Python bytecode cache from the ci/ checks. Regenerated on every run.

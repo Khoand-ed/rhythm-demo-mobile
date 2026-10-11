@@ -53,6 +53,10 @@ namespace UI {
             // screen on top of it closes - every return to Home, which is when remote config is
             // checked. The answer is a 304 unless something changed.
             if (Name == BootIntent.Home) RemoteConfigManager.Inst().CheckOnHome();
+
+            // 每天第一次 / Sign-in and notices pop up the first time Home shows each server day,
+            // and the dots on the mail, alert and calendar icons are kept fresh.
+            if (Name == BootIntent.Home) HomeDaily.CheckOnHome();
         }
 
         public override void Show() {

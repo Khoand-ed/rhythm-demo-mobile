@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Promuse Backend API
-  version: 1.0.0-draft.9
+  version: 1.0.0-draft.10
   summary: Authentication and player state for the Promuse mobile rhythm game.
   description: |
     **Phase 1** authentication, **Phase 2** player state, **Phase 3** the economy -
@@ -110,6 +110,17 @@ tags:
       Corrections to story lines. The stories ship inside the game; the server holds only the
       fixes an administrator made after release, each applied by the game only while its own
       line still reads what the fix was written against.
+  - name: mail
+    description: |
+      The mailbox. An administrator sends to one player or to every player who exists then;
+      opening a mail reads it and collects its attachments in one step, exactly once.
+  - name: notices
+    description: |
+      The announcement board - Event, System and News - with banners uploaded to this server.
+  - name: sign-in
+    description: |
+      The monthly sign-in: one square per server day, in order, starting over each month. A month
+      with no table of its own uses the default.
   - name: missions
     description: |
       The two mission boards. Phase 3.
@@ -1416,6 +1427,391 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /v1/mail:
+    get:
+      tags: [mail]
+      operationId: getMailbox
+      summary: The player's box, newest first, at most 100.
+      responses:
+        '200':
+          description: The box.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MailBox'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /v1/mail/{mailId}/open:
+    parameters:
+      - name: mailId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [mail]
+      operationId: openMail
+      summary: Open a mail - read it and collect its attachments.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201':
+          description: Done.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MailActionResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: '`MAIL_NOT_FOUND` - not in this box (expired, deleted, retracted, or never sent here).'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
+  /v1/mail/collect-all:
+    post:
+      tags: [mail]
+      operationId: collectAllMail
+      summary: Open every new mail and collect everything, totalled per item.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201':
+          description: Done.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MailActionResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /v1/mail/delete-opened:
+    post:
+      tags: [mail]
+      operationId: deleteOpenedMail
+      summary: Delete Read - every opened mail leaves the box.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201':
+          description: Done.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MailActionResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /v1/admin/mail:
+    get:
+      tags: [admin]
+      operationId: listSentMail
+      summary: The last hundred mails sent, with how many players opened each.
+      responses:
+        '200':
+          description: The mails.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminMailList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: '`FORBIDDEN`.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+    post:
+      tags: [admin]
+      operationId: sendMail
+      summary: Send a mail to one player, or to every player who exists now.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MailSendRequest'
+      responses:
+        '201':
+          description: Sent.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminMail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: '`FORBIDDEN`.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /v1/admin/mail/{mailId}/retract:
+    post:
+      tags: [admin]
+      operationId: retractMail
+      summary: Take a mail out of every box. What was collected stays collected.
+      parameters:
+        - name: mailId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Retracted.
+        '404':
+          description: '`MAIL_NOT_FOUND`.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
+  /v1/notices:
+    get:
+      tags: [notices]
+      operationId: getNotices
+      summary: The notices showing now, with which this player has read.
+      responses:
+        '200':
+          description: The notices.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NoticeList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /v1/notices/{noticeId}/read:
+    post:
+      tags: [notices]
+      operationId: readNotice
+      summary: Clear a notice's unread dot.
+      parameters:
+        - name: noticeId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Marked read.
+        '404':
+          description: '`NOTICE_NOT_FOUND` - not showing.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
+  /v1/notices/banners/{name}:
+    get:
+      tags: [notices]
+      operationId: getNoticeBanner
+      summary: A banner image. Public; the name is the content's hash, so it caches forever.
+      security: []
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-f]+\.(png|jpg)$'
+      responses:
+        '200':
+          description: The image.
+          content:
+            image/png: {}
+            image/jpeg: {}
+        '404':
+          description: No such banner.
+
+  /v1/admin/notices:
+    get:
+      tags: [admin]
+      operationId: listNotices
+      summary: Every notice, showing or not.
+      responses:
+        '200':
+          description: The notices.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminNoticeList'
+    post:
+      tags: [admin]
+      operationId: createNotice
+      summary: Create a notice.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NoticeUpsertRequest'
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminNotice'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /v1/admin/notices/{noticeId}:
+    put:
+      tags: [admin]
+      operationId: updateNotice
+      summary: Save a new version of a notice (If-Match).
+      parameters:
+        - name: noticeId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NoticeUpsertRequest'
+      responses:
+        '200':
+          description: Saved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminNotice'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+
+  /v1/admin/notices/banners:
+    post:
+      tags: [admin]
+      operationId: uploadNoticeBanner
+      summary: Upload a banner - PNG or JPEG, judged by its bytes, at most 2 MB.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: Stored.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BannerUpload'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /v1/sign-in:
+    get:
+      tags: [sign-in]
+      operationId: getSignIn
+      summary: This month's squares and how far this player is.
+      responses:
+        '200':
+          description: The month.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignInMonth'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [sign-in]
+      operationId: signIn
+      summary: Claim today's square.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201':
+          description: Done.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignInResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: '`NOTHING_TO_CLAIM` - signed today already, or every square is taken.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
+  /v1/admin/sign-in:
+    get:
+      tags: [admin]
+      operationId: listSignInTables
+      summary: The default table and every month's own.
+      responses:
+        '200':
+          description: The tables.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignInTables'
+
+  /v1/admin/sign-in/{key}:
+    parameters:
+      - name: key
+        in: path
+        required: true
+        schema:
+          type: string
+          description: '"default" or a month as yyyy-MM.'
+    put:
+      tags: [admin]
+      operationId: saveSignInTable
+      summary: Save the default (exactly 31 squares) or a month's table (at least its days, at most 31).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignInTableRequest'
+      responses:
+        '200':
+          description: Saved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignInTable'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+    delete:
+      tags: [admin]
+      operationId: deleteSignInTable
+      summary: Remove a month's table so it uses the default. The default stays.
+      responses:
+        '204':
+          description: Removed.
         '422':
           $ref: '#/components/responses/ValidationFailed'
 
@@ -3042,3 +3438,320 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AdminStoryPatch'
+
+    MailItem:
+      type: object
+      required: [mailId, title, body, sender, attachments, sentAt, expiresAt, isOpened]
+      properties:
+        mailId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        body:
+          type: string
+        sender:
+          type: string
+        senderCharacterId:
+          type: [string, 'null']
+          description: An operator whose portrait signs the mail.
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/ItemStack'
+        sentAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        isOpened:
+          type: boolean
+          description: Opened - read, and its attachments collected.
+
+    MailBox:
+      type: object
+      required: [mails, unopened, capacity, serverTime]
+      properties:
+        mails:
+          type: array
+          items:
+            $ref: '#/components/schemas/MailItem'
+        unopened:
+          type: integer
+        capacity:
+          type: integer
+        serverTime:
+          $ref: '#/components/schemas/ServerTime'
+
+    MailActionResult:
+      type: object
+      required: [granted, box, player]
+      properties:
+        granted:
+          type: array
+          items:
+            $ref: '#/components/schemas/ItemStack'
+        box:
+          $ref: '#/components/schemas/MailBox'
+        player:
+          $ref: '#/components/schemas/PlayerState'
+
+    MailSendRequest:
+      type: object
+      required: [title, body, sender, attachments, expiresInDays]
+      properties:
+        title:
+          type: string
+          maxLength: 60
+        body:
+          type: string
+          maxLength: 2000
+        sender:
+          type: string
+          maxLength: 40
+        senderCharacterId:
+          type: [string, 'null']
+        attachments:
+          type: array
+          maxItems: 10
+          items:
+            $ref: '#/components/schemas/ItemStack'
+        expiresInDays:
+          type: integer
+          minimum: 1
+          maximum: 365
+        toUsername:
+          type: [string, 'null']
+          description: One player; null sends to every player who exists now.
+
+    AdminMail:
+      type: object
+      required: [mailId, title, body, sender, attachments, sentAt, expiresAt, opened, isRetracted]
+      properties:
+        mailId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        body:
+          type: string
+        sender:
+          type: string
+        senderCharacterId:
+          type: [string, 'null']
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/ItemStack'
+        sentAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        toUsername:
+          type: [string, 'null']
+        sentBy:
+          type: [string, 'null']
+        opened:
+          type: integer
+        isRetracted:
+          type: boolean
+
+    AdminMailList:
+      type: object
+      required: [mails]
+      properties:
+        mails:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminMail'
+
+    NoticeCategory:
+      type: string
+      enum: [Event, System, News]
+
+    Notice:
+      type: object
+      required: [noticeId, category, listTitle, title, body, startsAt, sortOrder, isRead]
+      properties:
+        noticeId:
+          type: string
+          format: uuid
+        category:
+          $ref: '#/components/schemas/NoticeCategory'
+        listTitle:
+          type: string
+        title:
+          type: string
+        body:
+          type: string
+          description: TextMeshPro rich text.
+        bannerUrl:
+          type: [string, 'null']
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: [string, 'null']
+          format: date-time
+        sortOrder:
+          type: integer
+        isRead:
+          type: boolean
+
+    NoticeList:
+      type: object
+      required: [notices, serverTime]
+      properties:
+        notices:
+          type: array
+          items:
+            $ref: '#/components/schemas/Notice'
+        serverTime:
+          $ref: '#/components/schemas/ServerTime'
+
+    NoticeDefinition:
+      type: object
+      required: [category, listTitle, title, body, startsAt, isActive, sortOrder]
+      properties:
+        category:
+          $ref: '#/components/schemas/NoticeCategory'
+        listTitle:
+          type: string
+          maxLength: 40
+        title:
+          type: string
+          maxLength: 80
+        body:
+          type: string
+          maxLength: 8000
+        banner:
+          type: [string, 'null']
+          description: A file name from the banner upload.
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: [string, 'null']
+          format: date-time
+        isActive:
+          type: boolean
+        sortOrder:
+          type: integer
+
+    NoticeUpsertRequest:
+      type: object
+      required: [definition]
+      properties:
+        definition:
+          $ref: '#/components/schemas/NoticeDefinition'
+
+    AdminNotice:
+      type: object
+      required: [noticeId, version, definition, updatedAt]
+      properties:
+        noticeId:
+          type: string
+          format: uuid
+        version:
+          type: integer
+        definition:
+          $ref: '#/components/schemas/NoticeDefinition'
+        updatedAt:
+          type: string
+          format: date-time
+        updatedBy:
+          type: [string, 'null']
+
+    AdminNoticeList:
+      type: object
+      required: [notices]
+      properties:
+        notices:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminNotice'
+
+    BannerUpload:
+      type: object
+      required: [banner, url]
+      properties:
+        banner:
+          type: string
+        url:
+          type: string
+
+    SignInMonth:
+      type: object
+      required: [monthKey, year, month, rewards, signed, canSignToday, nextDayAt, serverTime]
+      properties:
+        monthKey:
+          type: string
+          example: 2026-10
+        year:
+          type: integer
+        month:
+          type: integer
+        rewards:
+          type: array
+          description: One per day of the month, square 1 first.
+          items:
+            $ref: '#/components/schemas/ItemStack'
+        signed:
+          type: integer
+        canSignToday:
+          type: boolean
+        nextDayAt:
+          type: string
+          format: date-time
+        serverTime:
+          $ref: '#/components/schemas/ServerTime'
+
+    SignInResult:
+      type: object
+      required: [day, granted, month, player]
+      properties:
+        day:
+          type: integer
+        granted:
+          $ref: '#/components/schemas/ItemStack'
+        month:
+          $ref: '#/components/schemas/SignInMonth'
+        player:
+          $ref: '#/components/schemas/PlayerState'
+
+    SignInTable:
+      type: object
+      required: [key, rewards, updatedAt]
+      properties:
+        key:
+          type: string
+        rewards:
+          type: array
+          items:
+            $ref: '#/components/schemas/ItemStack'
+        updatedAt:
+          type: string
+          format: date-time
+        updatedBy:
+          type: [string, 'null']
+
+    SignInTables:
+      type: object
+      required: [tables]
+      properties:
+        tables:
+          type: array
+          items:
+            $ref: '#/components/schemas/SignInTable'
+
+    SignInTableRequest:
+      type: object
+      required: [rewards]
+      properties:
+        rewards:
+          type: array
+          items:
+            $ref: '#/components/schemas/ItemStack'

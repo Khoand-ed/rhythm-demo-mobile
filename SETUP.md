@@ -159,6 +159,23 @@ Point an event stage at a story by its id in the Events tab (**Story before** / 
 Whether a player has seen a story is remembered on the device; the stage's STORY button replays
 it.
 
+### Mail, notices and the monthly sign-in
+
+Home's three top-left icons open them, and the admin page has a tab for each:
+
+- **Mail** - send to one player by username, or to every player who exists at that moment, with
+  up to ten items attached and an expiry. Opening a mail collects its items; a box shows the
+  newest hundred. A sent mail can be retracted from every box.
+- **Notices** - the announcement board's Event / System / News tabs. The body is TextMeshPro rich
+  text (`<b>`, `<size>`, `<color>`), and a banner is a PNG or JPEG uploaded on the page. Uploads are
+  kept in `server/src/Promuse.Api/App_Data/banners/` (gitignored; `Notices:BannerDirectory` moves it).
+- **Sign-in** - one square per server day, in order, starting over each month. `default` holds 31
+  squares; a month (`2026-11`) can have its own table, and falls back to the default without one.
+
+The first time Home shows each server day, the calendar opens (and signs today's square) if it is
+waiting, then the notice board if anything is showing. The screens are built by
+`Arknights/Home/Build Mail, Notice and Calendar UI`, which also wires the three icons and their red dots.
+
 ### Four red errors on boot are expected
 
 ```
@@ -207,7 +224,7 @@ above and for device builds.
 
 | Menu | What lives there |
 |---|---|
-| **`Arknights/`** | Content pipeline — AssetBundles, placeholder art, audio import, local character art, the Home / Depot / event screen builders, and the story tools |
+| **`Arknights/`** | Content pipeline — AssetBundles, placeholder art, audio import, local character art, the Home / Depot / event / mail, notice and calendar screen builders, and the story tools |
 | **`Beatmap/`** | Charting — `Beatmap Studio...` and `Timeline Editor...` author charts; `Import All Beatmaps` turns the JSON under `Assets/Beatmaps/` into `SongChart` assets |
 | **`Tools/Rhythm/`** | Gameplay scene setup — note system, HUD, hit feedback, character stage, skip button, song-select wiring, loading screen |
 

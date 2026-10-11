@@ -69,6 +69,20 @@ public sealed class MissionPeriod(IOptions<MissionOptions> options)
             $"{ISOWeek.GetYear(day):D4}-W{ISOWeek.GetWeekOfYear(day):D2}");
     }
 
+    /// <summary>
+    /// The month the instant falls in, on the same shifted clock: "2026-10". The monthly sign-in
+    /// turns over at the daily reset on the first, like everything else that resets.
+    /// </summary>
+    public string MonthlyKey(DateTimeOffset instant) =>
+        Shifted(instant).ToString("yyyy-MM", CultureInfo.InvariantCulture);
+
+    /// <summary>(year, month, days in it) of the month the instant falls in.</summary>
+    public (int Year, int Month, int Days) Month(DateTimeOffset instant)
+    {
+        DateTime day = Shifted(instant);
+        return (day.Year, day.Month, DateTime.DaysInMonth(day.Year, day.Month));
+    }
+
     public string KeyFor(MissionTab tab, DateTimeOffset instant) =>
         tab == MissionTab.Weekly ? WeeklyKey(instant) : DailyKey(instant);
 
