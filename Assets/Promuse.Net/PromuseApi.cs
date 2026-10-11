@@ -16,6 +16,7 @@ using Promuse.Contracts.Missions;
 using Promuse.Contracts.Players;
 using Promuse.Contracts.Runs;
 using Promuse.Contracts.Shop;
+using Promuse.Contracts.Stories;
 using UnityEngine;
 using UnityEngine.Networking;
 
@@ -92,6 +93,7 @@ namespace Promuse.Net
             _tokens = tokens;
             Pending = new PendingRunResults(Application.persistentDataPath);
             ConfigCache = new RemoteConfigCache(Application.persistentDataPath);
+            StoryPatches = new StoryPatchCache(Application.persistentDataPath);
         }
 
         public TokenStore Tokens => _tokens;
@@ -101,6 +103,9 @@ namespace Promuse.Net
 
         /// <summary>The last remote config this device read; survives a restart. See <see cref="GetConfigAsync"/>.</summary>
         public RemoteConfigCache ConfigCache { get; }
+
+        /// <summary>The last story corrections this device read; survives a restart. See <see cref="GetStoryPatchesAsync"/>.</summary>
+        public StoryPatchCache StoryPatches { get; }
 
         // --------------------------------------------------------------- config
 
@@ -281,6 +286,35 @@ namespace Promuse.Net
             return SendAsync<GachaHistoryPage>(UnityWebRequest.kHttpVerbGET, path, body: null, authenticate: true);
         }
 
+        // -------------------------------------------------------------- stories
+
+        /// <summary>
+        /// The corrections to story lines in force. Sends the revision already held as
+        /// If-None-Match, so an unchanged list is a 304 with no body and the held copy is returned.
+        /// On a failure the held copy stays in <see cref="StoryPatches"/> for the story player.
+        /// </summary>
+        public async Task<ApiResult<StoryPatchList>> GetStoryPatchesAsync()
+        {
+            StoryPatchList? held = StoryPatches.Current;
+            string? etag = held != null ? "W/\"" + held.Revision + "\"" : null;
+
+            ApiResult<StoryPatchList> result = await SendAsync<StoryPatchList>(
+                UnityWebRequest.kHttpVerbGET, "/v1/stories/patches", body: null, authenticate: true, ifNoneMatch: etag);
+
+            if (!result.IsSuccess) return result;
+
+            if (result.Value == null)
+            {
+                return held != null
+                    ? ApiResult<StoryPatchList>.Ok(held)
+                    : ApiResult<StoryPatchList>.Fail(Transport(TransportErrorCodes.Malformed,
+                        "The server's reply could not be read", "304 without a list to keep"));
+            }
+
+            StoryPatches.Store(result.Value);
+            return result;
+        }
+
         // --------------------------------------------------------------- events
 
         /// <summary>Events running now or starting later, ending soonest first.</summary>
@@ -352,11 +386,12 @@ namespace Promuse.Net
         /// Opens an attempt at a chart: the server charges the stamina and hands
         /// back the seed this run must be played with.
         /// </summary>
-        public async Task<ApiResult<RunTicket>> StartRunAsync(string stageId, string characterId)
+        /// <param name="eventId">Set when the chart is played as a stage of that event.</param>
+        public async Task<ApiResult<RunTicket>> StartRunAsync(string stageId, string characterId, string? eventId = null)
         {
             ApiResult<RunTicket> result = await SendAsync<RunTicket>(
                 UnityWebRequest.kHttpVerbPOST, "/v1/runs",
-                new StartRunRequest(stageId, characterId),
+                new StartRunRequest(stageId, characterId, eventId),
                 authenticate: true,
                 idempotencyKey: Guid.NewGuid().ToString());
 

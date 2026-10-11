@@ -9,9 +9,9 @@ using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 // Builds the SongSelectUI prefab, points it at the beatmap library, hooks the
-// home screen's Operation tile to it, and puts Back and Retry on the results
-// screen - everything the front-end needs to reach the rhythm scene and to come
-// back out of it.
+// home screen's Operation tile to the mode select screen (whose STORY card opens
+// the song list), and puts Back and Retry on the results screen - everything the
+// front-end needs to reach the rhythm scene and to come back out of it.
 //
 // The leaderboard panel, the PRACTICE button, the results RETRY, the ranking line
 // and the notice arrived after the prefab and the scene already existed, so they
@@ -82,7 +82,7 @@ public class SongSelectUISetup
         Debug.Log($"[SongSelectUISetup] Song flow wired.\n" +
                   $"  SongSelectUI prefab: {(built ? "built at " + PrefabPath : "already existed, left alone")}\n" +
                   $"  Leaderboard and PRACTICE: {additions}\n" +
-                  $"  HomeUI {OperationTileName}: {(hooked ? "opens SongSelectUI" : "NOT hooked - see the warning above")}\n" +
+                  $"  HomeUI {OperationTileName}: {(hooked ? "opens ModeSelectUI (STORY -> SongSelectUI)" : "NOT hooked - see the warning above")}\n" +
                   $"  Results Back button: {back}\n" +
                   $"  Results RETRY, ranking line and notice: {retry}");
     }
@@ -440,7 +440,7 @@ public class SongSelectUISetup
             if (tile == null)
             {
                 Debug.LogWarning($"HomeUI has no '{OperationTileName}' child. Add an OpenUIButton " +
-                                 $"with uiName '{SongSelectUI.UIName}' to whichever tile should open the song list.");
+                                 $"with uiName '{UI.Sub.ModeSelectUI.UIName}' to whichever tile should open the modes.");
                 return false;
             }
 
@@ -458,7 +458,8 @@ public class SongSelectUISetup
 
             OpenUIButton open = tile.GetComponent<OpenUIButton>();
             if (open == null) open = tile.gameObject.AddComponent<OpenUIButton>();
-            open.uiName = SongSelectUI.UIName;
+            // 先选模式 / Through the mode select: its STORY card is what opens the song list.
+            open.uiName = UI.Sub.ModeSelectUI.UIName;
 
             PrefabUtility.SaveAsPrefabAsset(contents, HomePrefabPath);
             return true;

@@ -7,8 +7,10 @@ using UnityEngine.UI;
 
 namespace UI.Sub {
     /// <summary>
-    /// 选模式 / Where the Home news screen leads: EVENT, for the live events, and STORY, the story
-    /// mode that comes in a later update and is shown as coming soon until then.
+    /// 选模式 / Where Home's Operation tile leads: EVENT, the live events, and STORY, the main
+    /// campaign - the stages every player has, which open the song list.
+    ///
+    /// The news screen on Home skips this and goes straight to the event screen.
     ///
     /// Built by Arknights/Events/Build Event UI.
     /// </summary>
@@ -18,6 +20,9 @@ namespace UI.Sub {
         /// <summary>Opened by name - it lives in the Bridge assembly, which this one cannot see.</summary>
         public const string EventUIName = "EventUI";
 
+        /// <summary>The song list, the main campaign's stages - Bridge too, so also by name.</summary>
+        public const string StoryUIName = "SongSelectUI";
+
         public Button backButton;
 
         [Header("活动卡 / Event card")]
@@ -26,7 +31,7 @@ namespace UI.Sub {
         public TextMeshProUGUI eventTitle;
         public TextMeshProUGUI eventDetail;
 
-        [Header("剧情卡 / Story card - not playable yet")]
+        [Header("剧情卡 / Story card - the main campaign")]
         public Button storyCard;
 
         private float nextTick;
@@ -34,8 +39,7 @@ namespace UI.Sub {
         public override void Init() {
             backButton.onClick.AddListener(() => UIManager.Inst().Hide(UIName, true));
             eventCard.onClick.AddListener(OpenEvents);
-            storyCard.onClick.AddListener(() =>
-                CommonDialogUI.Message(CommonDialogUI.GroundType.BLACK, "Story mode is coming in a future update."));
+            storyCard.onClick.AddListener(() => UIManager.Inst().Show(StoryUIName));
         }
 
         public override void Show() {

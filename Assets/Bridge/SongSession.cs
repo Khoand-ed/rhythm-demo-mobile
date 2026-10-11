@@ -63,9 +63,28 @@ public static class SongSession
     /// </summary>
     public static string ReturnUI { get; private set; }
 
-    public static void SetReturn(string uiName)
+    /// <summary>
+    /// 活动关卡 / The event the song is played as a stage of, null otherwise. Sent with every run
+    /// opened for it - the first and every ranked retry - so the server pays and clears the stage.
+    /// Kept across <see cref="Clear"/> for the same reason as <see cref="ReturnUI"/>.
+    /// </summary>
+    public static string EventId { get; private set; }
+
+    /// <summary>
+    /// The screens that were open under <see cref="ReturnUI"/> when the song started, bottom to top,
+    /// put back on the way out so Back retraces the way in. Written by CharSelectUI.
+    /// </summary>
+    public static string[] ReturnBeneath { get; private set; } = new string[0];
+
+    public static void SetReturn(string uiName, string eventId = null)
     {
         ReturnUI = uiName;
+        EventId = eventId;
+    }
+
+    public static void SetReturnBeneath(string[] screens)
+    {
+        ReturnBeneath = screens ?? new string[0];
     }
 
     public static bool HasRun

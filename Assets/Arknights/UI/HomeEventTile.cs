@@ -7,8 +7,8 @@ using UnityEngine.UI;
 namespace UI {
     /// <summary>
     /// 主页的新闻屏 / The little "breaking news" screen on Home, turned into the way into events: it
-    /// shows the event running now - or the next one - with its countdown, and opens the mode
-    /// select screen when pressed. With no event it keeps its colour bars and PLEASE STAND BY.
+    /// shows the event running now - or the next one - with its countdown, and opens the event
+    /// screen straight away when pressed. With no event it keeps its colour bars and PLEASE STAND BY.
     ///
     /// Placed by Arknights/Events/Build Event UI on HomeUI's NewsPanel.
     /// </summary>
@@ -79,7 +79,12 @@ namespace UI {
         }
 
         private void Open() {
-            UIManager.Inst().Show(Sub.ModeSelectUI.UIName);
+            if (EventManager.Inst().Events.Count == 0) {
+                Sub.CommonDialogUI.Message(Sub.CommonDialogUI.GroundType.BLACK, "There is no event running right now.");
+                return;
+            }
+
+            UIManager.Inst().Show(Sub.ModeSelectUI.EventUIName);
         }
     }
 }

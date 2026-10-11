@@ -67,15 +67,16 @@ has other `Image` types in scope.
 
 ## Checks
 
-Run before pushing. All three are stdlib Python, no dependencies:
+Run before pushing. All four are stdlib Python, no dependencies:
 
 ```bash
 python ci/check_meta.py              # missing/orphan .meta, duplicate GUIDs
 python ci/check_beatmaps.py --all --strict
+python ci/check_stories.py --strict  # story scripts parse, carry line ids, name real backgrounds
 python ci/check_repo_hygiene.py      # stray build output, LFS integrity, conflict markers
 ```
 
-`.github/workflows/project-checks.yml` runs the same three on every PR — no Unity
+`.github/workflows/project-checks.yml` runs the same four on every PR — no Unity
 licence, no secrets. There is no CI that compiles C#; only the Editor can do that.
 
 ## Traps
@@ -94,6 +95,8 @@ licence, no secrets. There is no CI that compiles C#; only the Editor can do tha
 | Adding or changing a headhunting banner | The server owns the rules: odds, pity, price, schedule and pool live in `gacha_banners` / `gacha_pool_entries` (seeded in `PromuseDbContext`). The `GachaBanner` asset is art only. A banner shows only when both exist with the same `bannerId` - either alone shows nothing |
 | Adding a remote-config feature flag | Three places or it is only half a switch: the field in `FeatureFlags` (shared contract), `.RequireFeature(...)` on the endpoint it guards (the server refuses), and a `RemoteConfigManager.IsOn` check on the screen (the client explains). A flag only the client obeys is a suggestion an old build ignores |
 | An event paying an item the client has no `ItemMeta` for | The server pays it and the bag holds it, but every screen shows "Item #id" with no icon. Add the meta (`DepotUISetup`'s seed list) in the same change as the event that first uses the item |
+| Changing or reusing a story line's `#id` after it shipped | The admin page corrects a line by `(story, id)`, and the game applies a correction only while the line still reads what it was written against. A new id orphans its correction; a reused id points an old one at a different line. Add lines with `Arknights/Story/Assign Missing Line Ids`, never by hand-copying an id |
+| Playing an event stage from anywhere but the event screen | Only a run started with `eventId` (`SongSession.SetReturn(ui, eventId)`) clears the stage, unlocks the next and pays the currency; the server refuses a locked stage before charging stamina |
 | Anything in `CharacterPresenter` choosing by chance | It is presentation, and the server replays a run from its seed. Pick from the event (lane, note type), never from `RunState.NextRoll()` or `UnityEngine.Random` |
 
 ## Working here

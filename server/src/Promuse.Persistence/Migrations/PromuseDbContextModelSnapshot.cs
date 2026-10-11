@@ -22,6 +22,8 @@ namespace Promuse.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.HasSequence<int>("story_patch_revisions");
+
             modelBuilder.Entity("Promuse.Persistence.Entities.Account", b =>
                 {
                     b.Property<Guid>("Id")
@@ -190,6 +192,39 @@ namespace Promuse.Persistence.Migrations
                     b.ToTable("event_purchases", null, t =>
                         {
                             t.HasCheckConstraint("ck_event_purchases_bought", "bought > 0");
+                        });
+                });
+
+            modelBuilder.Entity("Promuse.Persistence.Entities.EventStageClear", b =>
+                {
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("account_id");
+
+                    b.Property<string>("EventId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("event_id");
+
+                    b.Property<string>("StageId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("stage_id");
+
+                    b.Property<int>("Clears")
+                        .HasColumnType("integer")
+                        .HasColumnName("clears");
+
+                    b.Property<DateTimeOffset>("FirstClearedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("first_cleared_at");
+
+                    b.HasKey("AccountId", "EventId", "StageId")
+                        .HasName("pk_event_stage_clears");
+
+                    b.ToTable("event_stage_clears", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_event_stage_clears_clears", "clears > 0");
                         });
                 });
 
@@ -539,7 +574,7 @@ namespace Promuse.Persistence.Migrations
                         {
                             EventId = "resonant_dawn",
                             CreatedAt = new DateTimeOffset(new DateTime(2026, 10, 11, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
-                            Definition = "{\"title\":\"Resonant Dawn\",\"subtitle\":\"Festival event\",\"description\":\"AMIYA\\u0027s headhunting banner is open, and Rhodes Island is celebrating. Check in every day, clear the festival charts for Event Tokens, and spend them in the festival shop.\",\"startsAt\":\"2026-10-01T00:00:00+00:00\",\"endsAt\":\"2026-12-31T23:59:59+00:00\",\"isActive\":true,\"currencyItemId\":20,\"bannerId\":\"event_amiya\",\"checkIn\":[{\"day\":1,\"reward\":{\"itemId\":1,\"amount\":100}},{\"day\":2,\"reward\":{\"itemId\":2,\"amount\":2000}},{\"day\":3,\"reward\":{\"itemId\":20,\"amount\":50}},{\"day\":4,\"reward\":{\"itemId\":6,\"amount\":20}},{\"day\":5,\"reward\":{\"itemId\":1,\"amount\":200}},{\"day\":6,\"reward\":{\"itemId\":20,\"amount\":100}},{\"day\":7,\"reward\":{\"itemId\":10,\"amount\":1}}],\"missions\":[{\"missionId\":\"clear3\",\"description\":\"Clear any song 3 times\",\"goal\":\"PlaySong\",\"target\":3,\"points\":10,\"stageId\":null,\"minScore\":null},{\"missionId\":\"hard1\",\"description\":\"Clear the festival chart AIW (Hard) once\",\"goal\":\"ClearStage\",\"target\":1,\"points\":20,\"stageId\":\"stage_AIW_hard\",\"minScore\":null},{\"missionId\":\"score100k\",\"description\":\"Score 100,000 or more on any song\",\"goal\":\"ReachScore\",\"target\":1,\"points\":20,\"stageId\":null,\"minScore\":100000},{\"missionId\":\"pull10\",\"description\":\"Headhunt 10 times\",\"goal\":\"Headhunt\",\"target\":10,\"points\":10,\"stageId\":null,\"minScore\":null},{\"missionId\":\"shop1\",\"description\":\"Buy anything from the Store once\",\"goal\":\"BuyShopItem\",\"target\":1,\"points\":5,\"stageId\":null,\"minScore\":null}],\"milestones\":[{\"rewardId\":\"m20\",\"requiredPoints\":20,\"reward\":{\"itemId\":20,\"amount\":100}},{\"rewardId\":\"m40\",\"requiredPoints\":40,\"reward\":{\"itemId\":1,\"amount\":300}},{\"rewardId\":\"m65\",\"requiredPoints\":65,\"reward\":{\"itemId\":10,\"amount\":2}}],\"shop\":[{\"offerId\":\"permit\",\"sell\":{\"itemId\":10,\"amount\":1},\"price\":150,\"limit\":3},{\"offerId\":\"orundum\",\"sell\":{\"itemId\":1,\"amount\":100},\"price\":40,\"limit\":10},{\"offerId\":\"certificates\",\"sell\":{\"itemId\":8,\"amount\":10},\"price\":30,\"limit\":5},{\"offerId\":\"lmd\",\"sell\":{\"itemId\":2,\"amount\":5000},\"price\":20,\"limit\":null}],\"stages\":[{\"stageId\":\"stage_AIW\",\"currencyPerClear\":30},{\"stageId\":\"stage_AIW_hard\",\"currencyPerClear\":60}]}",
+                            Definition = "{\"title\":\"Resonant Dawn\",\"subtitle\":\"Festival event\",\"description\":\"AMIYA\\u0027s headhunting banner is open, and Rhodes Island is celebrating. Check in every day, clear the festival charts for Event Tokens, and spend them in the festival shop.\",\"startsAt\":\"2026-10-01T00:00:00+00:00\",\"endsAt\":\"2026-12-31T23:59:59+00:00\",\"isActive\":true,\"currencyItemId\":20,\"bannerId\":\"event_amiya\",\"checkIn\":[{\"day\":1,\"reward\":{\"itemId\":1,\"amount\":100}},{\"day\":2,\"reward\":{\"itemId\":2,\"amount\":2000}},{\"day\":3,\"reward\":{\"itemId\":20,\"amount\":50}},{\"day\":4,\"reward\":{\"itemId\":6,\"amount\":20}},{\"day\":5,\"reward\":{\"itemId\":1,\"amount\":200}},{\"day\":6,\"reward\":{\"itemId\":20,\"amount\":100}},{\"day\":7,\"reward\":{\"itemId\":10,\"amount\":1}}],\"missions\":[{\"missionId\":\"clear3\",\"description\":\"Clear any song 3 times\",\"goal\":\"PlaySong\",\"target\":3,\"points\":10,\"stageId\":null,\"minScore\":null},{\"missionId\":\"hard1\",\"description\":\"Clear the festival chart AIW (Hard) once\",\"goal\":\"ClearStage\",\"target\":1,\"points\":20,\"stageId\":\"stage_AIW_hard\",\"minScore\":null},{\"missionId\":\"score100k\",\"description\":\"Score 100,000 or more on any song\",\"goal\":\"ReachScore\",\"target\":1,\"points\":20,\"stageId\":null,\"minScore\":100000},{\"missionId\":\"pull10\",\"description\":\"Headhunt 10 times\",\"goal\":\"Headhunt\",\"target\":10,\"points\":10,\"stageId\":null,\"minScore\":null},{\"missionId\":\"shop1\",\"description\":\"Buy anything from the Store once\",\"goal\":\"BuyShopItem\",\"target\":1,\"points\":5,\"stageId\":null,\"minScore\":null}],\"milestones\":[{\"rewardId\":\"m20\",\"requiredPoints\":20,\"reward\":{\"itemId\":20,\"amount\":100}},{\"rewardId\":\"m40\",\"requiredPoints\":40,\"reward\":{\"itemId\":1,\"amount\":300}},{\"rewardId\":\"m65\",\"requiredPoints\":65,\"reward\":{\"itemId\":10,\"amount\":2}}],\"shop\":[{\"offerId\":\"permit\",\"sell\":{\"itemId\":10,\"amount\":1},\"price\":150,\"limit\":3},{\"offerId\":\"orundum\",\"sell\":{\"itemId\":1,\"amount\":100},\"price\":40,\"limit\":10},{\"offerId\":\"certificates\",\"sell\":{\"itemId\":8,\"amount\":10},\"price\":30,\"limit\":5},{\"offerId\":\"lmd\",\"sell\":{\"itemId\":2,\"amount\":5000},\"price\":20,\"limit\":null}],\"stages\":[{\"stageId\":\"stage_AIW\",\"currencyPerClear\":30,\"title\":\"RD-1\",\"storyBefore\":\"resonant_dawn_1_before\",\"storyAfter\":\"resonant_dawn_1_after\"},{\"stageId\":\"stage_AIW_hard\",\"currencyPerClear\":60,\"title\":\"RD-2\",\"storyBefore\":\"resonant_dawn_2_before\",\"storyAfter\":\"resonant_dawn_2_after\"}]}",
                             EndsAt = new DateTimeOffset(new DateTime(2026, 12, 31, 23, 59, 59, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
                             IsActive = true,
                             StartsAt = new DateTimeOffset(new DateTime(2026, 10, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
@@ -1253,6 +1288,11 @@ namespace Promuse.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("completed_at");
 
+                    b.Property<string>("EventId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("event_id");
+
                     b.Property<long>("Seed")
                         .HasColumnType("bigint")
                         .HasColumnName("seed");
@@ -1598,6 +1638,52 @@ namespace Promuse.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Promuse.Persistence.Entities.StoryLinePatch", b =>
+                {
+                    b.Property<string>("StoryId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("story_id");
+
+                    b.Property<string>("LineId")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("line_id");
+
+                    b.Property<string>("Original")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("original");
+
+                    b.Property<int>("Revision")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("revision")
+                        .HasDefaultValueSql("nextval('story_patch_revisions')");
+
+                    b.Property<string>("Text")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("text");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("StoryId", "LineId")
+                        .HasName("pk_story_patches");
+
+                    b.HasIndex("UpdatedBy")
+                        .HasDatabaseName("ix_story_patches_updated_by");
+
+                    b.ToTable("story_patches", (string)null);
+                });
+
             modelBuilder.Entity("Promuse.Persistence.Entities.EventCheckIn", b =>
                 {
                     b.HasOne("Promuse.Persistence.Entities.Player", null)
@@ -1636,6 +1722,16 @@ namespace Promuse.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_event_purchases_players_account_id");
+                });
+
+            modelBuilder.Entity("Promuse.Persistence.Entities.EventStageClear", b =>
+                {
+                    b.HasOne("Promuse.Persistence.Entities.Player", null)
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_event_stage_clears_players_account_id");
                 });
 
             modelBuilder.Entity("Promuse.Persistence.Entities.GachaPity", b =>
@@ -1864,6 +1960,15 @@ namespace Promuse.Persistence.Migrations
                         .HasConstraintName("fk_squad_slots_players_account_id");
 
                     b.Navigation("Player");
+                });
+
+            modelBuilder.Entity("Promuse.Persistence.Entities.StoryLinePatch", b =>
+                {
+                    b.HasOne("Promuse.Persistence.Entities.Account", null)
+                        .WithMany()
+                        .HasForeignKey("UpdatedBy")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_story_patches_accounts_updated_by");
                 });
 
             modelBuilder.Entity("Promuse.Persistence.Entities.Account", b =>

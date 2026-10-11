@@ -160,6 +160,14 @@ public static class ApiProblems
     public static ApiProblem NothingToClaim(string detail) =>
         Create(409, ErrorCodes.NothingToClaim, "Nothing to claim", detail);
 
+    public static ApiProblem StoryPatchNotFound(string storyId, string lineId) =>
+        Create(404, ErrorCodes.StoryPatchNotFound, "No such correction",
+            $"No correction is held for line '{lineId}' of '{storyId}'.");
+
+    public static ApiProblem StageLocked(string previousStageId) =>
+        Create(409, ErrorCodes.StageLocked, "Stage is locked",
+            $"Clear the stage before it ('{previousStageId}') to unlock this one.");
+
     public static ApiProblem Maintenance(string? message, DateTimeOffset? endsAt) =>
         Create(503, ErrorCodes.Maintenance, "Under maintenance",
             !string.IsNullOrWhiteSpace(message)

@@ -138,6 +138,12 @@ namespace Promuse.Contracts
         /// <summary>Today's check-in is taken, or every day of the event has been.</summary>
         public const string NothingToClaim = "NOTHING_TO_CLAIM";
 
+        /// <summary>An event stage whose previous stage has not been cleared yet.</summary>
+        public const string StageLocked = "STAGE_LOCKED";
+
+        /// <summary>No correction is held for that story line.</summary>
+        public const string StoryPatchNotFound = "STORY_PATCH_NOT_FOUND";
+
         /// <summary>
         /// The game is down for maintenance. Temporary by definition: a result that could not be
         /// sent is kept and sent afterwards, and the detail says what the operator wrote.

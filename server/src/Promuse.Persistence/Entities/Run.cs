@@ -34,6 +34,12 @@ public class Run
     /// </summary>
     public string? CharacterId { get; set; }
 
+    /// <summary>
+    /// 活动关卡 / The event this run was played as a stage of, from the event screen; null for
+    /// every other run. Only such a run pays the event currency and clears the stage.
+    /// </summary>
+    public string? EventId { get; set; }
+
     /// <summary>What entering cost, recorded so a refund knows the amount.</summary>
     public int StaminaSpent { get; set; }
 

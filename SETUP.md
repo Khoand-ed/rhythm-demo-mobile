@@ -110,14 +110,54 @@ within five seconds on any other.
 
 The same page's **Events** tab creates and edits events. An event is built from optional
 modules - check-in days, missions with point milestones, an event currency with its own shop,
-event stages that pay that currency per clear, and a headhunting banner to link to - so a
-check-in-only event and a full festival are the same thing with different parts filled in.
-The database starts with one, `resonant_dawn`, using every module.
+event stages, and a headhunting banner to link to - so a check-in-only event and a full
+festival are the same thing with different parts filled in. The database starts with one,
+`resonant_dawn`, using every module.
 
-Players reach events from the little news screen on Home, through the mode select screen
-(STORY is shown as coming soon). The screens are built by `Arknights/Events/Build Event UI`,
-which also creates the Event Token item (id 20). An event's currency and rewards can be any
-item id, but only items with an `ItemMeta` under `Resources/Meta/Item` show a name and icon.
+An event's stages are its own: played from the event screen, in the order listed - each opens
+once the one before it is cleared there - and each can carry a story before it (played the first
+time it is entered) and after it (played after its first clear). Only a run started from the
+event screen clears a stage and pays the currency; the same song played from the song list does
+not.
+
+Home's **Operation** tile opens the mode select screen: **EVENT** leads to the events, **STORY**
+to the main campaign's stages (the song list). The little news screen on Home goes straight to
+the event screen. The screens are built by `Arknights/Events/Build Event UI`, which also creates
+the Event Token item (id 20) and points the Operation tile at the mode select. An event's
+currency and rewards can be any item id, but only items with an `ItemMeta` under
+`Resources/Meta/Item` show a name and icon.
+
+### Stories
+
+The dialogue around a stage is a plain text file, `Assets/Arknights/Resources/Story/<id>.story`,
+written in any text editor and shipped inside the game:
+
+```
+// a comment
+@title Resonant Dawn - RD-1        the card shown before the first line
+@bg rhodes_deck                    background from Story/Backgrounds; "none" for none
+
+AMIYA: Doctor, the signal is back.   #a1f3
+Radio: ...anyone receiving?          #b2c4
+> The wind carries a faint melody.   #c9e1
+```
+
+A speaker that is an operator id shows that operator's name and portrait; any other name is shown
+as written; `>` is narration. The `#id` after a line is how it is corrected later, so **never change
+an id once the story has shipped** - `Arknights/Story/Assign Missing Line Ids` writes one on every
+line that has none. Unity reports a broken script in the Console the moment it is saved, and
+`Arknights/Story/Story Preview...` lists every script with its problems and plays one in Play Mode.
+`Arknights/Story/Build Story UI` builds the dialogue screen and three placeholder backgrounds;
+replace a PNG in `Story/Backgrounds` with real art of the same name.
+
+A typo found after release is fixed on the admin page's **Stories** tab, without a build: open the
+script file there, correct the line, save. The game picks it up the next time a story plays. A
+correction only applies while the game's own line still reads what it was written against, so
+once a build carries the fix it stops applying by itself.
+
+Point an event stage at a story by its id in the Events tab (**Story before** / **Story after**).
+Whether a player has seen a story is remembered on the device; the stage's STORY button replays
+it.
 
 ### Four red errors on boot are expected
 
@@ -167,7 +207,7 @@ above and for device builds.
 
 | Menu | What lives there |
 |---|---|
-| **`Arknights/`** | Content pipeline — AssetBundles, placeholder art, audio import, local character art, and the Home / Depot screen builders |
+| **`Arknights/`** | Content pipeline — AssetBundles, placeholder art, audio import, local character art, the Home / Depot / event screen builders, and the story tools |
 | **`Beatmap/`** | Charting — `Beatmap Studio...` and `Timeline Editor...` author charts; `Import All Beatmaps` turns the JSON under `Assets/Beatmaps/` into `SongChart` assets |
 | **`Tools/Rhythm/`** | Gameplay scene setup — note system, HUD, hit feedback, character stage, skip button, song-select wiring, loading screen |
 
@@ -229,6 +269,7 @@ The same checks CI runs, runnable locally:
 ```bash
 python ci/check_meta.py              # every asset has a .meta, no orphans, no duplicate GUIDs
 python ci/check_beatmaps.py --all --strict
+python ci/check_stories.py --strict  # every story script parses, has line ids, names real backgrounds
 python ci/check_repo_hygiene.py      # stray build output, LFS integrity, conflict markers
 ```
 

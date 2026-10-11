@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using Data.Events;
 using Data.Item;
+using Data.Story;
 using DG.Tweening;
 using Manager;
 using Promuse.Contracts.Events;
@@ -16,6 +17,10 @@ using UnityEngine.UI;
 
 // The event screen: the events on the left, the chosen one on the right with a tab for each of
 // its modules - overview, check-in, missions and milestones, shop, stages.
+//
+// 活动关卡 / The stages are the event's own: played in order, each unlocking when the one before
+// it is cleared here, with a story before the stage the first time it is entered and one after
+// its first clear. Both can be watched again from the stage's STORY button.
 //
 // Bridge, not Arknights: the stages tab hands a SongChart to CharSelectUI, and both live in the
 // default assembly, which an asmdef can never reference.
@@ -88,6 +93,13 @@ public class EventUI : UIBase
     private readonly List<RectTransform> eventButtons = new List<RectTransform>();
     private readonly List<RectTransform> tabs = new List<RectTransform>();
     private readonly Dictionary<RectTransform, List<RectTransform>> pools = new Dictionary<RectTransform, List<RectTransform>>();
+
+    /// <summary>
+    /// 打完再演 / The stage just played from here, kept across the song: when the event screen comes
+    /// back and the stage now reads cleared, its after-story plays. Static, because this screen is
+    /// rebuilt around the song only if it was destroyed - and the song is a different scene.
+    /// </summary>
+    private static (string EventId, string StageId)? playedStage;
 
     private EventView view;
     private Tab tab = Tab.Overview;
@@ -179,6 +191,7 @@ public class EventUI : UIBase
 
         note.text = "";
         Draw(result.Value);
+        PlayAfterStory();
     }
 
     // ---------------------------------------------------------------------- draw
@@ -396,22 +409,53 @@ public class EventUI : UIBase
     private void DrawStages()
     {
         int? currency = view.Definition.CurrencyItemId;
-        List<RectTransform> rows = Pool(stageList, rowTemplate, view.Definition.Stages.Count);
+        IReadOnlyList<EventStageState> stages = view.Stages ?? new List<EventStageState>();
+        List<RectTransform> rows = Pool(stageList, rowTemplate, stages.Count);
 
-        for (int i = 0; i < view.Definition.Stages.Count; i++)
+        for (int i = 0; i < stages.Count; i++)
         {
-            EventStage stage = view.Definition.Stages[i];
+            EventStageState state = stages[i];
+            EventStage stage = state.Stage;
             SongChart chart = Chart(stage.StageId);
 
-            string title = chart != null
+            string song = chart != null
                 ? (string.IsNullOrEmpty(chart.songName) ? chart.songId : chart.songName) + "   LV." + chart.difficulty
                 : stage.StageId;
+            string title = string.IsNullOrEmpty(stage.Title) ? song : stage.Title + "   " + song;
 
-            Row(rows[i], currency.HasValue ? Icon(currency.Value) : null, title,
-                chart != null ? $"{chart.notes.Count} notes" : "Not in this build",
+            string detail = chart == null ? "Not in this build"
+                : !state.IsUnlocked ? "Clear the stage before it to unlock"
+                : state.IsCleared ? "CLEARED"
+                : $"{chart.notes.Count} notes";
+
+            Row(rows[i], currency.HasValue ? Icon(currency.Value) : null, title, detail,
                 "+" + stage.CurrencyPerClear.ToString("N0", CultureInfo.InvariantCulture) + " per clear",
-                "PLAY", chart != null && view.IsOpen, () => Play(chart));
+                state.IsUnlocked ? "PLAY" : "LOCKED",
+                chart != null && view.IsOpen && state.IsUnlocked,
+                () => Play(state, chart));
+
+            StoryButton(rows[i], state);
         }
+    }
+
+    /// <summary>
+    /// The row's STORY button: watch the stage's stories again - the one before it once the stage is
+    /// open, the one after it once cleared. Only stage rows have stories; every other row hides it.
+    /// </summary>
+    private void StoryButton(RectTransform row, EventStageState state)
+    {
+        Transform found = row.Find("Story");
+        if (found == null) return;
+
+        string before = state != null && state.IsUnlocked ? state.Stage.StoryBefore : null;
+        string after = state != null && state.IsCleared ? state.Stage.StoryAfter : null;
+        bool any = StoryManager.Exists(before) || StoryManager.Exists(after);
+
+        found.gameObject.SetActive(any);
+        if (any) MakeRoom(row, ((RectTransform)found).sizeDelta.x + 12f);
+        Button button = found.GetComponent<Button>();
+        button.onClick.RemoveAllListeners();
+        if (any) button.onClick.AddListener(() => StoryUI.Play(before, () => StoryUI.Play(after, null)));
     }
 
     // ----------------------------------------------------------------- widgets
@@ -447,6 +491,28 @@ public class EventUI : UIBase
 
         button.onClick.RemoveAllListeners();
         if (enabled) button.onClick.AddListener(() => press());
+
+        // 只有关卡有剧情 / Shown again by DrawStages for the stage rows that have a story.
+        Transform story = row.Find("Story");
+        if (story != null) story.gameObject.SetActive(false);
+        MakeRoom(row, 0f);
+    }
+
+    /// <summary>
+    /// Moves the right-hand figure, the title and the detail left by <paramref name="by"/>, from where
+    /// the template has them, so a STORY button beside the action button does not cover them.
+    /// </summary>
+    private void MakeRoom(RectTransform row, float by)
+    {
+        foreach (string name in new[] { "Right", "Title", "Detail" })
+        {
+            RectTransform mine = row.Find(name) as RectTransform;
+            RectTransform home = rowTemplate.Find(name) as RectTransform;
+            if (mine == null || home == null) continue;
+
+            if (name == "Right") mine.anchoredPosition = home.anchoredPosition - new Vector2(by, 0f);
+            else mine.offsetMax = home.offsetMax - new Vector2(by, 0f);
+        }
     }
 
     private void Cell(RectTransform cell, string header, EventReward reward, string state, Color frame,
@@ -533,12 +599,13 @@ public class EventUI : UIBase
     }
 
     /// <summary>
-    /// Plays an event stage as a ranked run - the currency is paid by the server when the run
-    /// closes - and comes back here afterwards rather than to the song list.
+    /// Plays an event stage as a ranked run of this event - the server clears the stage and pays the
+    /// currency when the run closes - and comes back here afterwards rather than to the song list.
+    /// The stage's before-story plays first, the first time.
     /// </summary>
-    private void Play(SongChart chart)
+    private void Play(EventStageState state, SongChart chart)
     {
-        if (chart == null) return;
+        if (chart == null || view == null) return;
 
         if (!RemoteConfigManager.Inst().IsOn(f => f.Ranked))
         {
@@ -547,8 +614,39 @@ public class EventUI : UIBase
             return;
         }
 
-        SongSession.SetReturn(UIName);
-        CharSelectUI.Show(chart, PlayMode.Ranked);
+        string eventId = view.EventId;
+        playedStage = (eventId, state.Stage.StageId);
+
+        string before = state.Stage.StoryBefore;
+        bool first = !string.IsNullOrEmpty(before) && !StoryManager.Inst().HasSeen(before);
+
+        StoryUI.Play(first ? before : null, () =>
+        {
+            SongSession.SetReturn(UIName, eventId);
+            CharSelectUI.Show(chart, PlayMode.Ranked);
+        });
+    }
+
+    /// <summary>
+    /// Back from a stage played here: if it now reads cleared and its after-story has not been seen
+    /// on this device, that story plays over the event screen.
+    /// </summary>
+    private void PlayAfterStory()
+    {
+        if (playedStage == null || view == null || view.EventId != playedStage.Value.EventId) return;
+        string stageId = playedStage.Value.StageId;
+
+        EventStageState state = null;
+        foreach (EventStageState s in view.Stages ?? new List<EventStageState>())
+        {
+            if (s.Stage.StageId == stageId) state = s;
+        }
+
+        if (state == null || !state.IsCleared) return;
+
+        playedStage = null;
+        string after = state.Stage.StoryAfter;
+        if (!string.IsNullOrEmpty(after) && !StoryManager.Inst().HasSeen(after)) StoryUI.Play(after, null);
     }
 
     // ------------------------------------------------------------------ lookups

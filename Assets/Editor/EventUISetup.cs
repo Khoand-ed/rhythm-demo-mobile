@@ -8,14 +8,16 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 活动界面 / Builds the event screens and the way into them:
-///   - ModeSelectUI: EVENT and STORY (coming soon), opened from Home's news screen,
+/// 活动界面 / Builds the event screens and the ways into them:
+///   - ModeSelectUI: EVENT and STORY, opened from Home's Operation tile; STORY opens the song list,
 ///   - EventUI: the event list, a tab per module, and the templates the screen clones,
-///   - HomeEventTile on HomeUI's NewsPanel, so the little TV shows the running event,
+///   - HomeEventTile on HomeUI's NewsPanel, so the little TV shows the running event and opens the
+///     event screen directly,
 ///   - the Event Token item the seeded event pays in.
 ///
-/// 找到就不动 / Find-or-create: a prefab that exists is kept as it is, and the Home hook is only
-/// added where it is missing. Rebuild Event UI deletes the two prefabs and builds them again.
+/// 找到就不动 / Find-or-create: a prefab that exists is kept as it is, and only what a later
+/// version added is put into it - the STORY card's new face, the stage rows' STORY button, the
+/// Operation tile's target. Rebuild Event UI deletes the two prefabs and builds them again.
 ///
 /// Same palette and header as the headhunting and song screens, so leaving any of them is the same
 /// gesture in the same corner.
@@ -53,7 +55,10 @@ public static class EventUISetup
         Directory.CreateDirectory(UiPrefabDir);
         done.Add(BuildIfMissing(ModeSelectUI.UIName, BuildModeSelect));
         done.Add(BuildIfMissing(EventUI.UIName, BuildEventScreen));
+        done.Add(UpdateStoryCard());
+        done.Add(AddStageStoryButton());
         done.Add(HookHome());
+        done.Add(HookOperationTile());
 
         AssetDatabase.SaveAssets();
         Debug.Log("[EventUISetup] " + string.Join("\n  ", done));
@@ -101,19 +106,122 @@ public static class EventUISetup
         ui.eventDetail = NewText("EventDetail", eventCard, 24f, Dim, TextAlignmentOptions.Center);
         Place(ui.eventDetail.rectTransform, Center, Center, Center, new Vector2(0f, -120f), new Vector2(580f, 40f));
 
-        // 剧情卡 / The story card - a later update; it says so rather than being missing.
-        RectTransform storyCard = Card(rect, "StoryCard", new Vector2(350f, -30f), Slab, "STORY", out ui.storyCard);
-        storyCard.gameObject.AddComponent<CanvasGroup>().alpha = 0.7f;
-        TextMeshProUGUI soon = NewText("ComingSoon", storyCard, 30f, Gold, TextAlignmentOptions.Center);
-        Place(soon.rectTransform, Center, Center, Center, new Vector2(0f, -40f), new Vector2(580f, 60f));
-        soon.fontStyle = FontStyles.Bold;
-        soon.characterSpacing = 4f;
-        soon.text = "COMING SOON";
-        TextMeshProUGUI pitch = NewText("Pitch", storyCard, 24f, Dim, TextAlignmentOptions.Center);
-        Place(pitch.rectTransform, Center, Center, Center, new Vector2(0f, -120f), new Vector2(560f, 80f));
-        pitch.text = "Chapters, dialogue, stages and a shop of its own.";
+        // 剧情卡 / The story card: the main campaign, which opens the song list.
+        RectTransform storyCard = Card(rect, "StoryCard", new Vector2(350f, -30f), Gold, "STORY", out ui.storyCard);
+        StoryCardFace(storyCard);
 
         return root;
+    }
+
+    private const string StoryCardTitle = "MAIN CAMPAIGN";
+
+    /// <summary>The words on the STORY card, under its label - built new, or put on an older card.</summary>
+    private static void StoryCardFace(RectTransform storyCard)
+    {
+        TextMeshProUGUI title = NewText("StoryTitle", storyCard, 36f, Color.white, TextAlignmentOptions.Center);
+        Place(title.rectTransform, Center, Center, Center, new Vector2(0f, -40f), new Vector2(580f, 100f));
+        title.fontStyle = FontStyles.Bold;
+        title.text = StoryCardTitle;
+        TextMeshProUGUI detail = NewText("StoryDetail", storyCard, 24f, Dim, TextAlignmentOptions.Center);
+        Place(detail.rectTransform, Center, Center, Center, new Vector2(0f, -120f), new Vector2(560f, 40f));
+        detail.text = "Every stage, played in order.";
+    }
+
+    /// <summary>
+    /// 旧的"即将推出" / A STORY card built before the campaign was playable still says COMING SOON
+    /// and sits dimmed: give it the campaign's face. A card already showing it is left alone.
+    /// </summary>
+    private static string UpdateStoryCard()
+    {
+        string path = $"{UiPrefabDir}/{ModeSelectUI.UIName}.prefab";
+        if (AssetDatabase.LoadAssetAtPath<GameObject>(path) == null) return "STORY card: no prefab";
+
+        GameObject contents = PrefabUtility.LoadPrefabContents(path);
+        try
+        {
+            Transform card = FindDeep(contents.transform, "StoryCard");
+            if (card == null) return "STORY card: not found, left alone";
+            if (card.Find("StoryTitle") != null) return "STORY card: already the campaign";
+
+            foreach (string old in new[] { "ComingSoon", "Pitch" })
+            {
+                Transform node = card.Find(old);
+                if (node != null) Object.DestroyImmediate(node.gameObject);
+            }
+
+            CanvasGroup dim = card.GetComponent<CanvasGroup>();
+            if (dim != null) dim.alpha = 1f;
+            Transform bar = card.Find("Bar");
+            if (bar != null) bar.GetComponent<UnityEngine.UI.Image>().color = Gold;
+
+            StoryCardFace((RectTransform)card);
+            PrefabUtility.SaveAsPrefabAsset(contents, path);
+            return "STORY card: now opens the main campaign";
+        }
+        finally
+        {
+            PrefabUtility.UnloadPrefabContents(contents);
+        }
+    }
+
+    /// <summary>The stage rows' STORY button, added to an EventUI built before it existed.</summary>
+    private static string AddStageStoryButton()
+    {
+        string path = $"{UiPrefabDir}/{EventUI.UIName}.prefab";
+        if (AssetDatabase.LoadAssetAtPath<GameObject>(path) == null) return "Stage STORY button: no prefab";
+
+        GameObject contents = PrefabUtility.LoadPrefabContents(path);
+        try
+        {
+            EventUI ui = contents.GetComponent<EventUI>();
+            if (ui == null || ui.rowTemplate == null) return "Stage STORY button: no row template, left alone";
+            if (ui.rowTemplate.Find("Story") != null) return "Stage STORY button: already there";
+
+            StoryButton(ui.rowTemplate);
+            PrefabUtility.SaveAsPrefabAsset(contents, path);
+            return "Stage STORY button: added to the row template";
+        }
+        finally
+        {
+            PrefabUtility.UnloadPrefabContents(contents);
+        }
+    }
+
+    /// <summary>
+    /// Watch a stage's story again. Sits left of the action button; EventUI moves the right-hand
+    /// figure and the title over to make room on the rows that show it.
+    /// </summary>
+    private static void StoryButton(RectTransform row)
+    {
+        Button story = TextButton("Story", row, MiddleRight, new Vector2(-16f - 236f - 12f, 0f), new Vector2(140f, 60f), "STORY", Slab, out _);
+        story.gameObject.SetActive(false);
+    }
+
+    /// <summary>
+    /// 作战 → 选模式 / Home's Operation tile opens the mode select screen. It used to open the song
+    /// list directly, and Tools/Rhythm/Wire Song Flow set it that way - both now agree.
+    /// </summary>
+    private static string HookOperationTile()
+    {
+        string homePath = UiPrefabDir + "/HomeUI.prefab";
+        if (AssetDatabase.LoadAssetAtPath<GameObject>(homePath) == null) return "Operation tile: no HomeUI prefab";
+
+        GameObject contents = PrefabUtility.LoadPrefabContents(homePath);
+        try
+        {
+            Transform tile = FindDeep(contents.transform, "OperationTile");
+            OpenUIButton open = tile != null ? tile.GetComponent<OpenUIButton>() : null;
+            if (open == null) return "Operation tile: no OpenUIButton - run Tools/Rhythm/Wire Song Flow first";
+            if (open.uiName == ModeSelectUI.UIName) return "Operation tile: already opens the mode select";
+
+            open.uiName = ModeSelectUI.UIName;
+            PrefabUtility.SaveAsPrefabAsset(contents, homePath);
+            return "Operation tile: now opens the mode select";
+        }
+        finally
+        {
+            PrefabUtility.UnloadPrefabContents(contents);
+        }
     }
 
     private static RectTransform Card(RectTransform parent, string name, Vector2 position, Color bar, string label, out Button button)
@@ -343,6 +451,7 @@ public static class EventUISetup
         right.fontStyle = FontStyles.Bold;
 
         TextButton("Action", row, MiddleRight, new Vector2(-16f, 0f), new Vector2(236f, 60f), "CLAIM", Accent, out _);
+        StoryButton(row);
         return row;
     }
 

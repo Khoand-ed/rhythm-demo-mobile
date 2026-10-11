@@ -53,6 +53,22 @@ namespace UI {
             return ui;
         }
 
+        /// <summary>
+        /// The screens open right now, bottom to top - what a screen opened over others needs to
+        /// put back when it is rebuilt, e.g. after a song (see BootIntent.Beneath).
+        /// </summary>
+        public List<string> OpenScreens() {
+            List<UIBase> open = new List<UIBase>();
+            foreach (UIBase ui in uiDictionary.Values) {
+                if (ui != null && ui.state == UIState.Show) open.Add(ui);
+            }
+            open.Sort((a, b) => a.transform.GetSiblingIndex().CompareTo(b.transform.GetSiblingIndex()));
+
+            List<string> names = new List<string>();
+            foreach (UIBase ui in open) names.Add(ui.Name);
+            return names;
+        }
+
         public void Update(string type) {
             if (uiDictionary.TryGetValue(type, out UIBase ui)) ui.UpdateView();
         }

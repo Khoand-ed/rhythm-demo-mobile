@@ -16,6 +16,7 @@ using Promuse.Api.LiveOps;
 using Promuse.Api.Missions;
 using Promuse.Api.Players;
 using Promuse.Api.Runs;
+using Promuse.Api.Stories;
 using Microsoft.Extensions.Options;
 using Promuse.Persistence;
 
@@ -90,6 +91,7 @@ builder.Services.AddScoped<RemoteConfigService>();
 builder.Services.AddScoped<EventProgress>();
 builder.Services.AddScoped<EventService>();
 builder.Services.AddScoped<EventAdminService>();
+builder.Services.AddScoped<StoryPatchService>();
 
 builder.Services.AddOptions<GameDataOptions>()
     .Bind(builder.Configuration.GetSection(GameDataOptions.SectionName));
@@ -251,6 +253,7 @@ app.MapLeaderboardEndpoints();
 app.MapGachaEndpoints();
 app.MapRemoteConfigEndpoints();
 app.MapEventEndpoints();
+app.MapStoryEndpoints();
 
 
 app.Run();

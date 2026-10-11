@@ -59,6 +59,9 @@ public class EventRulesTests
     [InlineData("milestones[0].requiredPoints")]
     [InlineData("currencyItemId")]
     [InlineData("stages[0].stageId")]
+    [InlineData("stages[0].title")]
+    [InlineData("stages[0].storyBefore")]
+    [InlineData("stages[0].storyAfter")]
     [InlineData("bannerId")]
     [InlineData("missions")]
     public void Each_broken_rule_names_its_field(string field)
@@ -73,6 +76,9 @@ public class EventRulesTests
             "milestones[0].requiredPoints" => d with { Milestones = [new("m1", 999, new(10, 1))] },
             "currencyItemId" => d with { CurrencyItemId = null },
             "stages[0].stageId" => d with { Stages = [new("no_such_chart", 10)] },
+            "stages[0].title" => d with { Stages = [new("stage_AIW", 10, new string('x', 25))] },
+            "stages[0].storyBefore" => d with { Stages = [new("stage_AIW", 10, null, "Not An Id")] },
+            "stages[0].storyAfter" => d with { Stages = [new("stage_AIW", 10, null, null, "../secret")] },
             "bannerId" => d with { BannerId = "no_such_banner" },
             "missions" => d with { Missions = [d.Missions[0], d.Missions[0]] },
             _ => throw new ArgumentOutOfRangeException(nameof(field)),
@@ -95,6 +101,26 @@ public class EventRulesTests
 
         // 没通过审核的分不算 / A score the server could not vouch for reaches nothing.
         Assert.Equal(["any", "one"], Hits("stage_001", 6000, accepted: false));
+    }
+
+    [Fact]
+    public void Stages_unlock_one_after_another()
+    {
+        EventDefinition d = Valid() with
+        {
+            Stages = [new("stage_001", 1), new("stage_AIW", 1), new("stage_AIW_hard", 1)],
+        };
+
+        bool[] Open(params string[] cleared) =>
+            [.. Enumerable.Range(0, d.Stages.Count).Select(i => EventRules.IsUnlocked(d, i, cleared.ToHashSet()))];
+
+        Assert.Equal([true, false, false], Open());
+        Assert.Equal([true, true, false], Open("stage_001"));
+        Assert.Equal([true, true, true], Open("stage_001", "stage_AIW"));
+
+        // 只看前一关 / Only the stage right before counts: the third opens on the second alone.
+        Assert.Equal([true, false, true], Open("stage_AIW"));
+        Assert.False(EventRules.IsUnlocked(d, 3, new HashSet<string>()));
     }
 
     [Fact]
