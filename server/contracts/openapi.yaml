@@ -2,12 +2,12 @@ openapi: 3.1.0
 
 info:
   title: Promuse Backend API
-  version: 1.0.0-draft.7
+  version: 1.0.0-draft.8
   summary: Authentication and player state for the Promuse mobile rhythm game.
   description: |
     **Phase 1** authentication, **Phase 2** player state, **Phase 3** the economy -
     shop, runs and missions, **Phase 4** scored results and leaderboards, then headhunting
-    (gacha) with the server rolling the dice, and remote config for live operations. Each written
+    (gacha) with the server rolling the dice, remote config and live events. Each written
     before its implementation, so the client and the server are built against one
     agreement rather than the client being written against whatever the server happened
     to return.
@@ -98,6 +98,13 @@ tags:
       Changing remote config. Administrator accounts only - the flag is on the account and read
       on every request, never carried in the token. Every save is a new version; nothing is
       edited in place, so the history is the audit log and a rollback is a new version too.
+  - name: events
+    description: |
+      Live events, built from optional modules: check-in days, missions with milestones, an
+      event currency with its own shop, event stages that pay the currency, and a headhunting
+      banner to point at. An event with only check-in days is a check-in event; one with all of
+      them is a festival. Missions count only while the event is open, and every action that
+      hands something out is idempotent and transactional.
   - name: missions
     description: |
       The two mission boards. Phase 3.
@@ -982,6 +989,314 @@ paths:
                 $ref: '#/components/schemas/Problem'
         '422':
           $ref: '#/components/responses/ValidationFailed'
+
+  /v1/events:
+    get:
+      tags: [events]
+      operationId: getEvents
+      summary: Events running now or starting later, ending soonest first.
+      responses:
+        '200':
+          description: The events.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /v1/events/{eventId}:
+    get:
+      tags: [events]
+      operationId: getEvent
+      summary: One event with the caller's progress in it.
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The event.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventView'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: '`EVENT_NOT_FOUND` - unknown, or switched off.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
+  /v1/events/{eventId}/check-in:
+    post:
+      tags: [events]
+      operationId: checkIn
+      summary: Claim the next day's check-in reward - one per server day, days in order.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - name: eventId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: Done; what was given, the event as it now stands, and the whole player.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventActionResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: '`EVENT_NOT_FOUND`, or no such mission / milestone / offer in it.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: |
+            `EVENT_CLOSED`, `NOTHING_TO_CLAIM`, `MISSION_NOT_COMPLETE`, `ALREADY_CLAIMED`,
+            `NOT_ENOUGH_POINTS`, `INSUFFICIENT_FUNDS` or `OUT_OF_STOCK`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /v1/events/{eventId}/missions/{missionId}/claim:
+    post:
+      tags: [events]
+      operationId: claimEventMission
+      summary: Claim a finished event mission's points.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - name: eventId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: missionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: Done; what was given, the event as it now stands, and the whole player.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventActionResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: '`EVENT_NOT_FOUND`, or no such mission / milestone / offer in it.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: |
+            `EVENT_CLOSED`, `NOTHING_TO_CLAIM`, `MISSION_NOT_COMPLETE`, `ALREADY_CLAIMED`,
+            `NOT_ENOUGH_POINTS`, `INSUFFICIENT_FUNDS` or `OUT_OF_STOCK`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /v1/events/{eventId}/milestones/{rewardId}/claim:
+    post:
+      tags: [events]
+      operationId: claimEventMilestone
+      summary: Claim a milestone reward once enough points are held.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - name: eventId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: rewardId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: Done; what was given, the event as it now stands, and the whole player.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventActionResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: '`EVENT_NOT_FOUND`, or no such mission / milestone / offer in it.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: |
+            `EVENT_CLOSED`, `NOTHING_TO_CLAIM`, `MISSION_NOT_COMPLETE`, `ALREADY_CLAIMED`,
+            `NOT_ENOUGH_POINTS`, `INSUFFICIENT_FUNDS` or `OUT_OF_STOCK`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /v1/events/{eventId}/shop/{offerId}/purchase:
+    post:
+      tags: [events]
+      operationId: buyEventOffer
+      summary: Buy from the event shop with the event currency, within the offer's limit.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - name: eventId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: offerId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventPurchaseRequest'
+      responses:
+        '201':
+          description: Done; what was given, the event as it now stands, and the whole player.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventActionResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: '`EVENT_NOT_FOUND`, or no such mission / milestone / offer in it.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: |
+            `EVENT_CLOSED`, `NOTHING_TO_CLAIM`, `MISSION_NOT_COMPLETE`, `ALREADY_CLAIMED`,
+            `NOT_ENOUGH_POINTS`, `INSUFFICIENT_FUNDS` or `OUT_OF_STOCK`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /v1/admin/events:
+    get:
+      tags: [admin]
+      operationId: getAdminEvents
+      summary: Every event, including switched-off and ended ones, with its version.
+      responses:
+        '200':
+          description: The events.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminEventList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: '`FORBIDDEN`.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
+  /v1/admin/events/catalog:
+    get:
+      tags: [admin]
+      operationId: getEventCatalog
+      summary: The charts and banners an event may point at.
+      responses:
+        '200':
+          description: The catalog.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventCatalog'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: '`FORBIDDEN`.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
+  /v1/admin/events/{eventId}:
+    put:
+      tags: [admin]
+      operationId: upsertEvent
+      summary: Create an event (no If-Match) or save a new version of it (If-Match).
+      description: |
+        Events are never deleted - switching one off hides it and keeps everyone's progress.
+        The definition is validated whole: ids, dates, every module, that milestones are
+        reachable with the points the missions pay, and that stages and the banner exist.
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[a-z0-9_]{1,64}$'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventUpsertRequest'
+      responses:
+        '200':
+          description: Saved as a new version.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminEvent'
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminEvent'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: '`FORBIDDEN`.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
 
   /v1/missions:
     get:
@@ -2195,3 +2510,314 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ConfigRevision'
+
+    EventGoal:
+      type: string
+      enum: [PlaySong, BuyShopItem, ClearStage, ReachScore, Headhunt]
+      description: |
+        PlaySong - any clear. ClearStage - a clear of the mission's stageId. ReachScore - an
+        accepted result at or above minScore (on stageId if set). BuyShopItem - a store checkout.
+        Headhunt - pulls, a ten-pull counting ten.
+
+    EventReward:
+      type: object
+      required: [itemId, amount]
+      properties:
+        itemId:
+          type: integer
+        amount:
+          type: integer
+          minimum: 1
+
+    CheckInDay:
+      type: object
+      required: [day, reward]
+      properties:
+        day:
+          type: integer
+          minimum: 1
+        reward:
+          $ref: '#/components/schemas/EventReward'
+
+    EventMission:
+      type: object
+      required: [missionId, description, goal, target, points]
+      properties:
+        missionId:
+          type: string
+        description:
+          type: string
+        goal:
+          $ref: '#/components/schemas/EventGoal'
+        target:
+          type: integer
+          minimum: 1
+        points:
+          type: integer
+          minimum: 0
+        stageId:
+          type: [string, 'null']
+        minScore:
+          type: [integer, 'null']
+
+    EventMilestone:
+      type: object
+      required: [rewardId, requiredPoints, reward]
+      properties:
+        rewardId:
+          type: string
+        requiredPoints:
+          type: integer
+          minimum: 1
+        reward:
+          $ref: '#/components/schemas/EventReward'
+
+    EventShopOffer:
+      type: object
+      required: [offerId, sell, price]
+      properties:
+        offerId:
+          type: string
+        sell:
+          $ref: '#/components/schemas/EventReward'
+        price:
+          type: integer
+          minimum: 1
+          description: In the event currency.
+        limit:
+          type: [integer, 'null']
+          description: Per player over the whole event; null for no limit.
+
+    EventStage:
+      type: object
+      required: [stageId, currencyPerClear]
+      properties:
+        stageId:
+          type: string
+        currencyPerClear:
+          type: integer
+          minimum: 1
+
+    EventDefinition:
+      type: object
+      required: [title, startsAt, endsAt, isActive, checkIn, missions, milestones, shop, stages]
+      properties:
+        title:
+          type: string
+          maxLength: 60
+        subtitle:
+          type: [string, 'null']
+        description:
+          type: [string, 'null']
+          maxLength: 500
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+        isActive:
+          type: boolean
+        currencyItemId:
+          type: [integer, 'null']
+          description: Required when the event has a shop or stages.
+        bannerId:
+          type: [string, 'null']
+        checkIn:
+          type: array
+          items:
+            $ref: '#/components/schemas/CheckInDay'
+        missions:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventMission'
+        milestones:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventMilestone'
+        shop:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventShopOffer'
+        stages:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventStage'
+
+    EventSummary:
+      type: object
+      required: [eventId, title, startsAt, endsAt, isOpen]
+      properties:
+        eventId:
+          type: string
+        title:
+          type: string
+        subtitle:
+          type: [string, 'null']
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+        isOpen:
+          type: boolean
+
+    EventList:
+      type: object
+      required: [events, serverTime]
+      properties:
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventSummary'
+        serverTime:
+          $ref: '#/components/schemas/ServerTime'
+
+    CheckInState:
+      type: object
+      required: [claimed, canClaimToday, nextDayAt]
+      properties:
+        claimed:
+          type: integer
+        canClaimToday:
+          type: boolean
+        nextDayAt:
+          type: string
+          format: date-time
+
+    EventMissionState:
+      type: object
+      required: [mission, progress, isComplete, isClaimed]
+      properties:
+        mission:
+          $ref: '#/components/schemas/EventMission'
+        progress:
+          type: integer
+        isComplete:
+          type: boolean
+        isClaimed:
+          type: boolean
+
+    EventMilestoneState:
+      type: object
+      required: [milestone, isClaimed, isClaimable]
+      properties:
+        milestone:
+          $ref: '#/components/schemas/EventMilestone'
+        isClaimed:
+          type: boolean
+        isClaimable:
+          type: boolean
+
+    EventShopState:
+      type: object
+      required: [offer, bought]
+      properties:
+        offer:
+          $ref: '#/components/schemas/EventShopOffer'
+        bought:
+          type: integer
+        remaining:
+          type: [integer, 'null']
+
+    EventView:
+      type: object
+      required: [eventId, definition, isOpen, currencyBalance, points, missions, milestones, shop, serverTime]
+      properties:
+        eventId:
+          type: string
+        definition:
+          $ref: '#/components/schemas/EventDefinition'
+        isOpen:
+          type: boolean
+        currencyBalance:
+          type: integer
+        checkIn:
+          oneOf:
+            - $ref: '#/components/schemas/CheckInState'
+            - type: 'null'
+        points:
+          type: integer
+        missions:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventMissionState'
+        milestones:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventMilestoneState'
+        shop:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventShopState'
+        serverTime:
+          $ref: '#/components/schemas/ServerTime'
+
+    EventActionResult:
+      type: object
+      required: [granted, event, player]
+      properties:
+        granted:
+          type: array
+          items:
+            $ref: '#/components/schemas/ItemStack'
+        event:
+          $ref: '#/components/schemas/EventView'
+        player:
+          $ref: '#/components/schemas/PlayerState'
+
+    EventPurchaseRequest:
+      type: object
+      required: [quantity]
+      properties:
+        quantity:
+          type: integer
+          minimum: 1
+          maximum: 99
+
+    AdminEvent:
+      type: object
+      required: [eventId, version, definition, updatedAt]
+      properties:
+        eventId:
+          type: string
+        version:
+          type: integer
+          description: The If-Match for the next save.
+        definition:
+          $ref: '#/components/schemas/EventDefinition'
+        updatedAt:
+          type: string
+          format: date-time
+        updatedBy:
+          type: [string, 'null']
+
+    AdminEventList:
+      type: object
+      required: [events]
+      properties:
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminEvent'
+
+    EventUpsertRequest:
+      type: object
+      required: [definition]
+      properties:
+        definition:
+          $ref: '#/components/schemas/EventDefinition'
+
+    EventCatalog:
+      type: object
+      required: [stageIds, bannerIds]
+      properties:
+        stageIds:
+          type: array
+          items:
+            type: string
+        bannerIds:
+          type: array
+          items:
+            type: string

@@ -9,6 +9,7 @@ using Promuse.Api.Auth;
 using Promuse.Api.Infrastructure;
 using System.Text.Json.Serialization;
 using Promuse.Api.Economy;
+using Promuse.Api.Events;
 using Promuse.Api.Gacha;
 using Promuse.Api.Leaderboards;
 using Promuse.Api.LiveOps;
@@ -86,6 +87,9 @@ builder.Services.AddScoped<GachaService>();
 builder.Services.AddSingleton<IGachaDice, SecureGachaDice>();
 builder.Services.AddSingleton<RemoteConfigStore>();
 builder.Services.AddScoped<RemoteConfigService>();
+builder.Services.AddScoped<EventProgress>();
+builder.Services.AddScoped<EventService>();
+builder.Services.AddScoped<EventAdminService>();
 
 builder.Services.AddOptions<GameDataOptions>()
     .Bind(builder.Configuration.GetSection(GameDataOptions.SectionName));
@@ -246,6 +250,7 @@ app.MapMissionEndpoints();
 app.MapLeaderboardEndpoints();
 app.MapGachaEndpoints();
 app.MapRemoteConfigEndpoints();
+app.MapEventEndpoints();
 
 
 app.Run();

@@ -9,6 +9,7 @@ using Newtonsoft.Json.Serialization;
 using Promuse.Contracts;
 using Promuse.Contracts.Auth;
 using Promuse.Contracts.Config;
+using Promuse.Contracts.Events;
 using Promuse.Contracts.Gacha;
 using Promuse.Contracts.Leaderboards;
 using Promuse.Contracts.Missions;
@@ -278,6 +279,45 @@ namespace Promuse.Net
             if (before.HasValue) path += "&before=" + before.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
             return SendAsync<GachaHistoryPage>(UnityWebRequest.kHttpVerbGET, path, body: null, authenticate: true);
+        }
+
+        // --------------------------------------------------------------- events
+
+        /// <summary>Events running now or starting later, ending soonest first.</summary>
+        public Task<ApiResult<EventList>> GetEventsAsync() =>
+            SendAsync<EventList>(UnityWebRequest.kHttpVerbGET, "/v1/events", body: null, authenticate: true);
+
+        /// <summary>One event with this player's progress in it.</summary>
+        public Task<ApiResult<EventView>> GetEventAsync(string eventId) =>
+            SendAsync<EventView>(UnityWebRequest.kHttpVerbGET, "/v1/events/" + Uri.EscapeDataString(eventId),
+                body: null, authenticate: true);
+
+        public Task<ApiResult<EventActionResult>> CheckInAsync(string eventId) =>
+            EventActionAsync(eventId, "/check-in", null);
+
+        public Task<ApiResult<EventActionResult>> ClaimEventMissionAsync(string eventId, string missionId) =>
+            EventActionAsync(eventId, "/missions/" + Uri.EscapeDataString(missionId) + "/claim", null);
+
+        public Task<ApiResult<EventActionResult>> ClaimEventMilestoneAsync(string eventId, string rewardId) =>
+            EventActionAsync(eventId, "/milestones/" + Uri.EscapeDataString(rewardId) + "/claim", null);
+
+        public Task<ApiResult<EventActionResult>> BuyEventOfferAsync(string eventId, string offerId, int quantity) =>
+            EventActionAsync(eventId, "/shop/" + Uri.EscapeDataString(offerId) + "/purchase", new EventPurchaseRequest(quantity));
+
+        /// <summary>
+        /// 每次按下一个键 / One key per press, kept across retries - every event action hands
+        /// something out, and a retry after a lost answer must replay it rather than pay twice.
+        /// </summary>
+        private async Task<ApiResult<EventActionResult>> EventActionAsync(string eventId, string action, object? body)
+        {
+            ApiResult<EventActionResult> result = await SendAsync<EventActionResult>(
+                UnityWebRequest.kHttpVerbPOST, "/v1/events/" + Uri.EscapeDataString(eventId) + action, body,
+                authenticate: true,
+                idempotencyKey: Guid.NewGuid().ToString());
+
+            if (result.IsSuccess) _playerETag = ETagFor(result.Value!.Player);
+
+            return result;
         }
 
         // ------------------------------------------------------------- missions
@@ -594,7 +634,7 @@ namespace Promuse.Net
                 : ApiResult<T>.Ok(value);
         }
 
-        private static TValue? TryParse<TValue>(string text)
+        internal static TValue? TryParse<TValue>(string text)
         {
             try
             {

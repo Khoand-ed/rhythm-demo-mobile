@@ -72,6 +72,127 @@ namespace Promuse.Persistence.Migrations
                     b.ToTable("accounts", (string)null);
                 });
 
+            modelBuilder.Entity("Promuse.Persistence.Entities.EventCheckIn", b =>
+                {
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("account_id");
+
+                    b.Property<string>("EventId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("event_id");
+
+                    b.Property<int>("Day")
+                        .HasColumnType("integer")
+                        .HasColumnName("day");
+
+                    b.Property<DateTimeOffset>("ClaimedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("claimed_at");
+
+                    b.Property<string>("PeriodKey")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("period_key");
+
+                    b.HasKey("AccountId", "EventId", "Day")
+                        .HasName("pk_event_check_ins");
+
+                    b.HasIndex("AccountId", "EventId", "PeriodKey")
+                        .IsUnique()
+                        .HasDatabaseName("ix_event_check_ins_account_id_event_id_period_key");
+
+                    b.ToTable("event_check_ins", (string)null);
+                });
+
+            modelBuilder.Entity("Promuse.Persistence.Entities.EventClaim", b =>
+                {
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("account_id");
+
+                    b.Property<string>("EventId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("event_id");
+
+                    b.Property<string>("Kind")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("Key")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("key");
+
+                    b.Property<DateTimeOffset>("ClaimedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("claimed_at");
+
+                    b.HasKey("AccountId", "EventId", "Kind", "Key")
+                        .HasName("pk_event_claims");
+
+                    b.ToTable("event_claims", (string)null);
+                });
+
+            modelBuilder.Entity("Promuse.Persistence.Entities.EventCounter", b =>
+                {
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("account_id");
+
+                    b.Property<string>("EventId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("event_id");
+
+                    b.Property<string>("MissionId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("mission_id");
+
+                    b.Property<int>("Count")
+                        .HasColumnType("integer")
+                        .HasColumnName("count");
+
+                    b.HasKey("AccountId", "EventId", "MissionId")
+                        .HasName("pk_event_counters");
+
+                    b.ToTable("event_counters", (string)null);
+                });
+
+            modelBuilder.Entity("Promuse.Persistence.Entities.EventPurchase", b =>
+                {
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("account_id");
+
+                    b.Property<string>("EventId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("event_id");
+
+                    b.Property<string>("OfferId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("offer_id");
+
+                    b.Property<int>("Bought")
+                        .HasColumnType("integer")
+                        .HasColumnName("bought");
+
+                    b.HasKey("AccountId", "EventId", "OfferId")
+                        .HasName("pk_event_purchases");
+
+                    b.ToTable("event_purchases", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_event_purchases_bought", "bought > 0");
+                        });
+                });
+
             modelBuilder.Entity("Promuse.Persistence.Entities.GachaBanner", b =>
                 {
                     b.Property<string>("BannerId")
@@ -356,6 +477,75 @@ namespace Promuse.Persistence.Migrations
                         .HasDatabaseName("ix_gacha_pulls_account_id_id");
 
                     b.ToTable("gacha_pulls", (string)null);
+                });
+
+            modelBuilder.Entity("Promuse.Persistence.Entities.GameEvent", b =>
+                {
+                    b.Property<string>("EventId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("event_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Definition")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("definition");
+
+                    b.Property<DateTimeOffset>("EndsAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ends_at");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<DateTimeOffset>("StartsAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("starts_at");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
+                    b.HasKey("EventId")
+                        .HasName("pk_game_events");
+
+                    b.HasIndex("UpdatedBy")
+                        .HasDatabaseName("ix_game_events_updated_by");
+
+                    b.HasIndex("IsActive", "StartsAt", "EndsAt")
+                        .HasDatabaseName("ix_game_events_is_active_starts_at_ends_at");
+
+                    b.ToTable("game_events", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_game_events_window", "starts_at < ends_at");
+                        });
+
+                    b.HasData(
+                        new
+                        {
+                            EventId = "resonant_dawn",
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 10, 11, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            Definition = "{\"title\":\"Resonant Dawn\",\"subtitle\":\"Festival event\",\"description\":\"AMIYA\\u0027s headhunting banner is open, and Rhodes Island is celebrating. Check in every day, clear the festival charts for Event Tokens, and spend them in the festival shop.\",\"startsAt\":\"2026-10-01T00:00:00+00:00\",\"endsAt\":\"2026-12-31T23:59:59+00:00\",\"isActive\":true,\"currencyItemId\":20,\"bannerId\":\"event_amiya\",\"checkIn\":[{\"day\":1,\"reward\":{\"itemId\":1,\"amount\":100}},{\"day\":2,\"reward\":{\"itemId\":2,\"amount\":2000}},{\"day\":3,\"reward\":{\"itemId\":20,\"amount\":50}},{\"day\":4,\"reward\":{\"itemId\":6,\"amount\":20}},{\"day\":5,\"reward\":{\"itemId\":1,\"amount\":200}},{\"day\":6,\"reward\":{\"itemId\":20,\"amount\":100}},{\"day\":7,\"reward\":{\"itemId\":10,\"amount\":1}}],\"missions\":[{\"missionId\":\"clear3\",\"description\":\"Clear any song 3 times\",\"goal\":\"PlaySong\",\"target\":3,\"points\":10,\"stageId\":null,\"minScore\":null},{\"missionId\":\"hard1\",\"description\":\"Clear the festival chart AIW (Hard) once\",\"goal\":\"ClearStage\",\"target\":1,\"points\":20,\"stageId\":\"stage_AIW_hard\",\"minScore\":null},{\"missionId\":\"score100k\",\"description\":\"Score 100,000 or more on any song\",\"goal\":\"ReachScore\",\"target\":1,\"points\":20,\"stageId\":null,\"minScore\":100000},{\"missionId\":\"pull10\",\"description\":\"Headhunt 10 times\",\"goal\":\"Headhunt\",\"target\":10,\"points\":10,\"stageId\":null,\"minScore\":null},{\"missionId\":\"shop1\",\"description\":\"Buy anything from the Store once\",\"goal\":\"BuyShopItem\",\"target\":1,\"points\":5,\"stageId\":null,\"minScore\":null}],\"milestones\":[{\"rewardId\":\"m20\",\"requiredPoints\":20,\"reward\":{\"itemId\":20,\"amount\":100}},{\"rewardId\":\"m40\",\"requiredPoints\":40,\"reward\":{\"itemId\":1,\"amount\":300}},{\"rewardId\":\"m65\",\"requiredPoints\":65,\"reward\":{\"itemId\":10,\"amount\":2}}],\"shop\":[{\"offerId\":\"permit\",\"sell\":{\"itemId\":10,\"amount\":1},\"price\":150,\"limit\":3},{\"offerId\":\"orundum\",\"sell\":{\"itemId\":1,\"amount\":100},\"price\":40,\"limit\":10},{\"offerId\":\"certificates\",\"sell\":{\"itemId\":8,\"amount\":10},\"price\":30,\"limit\":5},{\"offerId\":\"lmd\",\"sell\":{\"itemId\":2,\"amount\":5000},\"price\":20,\"limit\":null}],\"stages\":[{\"stageId\":\"stage_AIW\",\"currencyPerClear\":30},{\"stageId\":\"stage_AIW_hard\",\"currencyPerClear\":60}]}",
+                            EndsAt = new DateTimeOffset(new DateTime(2026, 12, 31, 23, 59, 59, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsActive = true,
+                            StartsAt = new DateTimeOffset(new DateTime(2026, 10, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 10, 11, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            Version = 1
+                        });
                 });
 
             modelBuilder.Entity("Promuse.Persistence.Entities.IdempotencyRecord", b =>
@@ -1408,6 +1598,46 @@ namespace Promuse.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Promuse.Persistence.Entities.EventCheckIn", b =>
+                {
+                    b.HasOne("Promuse.Persistence.Entities.Player", null)
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_event_check_ins_players_account_id");
+                });
+
+            modelBuilder.Entity("Promuse.Persistence.Entities.EventClaim", b =>
+                {
+                    b.HasOne("Promuse.Persistence.Entities.Player", null)
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_event_claims_players_account_id");
+                });
+
+            modelBuilder.Entity("Promuse.Persistence.Entities.EventCounter", b =>
+                {
+                    b.HasOne("Promuse.Persistence.Entities.Player", null)
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_event_counters_players_account_id");
+                });
+
+            modelBuilder.Entity("Promuse.Persistence.Entities.EventPurchase", b =>
+                {
+                    b.HasOne("Promuse.Persistence.Entities.Player", null)
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_event_purchases_players_account_id");
+                });
+
             modelBuilder.Entity("Promuse.Persistence.Entities.GachaPity", b =>
                 {
                     b.HasOne("Promuse.Persistence.Entities.Player", "Player")
@@ -1456,6 +1686,15 @@ namespace Promuse.Persistence.Migrations
                         .HasConstraintName("fk_gacha_pulls_gacha_banners_banner_id");
 
                     b.Navigation("Player");
+                });
+
+            modelBuilder.Entity("Promuse.Persistence.Entities.GameEvent", b =>
+                {
+                    b.HasOne("Promuse.Persistence.Entities.Account", null)
+                        .WithMany()
+                        .HasForeignKey("UpdatedBy")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_game_events_accounts_updated_by");
                 });
 
             modelBuilder.Entity("Promuse.Persistence.Entities.LeaderboardScore", b =>

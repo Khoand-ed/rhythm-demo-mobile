@@ -391,6 +391,8 @@ public class SongSelectUI : UIBase
                 return;
             }
 
+            // 从歌单开的歌回歌单 / A song started from the list comes back to the list.
+            SongSession.SetReturn(null);
             CharSelectUI.Show(selected, mode);
         }
     }

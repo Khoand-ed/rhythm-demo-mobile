@@ -126,6 +126,18 @@ namespace Promuse.Contracts
         /// <summary>The banner exists but is not open right now - not yet started, or ended.</summary>
         public const string BannerClosed = "BANNER_CLOSED";
 
+        /// <summary>No such event, or it has been switched off.</summary>
+        public const string EventNotFound = "EVENT_NOT_FOUND";
+
+        /// <summary>The event exists but is not running right now - not started, or over.</summary>
+        public const string EventClosed = "EVENT_CLOSED";
+
+        /// <summary>The player has bought as many of that event offer as it allows.</summary>
+        public const string OutOfStock = "OUT_OF_STOCK";
+
+        /// <summary>Today's check-in is taken, or every day of the event has been.</summary>
+        public const string NothingToClaim = "NOTHING_TO_CLAIM";
+
         /// <summary>
         /// The game is down for maintenance. Temporary by definition: a result that could not be
         /// sent is kept and sent afterwards, and the detail says what the operator wrote.

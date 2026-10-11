@@ -29,6 +29,8 @@ public sealed class RunService(
     PlayerService players,
     MissionService missions,
     LeaderboardService leaderboards,
+    Events.EventProgress events,
+    Economy.Inventory inventory,
     GameData gameData,
     IOptions<StaminaOptions> stamina)
 {
@@ -186,6 +188,14 @@ public sealed class RunService(
             }
 
             if (countsAsClear) await missions.NotifyAsync(accountId, MissionGoal.PlaySong, ct);
+
+            // 活动 / Event missions, and the currency an event stage pays. A paid stage changed
+            // the bag, so the state version moves with it.
+            if (await events.OnRunClosedAsync(accountId, run.StageId, countsAsClear, ranked,
+                    submission?.Result.Score, now, ct))
+            {
+                await inventory.BumpStateVersionAsync(accountId, now, ct);
+            }
 
             if (ranked)
             {

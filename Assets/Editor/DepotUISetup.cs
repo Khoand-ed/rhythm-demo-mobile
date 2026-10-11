@@ -90,6 +90,13 @@ public static class DepotUISetup
             "so trading through every channel available is simply necessary.",
             "Mission Rewards, Stage Drops",
             new Color(0.85f, 0.32f, 0.30f)),
+
+        // 活动代币 / The seeded event's currency (SeedEvents.EventTokenItemId on the server).
+        new SeedItem(20, "Event Token", 4, ItemType.JI_CHU,
+            "Spent in the event shop while the event runs.",
+            "A festival token. Worth a great deal at the festival and nothing at all after it.",
+            "Event Stages, Event Rewards",
+            new Color(0.95f, 0.62f, 0.25f)),
     };
 
     [MenuItem("Arknights/Depot/Create Missing Item Metas", false, 0)]

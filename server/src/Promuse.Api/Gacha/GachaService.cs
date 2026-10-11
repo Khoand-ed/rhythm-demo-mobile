@@ -25,6 +25,7 @@ public sealed class GachaService(
     PlayerService players,
     Inventory inventory,
     IGachaDice dice,
+    Events.EventProgress events,
     ILogger<GachaService> log)
 {
     public const int MaxHistoryPage = 50;
@@ -166,6 +167,9 @@ public sealed class GachaService(
         // 版本要动 / Bumped so the ETag the client is holding stops matching: the roster and
         // the bag both changed.
         await inventory.BumpStateVersionAsync(accountId, now, ct);
+
+        // 活动任务 / Headhunting missions of any event running now - a ten-pull counts ten.
+        await events.OnHeadhuntAsync(accountId, times, now, ct);
 
         await transaction.CommitAsync(ct);
 
