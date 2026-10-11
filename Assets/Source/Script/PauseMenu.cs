@@ -78,6 +78,11 @@ public class PauseMenu : MonoBehaviour
         GameManager game = GameManager.instance;
         if (game == null) yield break;
 
+        // 等加载画面撤走 / Wait for the loading screen to lift. It is still fading out over the
+        // first frames of the scene, and a READY counted down underneath it is a READY the
+        // player never saw. Instant on a Retry, which never shows it.
+        yield return new WaitWhile(() => UI.LoadingScreen.IsVisible);
+
         // 等所有 Start 跑完 / One frame, so every Start has run before anything is measured.
         // GameManager.Start is where SongSession's chart is handed to the spawner, and the
         // run-up below is computed from that chart's note speed. Two components on one
