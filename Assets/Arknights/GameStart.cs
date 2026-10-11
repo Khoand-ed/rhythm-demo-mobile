@@ -23,6 +23,7 @@ namespace Scripts {
             if (uiCamera != null && !uiCamera.activeSelf) uiCamera.SetActive(true);
 
             string next = BootIntent.Take();
+            string[] beneath = BootIntent.TakeBeneath();
 
             // 先开主界面, 再把目标界面叠上去 / Anything other than login opens over the
             // home screen. Without this, returning from a song leaves the song
@@ -37,6 +38,15 @@ namespace Scripts {
                     uiManager.Show(BootIntent.Home);
                 } catch (Exception e) {
                     Debug.LogException(e);
+                }
+
+                foreach (string layer in beneath) {
+                    if (layer == BootIntent.Home || layer == next) continue;
+                    try {
+                        uiManager.Show(layer);
+                    } catch (Exception e) {
+                        Debug.LogException(e);
+                    }
                 }
             }
 

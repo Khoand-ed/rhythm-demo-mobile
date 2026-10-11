@@ -67,6 +67,13 @@ public class PromuseDbContext(DbContextOptions<PromuseDbContext> options) : DbCo
 
     public DbSet<EventPurchase> EventPurchases => Set<EventPurchase>();
 
+    public DbSet<EventStageClear> EventStageClears => Set<EventStageClear>();
+
+    public DbSet<StoryLinePatch> StoryPatches => Set<StoryLinePatch>();
+
+    /// <summary>Hands every story correction its revision - see <see cref="StoryLinePatch"/>.</summary>
+    public const string StoryPatchRevisions = "story_patch_revisions";
+
     /// <summary>
     /// 第一版 / Version 1: no maintenance, every build accepted, every feature on, nothing
     /// announced - the game exactly as it behaved before remote config existed. Written as the
@@ -469,6 +476,33 @@ public class PromuseDbContext(DbContextOptions<PromuseDbContext> options) : DbCo
             entity.HasOne<Player>().WithMany().HasForeignKey(p => p.AccountId).OnDelete(DeleteBehavior.Cascade);
         });
 
+        modelBuilder.Entity<EventStageClear>(entity =>
+        {
+            entity.ToTable("event_stage_clears");
+            entity.HasKey(c => new { c.AccountId, c.EventId, c.StageId });
+            entity.Property(c => c.EventId).HasMaxLength(64);
+            entity.Property(c => c.StageId).HasMaxLength(64);
+            entity.ToTable(t => t.HasCheckConstraint("ck_event_stage_clears_clears", "clears > 0"));
+            entity.HasOne<Player>().WithMany().HasForeignKey(c => c.AccountId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.HasSequence<int>(StoryPatchRevisions);
+
+        modelBuilder.Entity<StoryLinePatch>(entity =>
+        {
+            entity.ToTable("story_patches");
+            entity.HasKey(p => new { p.StoryId, p.LineId });
+            entity.Property(p => p.StoryId).HasMaxLength(64);
+            entity.Property(p => p.LineId).HasMaxLength(8);
+            entity.Property(p => p.Original).HasMaxLength(500).IsRequired();
+            entity.Property(p => p.Text).HasMaxLength(500);
+            entity.Property(p => p.Revision).HasDefaultValueSql($"nextval('{StoryPatchRevisions}')");
+
+            // SetNull, like the config history: deleting an admin must not delete what they fixed.
+            entity.HasOne<Account>().WithMany()
+                  .HasForeignKey(p => p.UpdatedBy).OnDelete(DeleteBehavior.SetNull);
+        });
+
         modelBuilder.Entity<RemoteConfigVersion>(entity =>
         {
             entity.ToTable("remote_config_versions");
@@ -615,6 +649,7 @@ public class PromuseDbContext(DbContextOptions<PromuseDbContext> options) : DbCo
 
             entity.Property(r => r.StageId).HasMaxLength(64).IsRequired();
             entity.Property(r => r.CharacterId).HasMaxLength(32);
+            entity.Property(r => r.EventId).HasMaxLength(64);
             entity.HasIndex(r => new { r.AccountId, r.StartedAt });
 
             entity.HasOne(r => r.Player)

@@ -299,7 +299,7 @@ public class CharSelectUI : UIBase
     private async void StartRunAsync(SongChart starting, CharData operatorChosen)
     {
         ApiResult<RunTicket> ticket =
-            await PlayerManager.Inst().Api.StartRunAsync(starting.stageId, operatorChosen.GetId());
+            await PlayerManager.Inst().Api.StartRunAsync(starting.stageId, operatorChosen.GetId(), SongSession.EventId);
 
         if (!ticket.IsSuccess)
         {
@@ -340,6 +340,14 @@ public class CharSelectUI : UIBase
         // playing underneath the song. HomeUI starts it again on the way back,
         // because its Lua show() is what plays it.
         SoundManager.Inst().StopMusic();
+
+        // 记下来时的路 / What is open under the screen the player will come back to - Operation's
+        // mode select, say - so it is put back too, and Back from the song list or the event
+        // screen lands there rather than on Home.
+        string target = SongSession.ReturnUI ?? SongSelectUI.UIName;
+        List<string> beneath = UIManager.Inst().OpenScreens();
+        beneath.RemoveAll(screen => screen == BootIntent.Home || screen == UIName || screen == target);
+        SongSession.SetReturnBeneath(beneath.ToArray());
 
         // The song map is hidden rather than destroyed - it is worth keeping, and
         // HomeUI has to still be underneath for Back to land on. This screen is

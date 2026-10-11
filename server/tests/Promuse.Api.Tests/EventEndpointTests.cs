@@ -152,11 +152,17 @@ public class EventEndpointTests(PromuseApiFactory factory)
         return (response.StatusCode, null, (await response.Content.ReadFromJsonAsync<ApiProblem>(Json))!.Code);
     }
 
-    /// <summary>A ranked win on stage_001, closed as the score tests close one.</summary>
-    private async Task<RunCompletion> WinAsync(AuthSession player, int score = 1000)
+    private Task<HttpResponseMessage> StartAsync(AuthSession player, string stageId, string? eventId) =>
+        _client.SendAsync(Send(HttpMethod.Post, "/v1/runs", player, new StartRunRequest(stageId, Played.Operator, eventId)));
+
+    /// <summary>
+    /// A ranked win on stage_001, closed as the score tests close one - played as a stage of
+    /// <paramref name="eventId"/> when one is given, from the song list otherwise.
+    /// </summary>
+    private async Task<RunCompletion> WinAsync(AuthSession player, int score = 1000, string? eventId = null)
     {
-        HttpResponseMessage start = await _client.SendAsync(Send(HttpMethod.Post, "/v1/runs", player,
-            new StartRunRequest(Played.Stage, Played.Operator)));
+        HttpResponseMessage start = await StartAsync(player, Played.Stage, eventId);
+        Assert.Equal(HttpStatusCode.Created, start.StatusCode);
         RunTicket ticket = (await start.Content.ReadFromJsonAsync<RunTicket>(Json))!;
         await Played.AgeAsync(factory, ticket.RunId, TimeSpan.FromMinutes(5));
 
@@ -257,7 +263,7 @@ public class EventEndpointTests(PromuseApiFactory factory)
         {
             AuthSession player = await GuestAsync();
 
-            RunCompletion done = await WinAsync(player, score: 1000);
+            RunCompletion done = await WinAsync(player, score: 1000, eventId: id);
             Assert.Equal(25, done.Player.Inventory.Single(i => i.ItemId == Token).Amount);
 
             EventView view = await ViewAsync(player, id);
@@ -288,6 +294,67 @@ public class EventEndpointTests(PromuseApiFactory factory)
         {
             await CloseAsync(admin, id);
         }
+    }
+
+    [Fact]
+    public async Task Event_stages_unlock_in_order_and_only_event_runs_clear_them()
+    {
+        // stage_AIW first, then stage_001: the second can only be entered once the first is cleared.
+        EventDefinition chained = Open() with
+        {
+            Stages = [new("stage_AIW", 5, "EV-1", "ev_1_before", null), new(Played.Stage, 25, "EV-2", null, "ev_2_after")],
+        };
+        (AuthSession admin, string id) = await CreateAsync(chained);
+        try
+        {
+            AuthSession player = await GuestAsync();
+
+            EventView fresh = await ViewAsync(player, id);
+            Assert.Equal([(true, false), (false, false)], fresh.Stages.Select(s => (s.IsUnlocked, s.IsCleared)));
+            Assert.Equal(("EV-1", "ev_1_before"), (fresh.Stages[0].Stage.Title, fresh.Stages[0].Stage.StoryBefore));
+
+            // 锁着就不开局 / Locked: refused before anything is charged.
+            int stamina = await StaminaAsync(player);
+            HttpResponseMessage locked = await StartAsync(player, Played.Stage, id);
+            Assert.Equal(HttpStatusCode.Conflict, locked.StatusCode);
+            Assert.Equal(ErrorCodes.StageLocked, (await locked.Content.ReadFromJsonAsync<ApiProblem>(Json))!.Code);
+            Assert.Equal(stamina, await StaminaAsync(player));
+
+            // A chart the event does not list is not one of its stages.
+            HttpResponseMessage stranger = await StartAsync(player, "stage_AIW_hard", id);
+            Assert.Equal(HttpStatusCode.UnprocessableEntity, stranger.StatusCode);
+
+            // 第一关打过 / The first stage cleared - recorded directly, since the harness can only
+            // play stage_001 - and the second opens.
+            await SqlAsync($"""
+                INSERT INTO event_stage_clears (account_id, event_id, stage_id, clears, first_cleared_at)
+                VALUES ({player.PlayerId}, {id}, 'stage_AIW', 1, now())
+                """);
+            Assert.True((await ViewAsync(player, id)).Stages[1].IsUnlocked);
+
+            // stage_001 from the song list: the missions count, the stage neither clears nor pays.
+            RunCompletion plain = await WinAsync(player);
+            Assert.DoesNotContain(plain.Player.Inventory, i => i.ItemId == Token);
+            EventView afterPlain = await ViewAsync(player, id);
+            Assert.False(afterPlain.Stages[1].IsCleared);
+            Assert.True(afterPlain.Missions.Single(m => m.Mission.MissionId == "stage1").IsComplete);
+
+            // Played from the event, it clears and pays.
+            RunCompletion played = await WinAsync(player, eventId: id);
+            Assert.Equal(25, played.Player.Inventory.Single(i => i.ItemId == Token).Amount);
+            Assert.True((await ViewAsync(player, id)).Stages[1].IsCleared);
+        }
+        finally
+        {
+            await CloseAsync(admin, id);
+        }
+    }
+
+    private async Task<int> StaminaAsync(AuthSession player)
+    {
+        using IServiceScope scope = factory.Services.CreateScope();
+        return await scope.ServiceProvider.GetRequiredService<PromuseDbContext>().Players
+            .Where(p => p.AccountId == player.PlayerId).Select(p => p.Stamina).FirstAsync();
     }
 
     [Fact]
@@ -369,7 +436,12 @@ public class EventEndpointTests(PromuseApiFactory factory)
             var early = await ActAsync(player, $"/v1/events/{id}/check-in");
             Assert.Equal((HttpStatusCode.Conflict, ErrorCodes.EventClosed), (early.Status, early.Code));
 
-            // Clearing its stage before it starts pays nothing.
+            // Its stages cannot be entered before it starts, and the chart played from the song
+            // list pays nothing.
+            HttpResponseMessage refused = await StartAsync(player, Played.Stage, id);
+            Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
+            Assert.Equal(ErrorCodes.EventClosed, (await refused.Content.ReadFromJsonAsync<ApiProblem>(Json))!.Code);
+
             RunCompletion done = await WinAsync(player);
             Assert.DoesNotContain(done.Player.Inventory, i => i.ItemId == Token);
         }

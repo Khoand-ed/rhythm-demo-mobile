@@ -34,8 +34,12 @@ public sealed class RunService(
     GameData gameData,
     IOptions<StaminaOptions> stamina)
 {
+    /// <param name="eventId">
+    /// Set when the song is played as a stage of that event. Checked before anything is charged: a
+    /// stage that is locked, or an event that is not running, costs nothing to be refused.
+    /// </param>
     public async Task<Outcome<RunTicket>> StartAsync(
-        Guid accountId, string stageId, string characterId, CancellationToken ct)
+        Guid accountId, string stageId, string characterId, string? eventId, CancellationToken ct)
     {
         var errors = new Dictionary<string, string[]>();
         if (string.IsNullOrWhiteSpace(stageId)) errors["stageId"] = ["Required."];
@@ -56,6 +60,12 @@ public sealed class RunService(
             .AnyAsync(c => c.AccountId == accountId && c.CharacterId == characterId, ct);
 
         if (!owned) return Outcome<RunTicket>.Fail(ApiProblems.CharacterNotOwned(characterId));
+
+        if (eventId is not null &&
+            await events.CanStartAsync(accountId, eventId, stage.StageId, clock.GetUtcNow(), ct) is { } refused)
+        {
+            return Outcome<RunTicket>.Fail(refused);
+        }
 
         Player? player = await db.Players.FirstOrDefaultAsync(p => p.AccountId == accountId, ct);
 
@@ -98,6 +108,7 @@ public sealed class RunService(
             AccountId = accountId,
             StageId = stage.StageId,
             CharacterId = characterId,
+            EventId = eventId,
             StaminaSpent = stage.StaminaCost,
             Seed = NewSeed(),
             StartedAt = now,
@@ -191,7 +202,7 @@ public sealed class RunService(
 
             // 活动 / Event missions, and the currency an event stage pays. A paid stage changed
             // the bag, so the state version moves with it.
-            if (await events.OnRunClosedAsync(accountId, run.StageId, countsAsClear, ranked,
+            if (await events.OnRunClosedAsync(accountId, run.StageId, run.EventId, countsAsClear, ranked,
                     submission?.Result.Score, now, ct))
             {
                 await inventory.BumpStateVersionAsync(accountId, now, ct);

@@ -1737,7 +1737,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 87649f0ce7ff2bc43bdfae9cfa3dd515, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::OpenUIButton
-  uiName: SongSelectUI
+  uiName: ModeSelectUI
 --- !u!1 &1485656844085530894
 GameObject:
   m_ObjectHideFlags: 0

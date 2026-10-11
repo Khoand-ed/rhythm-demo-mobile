@@ -25,7 +25,8 @@ public sealed class EventService(
     TimeProvider clock,
     PlayerService players,
     Inventory inventory,
-    MissionPeriod period)
+    MissionPeriod period,
+    EventProgress progress)
 {
     public const string MissionKind = "mission";
     public const string MilestoneKind = "milestone";
@@ -331,7 +332,11 @@ public sealed class EventService(
                 .Select(i => i.Amount).FirstOrDefaultAsync(ct);
         }
 
-        return new EventView(eventId, d, open, balance, checkIn, points, missions, milestones, shop, now);
+        HashSet<string> cleared = await progress.ClearedAsync(accountId, eventId, ct);
+        List<EventStageState> stages = [.. d.Stages.Select((s, i) =>
+            new EventStageState(s, EventRules.IsUnlocked(d, i, cleared), cleared.Contains(s.StageId)))];
+
+        return new EventView(eventId, d, open, balance, checkIn, points, missions, milestones, shop, stages, now);
     }
 
     private async Task<Outcome<EventActionResult>> ResultAsync(

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Promuse.Contracts.Events;
+using Promuse.Contracts.Stories;
 using Promuse.Persistence;
 
 namespace Promuse.Api.Events;
@@ -20,6 +21,9 @@ public static partial class EventRules
     private static partial Regex IdPattern();
 
     public static bool IsValidId(string? id) => id is not null && IdPattern().IsMatch(id);
+
+    private const string StoryIdRule =
+        "A story script's file name: lower-case letters, digits and underscores - or leave it empty.";
 
     public static string Serialize(EventDefinition definition) =>
         JsonSerializer.Serialize(Normalize(definition), SeedEvents.Json);
@@ -43,6 +47,15 @@ public static partial class EventRules
 
     public static bool IsOpen(EventDefinition d, DateTimeOffset now) =>
         d.IsActive && d.StartsAt <= now && now < d.EndsAt;
+
+    public const int MaxStageTitle = 24;
+
+    /// <summary>
+    /// 按顺序解锁 / The stage at <paramref name="index"/> is open when it is the first, or the stage
+    /// listed before it has been cleared.
+    /// </summary>
+    public static bool IsUnlocked(EventDefinition d, int index, IReadOnlySet<string> cleared) =>
+        index == 0 || (index > 0 && index < d.Stages.Count && cleared.Contains(d.Stages[index - 1].StageId));
 
     /// <summary>
     /// Field path to what is wrong with it; empty when the definition can be saved.
@@ -146,6 +159,12 @@ public static partial class EventRules
             EventStage s = d.Stages[i];
             if (!stages.Contains(s.StageId)) Add($"stages[{i}].stageId", $"No chart '{s.StageId}'.");
             if (s.CurrencyPerClear is < 1 or > MaxAmount) Add($"stages[{i}].currencyPerClear", $"Between 1 and {MaxAmount}.");
+            if (s.Title is not null && (string.IsNullOrWhiteSpace(s.Title) || s.Title.Length > MaxStageTitle))
+            {
+                Add($"stages[{i}].title", $"1-{MaxStageTitle} characters, or leave it empty for the chart's name.");
+            }
+            if (s.StoryBefore is not null && !StoryIds.IsStoryId(s.StoryBefore)) Add($"stages[{i}].storyBefore", StoryIdRule);
+            if (s.StoryAfter is not null && !StoryIds.IsStoryId(s.StoryAfter)) Add($"stages[{i}].storyAfter", StoryIdRule);
         }
 
         return errors;

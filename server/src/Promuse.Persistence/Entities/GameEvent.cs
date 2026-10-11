@@ -100,3 +100,20 @@ public class EventPurchase
 
     public int Bought { get; set; }
 }
+
+/// <summary>
+/// 打过的活动关卡 / An event stage a player has cleared, from the event screen. The row existing is
+/// what unlocks the next stage; the count is how many times, for the record.
+/// </summary>
+public class EventStageClear
+{
+    public Guid AccountId { get; set; }
+
+    public string EventId { get; set; } = string.Empty;
+
+    public string StageId { get; set; } = string.Empty;
+
+    public int Clears { get; set; }
+
+    public DateTimeOffset FirstClearedAt { get; set; }
+}

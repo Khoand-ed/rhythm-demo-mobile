@@ -17,7 +17,12 @@ namespace Promuse.Contracts.Runs
     /// could name its own operator afterwards would simply name the strongest one. The server
     /// also refuses an operator the player does not own.
     /// </param>
-    public sealed record StartRunRequest(string StageId, string CharacterId);
+    /// <param name="EventId">
+    /// 活动关卡 / Set when the song is played as a stage of that event, from the event screen. Only
+    /// such a run pays the event currency and clears the stage, and it is refused while the event is
+    /// not running or the stage is still locked. Null for every other run.
+    /// </param>
+    public sealed record StartRunRequest(string StageId, string CharacterId, string? EventId = null);
 
     /// <summary>
     /// Permission to play one song, and what it cost.

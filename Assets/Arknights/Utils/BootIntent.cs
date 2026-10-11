@@ -16,11 +16,24 @@ namespace Tools {
 
         public static string NextUI = Login;
 
+        /// <summary>
+        /// 中间那几层 / The screens that were open between Home and <see cref="NextUI"/>, bottom to
+        /// top - Operation's mode select under the song list, say - so Back from the screen the
+        /// player returns to lands where it did before the song, not straight on Home.
+        /// </summary>
+        public static string[] Beneath = new string[0];
+
         // Reading consumes the intent, so a later cold boot goes back to Login.
         public static string Take() {
             string next = string.IsNullOrEmpty(NextUI) ? Login : NextUI;
             NextUI = Login;
             return next;
+        }
+
+        public static string[] TakeBeneath() {
+            string[] beneath = Beneath ?? new string[0];
+            Beneath = new string[0];
+            return beneath;
         }
     }
 }

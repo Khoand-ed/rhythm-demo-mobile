@@ -59,7 +59,7 @@
   <div class="top">
     <div>
       <h1>Promuse LiveOps</h1>
-      <div class="muted">Remote config and live events, changed without a build or a restart.</div>
+      <div class="muted">Remote config, live events and story corrections, changed without a build or a restart.</div>
     </div>
     <button id="signOut" class="ghost" hidden>Sign out</button>
   </div>
@@ -67,6 +67,7 @@
   <nav id="nav" class="nav" hidden>
     <button id="tabConfig" type="button" class="on">Remote config</button>
     <button id="tabEvents" type="button">Events</button>
+    <button id="tabStories" type="button">Stories</button>
   </nav>
 
   <!-- Sign in with an administrator account. The page holds the access token for this tab only. -->
@@ -159,6 +160,35 @@
     </div>
     <div id="eventStatus" class="status"></div>
   </section>
+
+  <section id="stories" class="panel" hidden>
+    <h2>Story corrections</h2>
+    <div class="muted small">The stories ship inside the game, under Assets/Arknights/Resources/Story. Open a script here,
+      correct a line and save: players get the fix the next time a story plays, without a new build. A correction only
+      applies while the game's own line still reads what it was written against, so once a build carries the fix it
+      simply stops applying.</div>
+    <div class="row" style="margin-top:12px"><label for="storyFile">Script (.story)</label><input id="storyFile" type="file" accept=".story,.txt"></div>
+    <div id="storyOpen" hidden>
+      <h3 id="storyName"></h3>
+      <div class="scroll">
+      <table class="grid">
+        <thead><tr><th>Line</th><th>Speaker</th><th>Text</th><th></th></tr></thead>
+        <tbody id="storyLines"></tbody>
+      </table>
+      </div>
+    </div>
+    <div id="storyStatus" class="status"></div>
+
+    <div class="module">
+      <div class="top"><h3>In force</h3><button id="storyReload" class="ghost" type="button">Reload</button></div>
+      <div class="scroll">
+      <table>
+        <thead><tr><th>Story</th><th>Line</th><th>Was</th><th>Now</th><th>By</th><th></th></tr></thead>
+        <tbody id="patchRows"></tbody>
+      </table>
+      </div>
+    </div>
+  </section>
 </main>
 
 <script>
@@ -217,7 +247,7 @@
   function signOut(message) {
     sessionStorage.removeItem(TOKEN);
     $('login').hidden = false;
-    for (const id of ['editor', 'history', 'signOut', 'nav', 'events', 'eventEditor']) $(id).hidden = true;
+    for (const id of ['editor', 'history', 'signOut', 'nav', 'events', 'eventEditor', 'stories']) $(id).hidden = true;
     if (message) show($('loginStatus'), message, false);
   }
 
@@ -231,10 +261,14 @@
   async function view(which) {
     $('tabConfig').className = which === 'config' ? 'on' : '';
     $('tabEvents').className = which === 'events' ? 'on' : '';
+    $('tabStories').className = which === 'stories' ? 'on' : '';
     $('editor').hidden = $('history').hidden = which !== 'config';
     $('events').hidden = which !== 'events';
+    $('stories').hidden = which !== 'stories';
     $('eventEditor').hidden = true;
-    if (which === 'config') await load(); else await loadEvents();
+    if (which === 'config') await load();
+    else if (which === 'events') await loadEvents();
+    else await loadPatches();
   }
 
   // ------------------------------------------------------------------ config
@@ -392,8 +426,13 @@
       deep: r => ({ offerId: r.offerId, sell: { itemId: r.itemId, amount: r.amount }, price: r.price, limit: r.limit }),
     },
     stages: {
-      title: 'Event stages', add: 'Add stage', hint: 'Each clear while the event runs pays this much currency.',
-      cols: [['stageId', 'Stage', 'stage'], ['currencyPerClear', 'Currency per clear', 'number']],
+      title: 'Event stages', add: 'Add stage',
+      hint: 'Played in row order: each one unlocks when the one above it is cleared from the event screen, and pays ' +
+            'this much currency per clear. Title is what the stage is called (e.g. RD-1; empty shows the song). ' +
+            'The stories are script names in the game - Resources/Story/<name>.story - played before the stage ' +
+            'the first time and after its first clear.',
+      cols: [['stageId', 'Stage', 'stage'], ['currencyPerClear', 'Currency per clear', 'number'], ['title', 'Title', 'text'],
+             ['storyBefore', 'Story before', 'text'], ['storyAfter', 'Story after', 'text']],
       flat: s => ({ ...s }),
       deep: r => ({ ...r }),
     },
@@ -588,6 +627,157 @@
     $('eventsStatus').textContent = list.data.events.length ? '' : 'No events yet.';
   }
 
+  // ------------------------------------------------------------------ stories
+
+  // 和游戏里的解析一致 / The same reading of a script as StoryScript.Parse in the game, kept to what
+  // this page needs: which lines can be corrected, by id, with their text.
+  const LINE_ID = /\s#([a-z0-9]{4,8})\s*$/;
+  let story = null;   // { id, lines: [{ lineId, speaker, text }] }
+  let patches = [];   // what is in force
+
+  function parseStory(source) {
+    const lines = [];
+    for (const raw of source.split(/\r?\n/)) {
+      let line = raw.trim();
+      if (line === '' || line.startsWith('//') || line.startsWith('@')) continue;
+      const id = LINE_ID.exec(line);
+      if (!id) continue;
+      line = line.slice(0, id.index).trim();
+      let speaker = '', text;
+      if (line.startsWith('>')) {
+        text = line.slice(1).trim();
+      } else {
+        const colon = line.indexOf(':');
+        if (colon <= 0) continue;
+        speaker = line.slice(0, colon).trim();
+        text = line.slice(colon + 1).trim();
+      }
+      lines.push({ lineId: id[1], speaker, text });
+    }
+    return lines;
+  }
+
+  function patchFor(storyId, lineId) {
+    return patches.find(p => p.storyId === storyId && p.lineId === lineId);
+  }
+
+  function drawStory() {
+    const rows = $('storyLines');
+    rows.replaceChildren();
+    if (!story) { $('storyOpen').hidden = true; return; }
+
+    $('storyOpen').hidden = false;
+    $('storyName').textContent = story.id + ' - ' + story.lines.length + ' lines';
+
+    for (const line of story.lines) {
+      const fix = patchFor(story.id, line.lineId);
+      const stale = fix && fix.original !== line.text;
+      const tr = document.createElement('tr');
+      const cell = t => { const td = document.createElement('td'); td.textContent = t; tr.appendChild(td); return td; };
+      cell(line.lineId).className = 'muted';
+      cell(line.speaker || '(narration)');
+
+      const td = document.createElement('td');
+      td.className = 'wide';
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.maxLength = 500;
+      input.value = fix && !stale ? fix.text : line.text;
+      td.appendChild(input);
+      if (fix) {
+        const note = document.createElement('div');
+        note.className = 'small ' + (stale ? 'muted' : '');
+        note.style.color = stale ? 'var(--warn)' : 'var(--ok)';
+        note.textContent = stale
+          ? 'A correction exists, but this file no longer reads what it was written against - it does not apply.'
+          : 'Corrected - the game shows this instead of the file\'s text.';
+        td.appendChild(note);
+      }
+      tr.appendChild(td);
+
+      const action = document.createElement('td');
+      const save = document.createElement('button');
+      save.type = 'button'; save.textContent = 'Save';
+      save.onclick = () => savePatch(line, input.value);
+      action.appendChild(save);
+      tr.appendChild(action);
+      rows.appendChild(tr);
+    }
+  }
+
+  async function openStory(file) {
+    if (!file) return;
+    const id = file.name.replace(/\.(story|txt)$/i, '');
+    if (!/^[a-z0-9_]{1,64}$/.test(id)) {
+      story = null; drawStory();
+      return show($('storyStatus'), 'A script is named with lower-case letters, digits and underscores - "' + file.name + '" is not one.', false);
+    }
+
+    const lines = parseStory(await file.text());
+    story = { id, lines };
+    drawStory();
+    show($('storyStatus'), lines.length ? '' : 'No line in this script carries an id (#a1f3) - run Arknights/Story/Assign Missing Line Ids in Unity first.', lines.length > 0);
+  }
+
+  async function savePatch(line, value) {
+    const text = value.trim();
+    const fix = patchFor(story.id, line.lineId);
+
+    // 改回原文就是撤销 / Saving the file's own text back is taking the correction back.
+    if (text === line.text) {
+      if (!fix) return show($('storyStatus'), 'Nothing to save - that is what the script already says.', false);
+      return revertPatch(story.id, line.lineId);
+    }
+
+    const path = '/v1/admin/stories/patches/' + encodeURIComponent(story.id) + '/' + encodeURIComponent(line.lineId);
+    const result = await api('PUT', path, { original: line.text, text });
+    if (!result.ok) return show($('storyStatus'), problemText(result), false);
+
+    await loadPatches();
+    show($('storyStatus'), 'Saved. Players see it the next time this story plays.', true);
+  }
+
+  async function revertPatch(storyId, lineId) {
+    if (!confirm('Take back the correction to ' + storyId + ' #' + lineId + '?')) return;
+    const path = '/v1/admin/stories/patches/' + encodeURIComponent(storyId) + '/' + encodeURIComponent(lineId);
+    const result = await api('DELETE', path);
+    if (!result.ok) return show($('storyStatus'), problemText(result), false);
+
+    await loadPatches();
+    show($('storyStatus'), 'Taken back - the line reads as the game has it again.', true);
+  }
+
+  async function loadPatches() {
+    const result = await api('GET', '/v1/admin/stories/patches');
+    if (!result.ok) return show($('storyStatus'), problemText(result), false);
+    patches = result.data.patches;
+
+    const rows = $('patchRows');
+    rows.replaceChildren();
+    for (const p of patches) {
+      const tr = document.createElement('tr');
+      const cell = t => { const td = document.createElement('td'); td.textContent = t; tr.appendChild(td); return td; };
+      cell(p.storyId);
+      cell('#' + p.lineId);
+      cell(p.original).className = 'muted';
+      cell(p.text);
+      cell((p.updatedBy || '') + ' · ' + new Date(p.updatedAt).toLocaleString()).className = 'muted small';
+      const action = document.createElement('td');
+      const undo = document.createElement('button');
+      undo.className = 'ghost'; undo.type = 'button'; undo.textContent = 'Take back';
+      undo.onclick = () => revertPatch(p.storyId, p.lineId);
+      action.appendChild(undo);
+      tr.appendChild(action);
+      rows.appendChild(tr);
+    }
+    if (!patches.length) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td colspan="6" class="muted">No corrections - every story reads as the game has it.</td>';
+      rows.appendChild(tr);
+    }
+    drawStory();
+  }
+
   // ------------------------------------------------------------------ wiring
 
   $('signIn').onclick = signIn;
@@ -598,6 +788,9 @@
   $('mEndsClear').onclick = () => { $('mEnds').value = ''; };
   $('tabConfig').onclick = () => view('config');
   $('tabEvents').onclick = () => view('events');
+  $('tabStories').onclick = () => view('stories');
+  $('storyFile').onchange = e => openStory(e.target.files[0]);
+  $('storyReload').onclick = loadPatches;
   $('newEvent').onclick = () => openEditor(null);
   $('eventSave').onclick = saveEvent;
   $('eventCancel').onclick = () => { $('eventEditor').hidden = true; };

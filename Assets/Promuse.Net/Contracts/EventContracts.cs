@@ -55,8 +55,25 @@ namespace Promuse.Contracts.Events
     /// <param name="Limit">How many one player may buy over the whole event; null for unlimited.</param>
     public sealed record EventShopOffer(string OfferId, EventReward Sell, int Price, int? Limit);
 
-    /// <summary>A chart that pays the event currency each time it is cleared while the event is open.</summary>
-    public sealed record EventStage(string StageId, int CurrencyPerClear);
+    /// <summary>
+    /// 活动关卡 / One of the event's own stages: a chart played from the event screen, which pays the
+    /// event currency each time it is cleared while the event is open.
+    ///
+    /// 按顺序解锁 / Stages unlock in the order they are listed - the first is open, every other one
+    /// opens when the stage before it has been cleared in this event.
+    /// </summary>
+    /// <param name="Title">What the stage is called on the event screen, e.g. "RD-1"; null shows the chart's name.</param>
+    /// <param name="StoryBefore">
+    /// A story script shipped in the game (Resources/Story/&lt;id&gt;.story), played before the stage
+    /// the first time it is entered. The server only carries the id - the dialogue is in the build.
+    /// </param>
+    /// <param name="StoryAfter">The same, played after the stage is cleared for the first time.</param>
+    public sealed record EventStage(
+        string StageId,
+        int CurrencyPerClear,
+        string? Title = null,
+        string? StoryBefore = null,
+        string? StoryAfter = null);
 
     /// <summary>
     /// 一个活动就是一份文档 / An event is one document, edited whole by an operator.
@@ -112,6 +129,10 @@ namespace Promuse.Contracts.Events
     /// <param name="Remaining">Null when the offer has no limit.</param>
     public sealed record EventShopState(EventShopOffer Offer, int Bought, int? Remaining);
 
+    /// <param name="IsUnlocked">The first stage, or the one before it has been cleared in this event.</param>
+    /// <param name="IsCleared">Cleared at least once in this event, from the event screen.</param>
+    public sealed record EventStageState(EventStage Stage, bool IsUnlocked, bool IsCleared);
+
     /// <summary>One event as the player sees it: the definition and their own progress in it.</summary>
     /// <param name="Points">From claimed missions.</param>
     public sealed record EventView(
@@ -124,6 +145,7 @@ namespace Promuse.Contracts.Events
         IReadOnlyList<EventMissionState> Missions,
         IReadOnlyList<EventMilestoneState> Milestones,
         IReadOnlyList<EventShopState> Shop,
+        IReadOnlyList<EventStageState> Stages,
         DateTimeOffset ServerTime);
 
     /// <summary>

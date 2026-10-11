@@ -47,5 +47,9 @@ jobs:
       - name: Beatmap chart validity
         run: python ci/check_beatmaps.py --all --strict
 
+      # A story that does not parse is skipped on the phone; catch it here instead.
+      - name: Story scripts
+        run: python ci/check_stories.py --strict
+
       - name: Repo hygiene
         run: python ci/check_repo_hygiene.py

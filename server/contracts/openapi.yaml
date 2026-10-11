@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Promuse Backend API
-  version: 1.0.0-draft.8
+  version: 1.0.0-draft.9
   summary: Authentication and player state for the Promuse mobile rhythm game.
   description: |
     **Phase 1** authentication, **Phase 2** player state, **Phase 3** the economy -
@@ -105,6 +105,11 @@ tags:
       banner to point at. An event with only check-in days is a check-in event; one with all of
       them is a festival. Missions count only while the event is open, and every action that
       hands something out is idempotent and transactional.
+  - name: stories
+    description: |
+      Corrections to story lines. The stories ship inside the game; the server holds only the
+      fixes an administrator made after release, each applied by the game only while its own
+      line still reads what the fix was written against.
   - name: missions
     description: |
       The two mission boards. Phase 3.
@@ -591,6 +596,10 @@ paths:
         选了谁要先说 / The operator is named here, before the song, and must be on the
         player's roster. Its modifiers are part of what the result is checked against;
         a result that could name its operator afterwards would name the strongest one.
+
+        活动关卡 / With `eventId` the song is played as a stage of that event: refused while
+        the event is not running or the stage before it has not been cleared, checked before
+        anything is charged. Only such a run clears the stage and pays the event currency.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -616,8 +625,9 @@ paths:
                 $ref: '#/components/schemas/Problem'
         '409':
           description: |
-            `INSUFFICIENT_STAMINA`, `CHARACTER_NOT_OWNED`, or `STATE_CONFLICT` when two
-            starts raced for the last of the bar.
+            `INSUFFICIENT_STAMINA`, `CHARACTER_NOT_OWNED`, `STATE_CONFLICT` when two
+            starts raced for the last of the bar; for an event stage `EVENT_CLOSED` or
+            `STAGE_LOCKED`.
           content:
             application/problem+json:
               schema:
@@ -1298,6 +1308,117 @@ paths:
         '428':
           $ref: '#/components/responses/PreconditionRequired'
 
+  /v1/stories/patches:
+    get:
+      tags: [stories]
+      operationId: getStoryPatches
+      summary: Every story correction in force.
+      description: |
+        The revision is the ETag; a client holding it gets 304. Asked before a story plays,
+        waiting only a moment - a story never waits on the network.
+      parameters:
+        - $ref: '#/components/parameters/IfNoneMatch'
+      responses:
+        '200':
+          description: The corrections.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoryPatchList'
+        '304':
+          description: Unchanged since the revision in If-None-Match.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /v1/admin/stories/patches:
+    get:
+      tags: [admin]
+      operationId: listStoryPatches
+      summary: The corrections in force, newest first, with who made them.
+      responses:
+        '200':
+          description: The corrections.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminStoryPatchList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: '`FORBIDDEN`.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
+  /v1/admin/stories/patches/{storyId}/{lineId}:
+    parameters:
+      - name: storyId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[a-z0-9_]{1,64}$'
+      - name: lineId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[a-z0-9]{4,8}$'
+    put:
+      tags: [admin]
+      operationId: saveStoryPatch
+      summary: Correct one line, or replace its correction.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StoryPatchRequest'
+      responses:
+        '200':
+          description: Saved; live on the next story played.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminStoryPatch'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: '`FORBIDDEN`.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+    delete:
+      tags: [admin]
+      operationId: revertStoryPatch
+      summary: Take a correction back; the line reads as the game has it again.
+      responses:
+        '204':
+          description: Taken back.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: '`FORBIDDEN`.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '404':
+          description: '`STORY_PATCH_NOT_FOUND` - no correction held for that line.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
   /v1/missions:
     get:
       tags: [missions]
@@ -1909,6 +2030,10 @@ components:
           type: string
           maxLength: 32
           description: The operator, which must be on the player's roster.
+        eventId:
+          type: [string, 'null']
+          maxLength: 64
+          description: Set when the chart is played as a stage of this event, from the event screen.
 
     RunTicket:
       type: object
@@ -2590,6 +2715,9 @@ components:
 
     EventStage:
       type: object
+      description: |
+        One of the event's own stages. They unlock in list order - each when the one before it
+        has been cleared from the event screen.
       required: [stageId, currencyPerClear]
       properties:
         stageId:
@@ -2597,6 +2725,29 @@ components:
         currencyPerClear:
           type: integer
           minimum: 1
+        title:
+          type: [string, 'null']
+          maxLength: 24
+          description: What the stage is called on the event screen; null shows the chart's name.
+        storyBefore:
+          type: [string, 'null']
+          pattern: '^[a-z0-9_]{1,64}$'
+          description: A story script in the game (Resources/Story/<id>.story), played before the stage the first time.
+        storyAfter:
+          type: [string, 'null']
+          pattern: '^[a-z0-9_]{1,64}$'
+          description: Played after the stage's first clear.
+
+    EventStageState:
+      type: object
+      required: [stage, isUnlocked, isCleared]
+      properties:
+        stage:
+          $ref: '#/components/schemas/EventStage'
+        isUnlocked:
+          type: boolean
+        isCleared:
+          type: boolean
 
     EventDefinition:
       type: object
@@ -2723,7 +2874,7 @@ components:
 
     EventView:
       type: object
-      required: [eventId, definition, isOpen, currencyBalance, points, missions, milestones, shop, serverTime]
+      required: [eventId, definition, isOpen, currencyBalance, points, missions, milestones, shop, stages, serverTime]
       properties:
         eventId:
           type: string
@@ -2751,6 +2902,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/EventShopState'
+        stages:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventStageState'
         serverTime:
           $ref: '#/components/schemas/ServerTime'
 
@@ -2821,3 +2976,69 @@ components:
           type: array
           items:
             type: string
+
+    StoryPatch:
+      type: object
+      required: [storyId, lineId, original, text]
+      properties:
+        storyId:
+          type: string
+        lineId:
+          type: string
+        original:
+          type: string
+          description: The text the correction was written against; applied only while the line still reads this.
+        text:
+          type: string
+
+    StoryPatchList:
+      type: object
+      required: [revision, patches]
+      properties:
+        revision:
+          type: integer
+          description: Grows with every save and every take-back; the ETag.
+        patches:
+          type: array
+          items:
+            $ref: '#/components/schemas/StoryPatch'
+
+    StoryPatchRequest:
+      type: object
+      required: [original, text]
+      properties:
+        original:
+          type: string
+          maxLength: 500
+        text:
+          type: string
+          maxLength: 500
+
+    AdminStoryPatch:
+      type: object
+      required: [storyId, lineId, original, text, revision, updatedAt]
+      properties:
+        storyId:
+          type: string
+        lineId:
+          type: string
+        original:
+          type: string
+        text:
+          type: string
+        revision:
+          type: integer
+        updatedAt:
+          type: string
+          format: date-time
+        updatedBy:
+          type: [string, 'null']
+
+    AdminStoryPatchList:
+      type: object
+      required: [patches]
+      properties:
+        patches:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminStoryPatch'

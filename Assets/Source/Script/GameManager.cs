@@ -725,6 +725,7 @@ void Update()
         // 从活动来就回活动 / Back to where the song was picked: the event screen for an event
         // stage, the song list otherwise.
         BootIntent.NextUI = SongSession.ReturnUI ?? SongSelectUI.UIName;
+        BootIntent.Beneath = SongSession.ReturnBeneath;
         UI.LoadingScreen.LoadScene(SongSelectUI.SelectScene);
     }
 
@@ -1005,7 +1006,7 @@ void Update()
         openingRun = true;
         ShowNotice("OPENING A NEW RUN...", 0f);
 
-        ApiResult<RunTicket> ticket = await Data.Player.PlayerManager.Inst().Api.StartRunAsync(stageId, operatorId);
+        ApiResult<RunTicket> ticket = await Data.Player.PlayerManager.Inst().Api.StartRunAsync(stageId, operatorId, SongSession.EventId);
 
         openingRun = false;
 

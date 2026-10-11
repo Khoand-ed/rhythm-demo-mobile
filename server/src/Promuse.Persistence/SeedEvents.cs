@@ -71,7 +71,7 @@ public static class SeedEvents
         ],
         Stages:
         [
-            new("stage_AIW", 30),
-            new("stage_AIW_hard", 60),
+            new("stage_AIW", 30, "RD-1", "resonant_dawn_1_before", "resonant_dawn_1_after"),
+            new("stage_AIW_hard", 60, "RD-2", "resonant_dawn_2_before", "resonant_dawn_2_after"),
         ]);
 }
