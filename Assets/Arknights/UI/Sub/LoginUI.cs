@@ -206,6 +206,11 @@ namespace UI.Sub {
 
         public override void Show() {
             base.Show();
+
+            // 登录前先看一眼 / Before anyone signs in: is the game in maintenance, is this build too
+            // old? The server refuses either way; this is what lets the screen say why first.
+            RemoteConfigManager.Inst().CheckOnLogin();
+
             SoundManager.Inst().PlayMusic(clip, false, () => {
                 SoundManager.Inst().PlayMusic(loop_clip, true);
             });

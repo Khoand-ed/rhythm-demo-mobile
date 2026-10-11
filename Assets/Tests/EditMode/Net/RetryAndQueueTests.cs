@@ -27,6 +27,7 @@ public class RetryAndQueueTests
         Assert.IsTrue(RetryPolicy.IsTransient(Problem(500, ErrorCodes.InternalError)));
         Assert.IsTrue(RetryPolicy.IsTransient(Problem(503, TransportErrorCodes.Malformed)), "a proxy's HTML 503 too");
         Assert.IsTrue(RetryPolicy.IsTransient(Problem(429, ErrorCodes.RateLimited)));
+        Assert.IsTrue(RetryPolicy.IsTransient(Problem(503, ErrorCodes.Maintenance)), "a result refused by maintenance is kept for later");
     }
 
     [Test]
@@ -36,6 +37,8 @@ public class RetryAndQueueTests
         Assert.IsFalse(RetryPolicy.IsTransient(Problem(422, ErrorCodes.ValidationFailed)));
         Assert.IsFalse(RetryPolicy.IsTransient(Problem(401, ErrorCodes.Unauthorized)), "401 has its own refresh path");
         Assert.IsFalse(RetryPolicy.IsTransient(Problem(412, ErrorCodes.StateConflict)));
+        Assert.IsFalse(RetryPolicy.IsTransient(Problem(503, ErrorCodes.FeatureDisabled)), "a switched-off feature stays off");
+        Assert.IsFalse(RetryPolicy.IsTransient(Problem(426, ErrorCodes.ClientOutdated)), "an old build stays old");
         Assert.IsFalse(RetryPolicy.IsTransient(null));
     }
 
@@ -127,6 +130,46 @@ public class RetryAndQueueTests
 
         Assert.AreEqual(PendingRunResults.Capacity, queue.Count);
         Assert.IsFalse(queue.Load().Exists(e => e.RunId == first));
+    }
+
+    // --- the remote config kept on disk ------------------------------------------
+
+    /// <summary>
+    /// The config exactly as the server writes it - camelCase, offsets on the dates - read back
+    /// through the same Newtonsoft path the client uses, then stored and read again.
+    /// </summary>
+    [Test]
+    public void ConfigCache_ReadsTheServersJson_AndRoundTrips()
+    {
+        File.WriteAllText(Path.Combine(directory, "remote-config.json"),
+            "{\"version\":7,\"document\":{\"maintenance\":{\"enabled\":true,\"message\":\"Patch\"," +
+            "\"endsAt\":\"2026-10-11T12:00:00+00:00\"},\"minClientVersion\":\"1.0.1\"," +
+            "\"features\":{\"gacha\":false,\"shop\":true,\"ranked\":true,\"leaderboards\":false}," +
+            "\"announcement\":\"Hi\"},\"updatedAt\":\"2026-10-11T09:00:00+00:00\",\"serverTime\":\"2026-10-11T09:30:00+00:00\"}");
+
+        Promuse.Contracts.Config.RemoteConfig config = new RemoteConfigCache(directory).Current;
+
+        Assert.AreEqual(7, config.Version);
+        Assert.IsTrue(config.Document.Maintenance.Enabled);
+        Assert.AreEqual("Patch", config.Document.Maintenance.Message);
+        Assert.AreEqual(new DateTimeOffset(2026, 10, 11, 12, 0, 0, TimeSpan.Zero), config.Document.Maintenance.EndsAt);
+        Assert.AreEqual("1.0.1", config.Document.MinClientVersion);
+        Assert.IsFalse(config.Document.Features.Gacha);
+        Assert.IsFalse(config.Document.Features.Leaderboards);
+        Assert.AreEqual("Hi", config.Document.Announcement);
+
+        new RemoteConfigCache(directory).Store(config);
+        Assert.AreEqual(config, new RemoteConfigCache(directory).Current, "what is stored is what comes back");
+    }
+
+    [Test]
+    public void ConfigCache_ReadsAsNothing_WhenTheFileIsGarbage()
+    {
+        File.WriteAllText(Path.Combine(directory, "remote-config.json"), "{ not json");
+        UnityEngine.TestTools.LogAssert.Expect(UnityEngine.LogType.Warning,
+            new System.Text.RegularExpressions.Regex(@"\[RemoteConfigCache\] Could not read"));
+
+        Assert.IsNull(new RemoteConfigCache(directory).Current);
     }
 
     [Test]

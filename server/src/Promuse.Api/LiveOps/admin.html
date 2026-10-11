@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Promuse LiveOps</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #181b22; --edge: #2a2f3a; --text: #e8eaee; --dim: #8b93a3;
+    --accent: #2b8fe5; --danger: #e5534b; --ok: #3fb950; --warn: #d29922;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, "Segoe UI", sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 20px; margin: 0 0 4px; letter-spacing: .5px; }
+  h2 { font-size: 15px; margin: 0 0 12px; color: var(--dim); text-transform: uppercase; letter-spacing: 1px; }
+  .panel { background: var(--panel); border: 1px solid var(--edge); border-radius: 8px; padding: 16px; margin-top: 16px; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+  label { color: var(--dim); min-width: 150px; }
+  input[type=text], input[type=password], input[type=datetime-local], textarea {
+    background: var(--bg); color: var(--text); border: 1px solid var(--edge); border-radius: 6px; padding: 7px 9px; font: inherit;
+  }
+  input[type=text], input[type=password], textarea { flex: 1 1 200px; min-width: 0; }
+  textarea { min-height: 54px; resize: vertical; }
+  button { background: var(--accent); color: #fff; border: 0; border-radius: 6px; padding: 8px 14px; font: inherit; cursor: pointer; }
+  button.ghost { background: transparent; border: 1px solid var(--edge); color: var(--text); }
+  button:disabled { opacity: .45; cursor: default; }
+  .flags { display: flex; gap: 18px; flex-wrap: wrap; }
+  .flags label { min-width: 0; color: var(--text); }
+  .status { min-height: 20px; margin-top: 8px; }
+  .status.err { color: var(--danger); } .status.ok { color: var(--ok); }
+  .badge { display: inline-block; padding: 1px 8px; border-radius: 10px; background: var(--edge); color: var(--text); font-size: 12px; }
+  .badge.on { background: var(--danger); } .badge.off { background: #24402c; color: var(--ok); }
+  /* The history scrolls inside its panel on a phone instead of pushing the page sideways. */
+  .scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--edge); vertical-align: top; }
+  th { color: var(--dim); font-weight: 500; }
+  .muted { color: var(--dim); }
+  .top { display: flex; justify-content: space-between; align-items: center; }
+  @media (max-width: 640px) { label { min-width: 100%; } }
+</style>
+</head>
+<body>
+<main>
+  <div class="top">
+    <div>
+      <h1>Promuse LiveOps</h1>
+      <div class="muted">Remote config - maintenance, minimum version, feature flags, announcement.</div>
+    </div>
+    <button id="signOut" class="ghost" hidden>Sign out</button>
+  </div>
+
+  <!-- Sign in with an administrator account. The page holds the access token for this tab only. -->
+  <section id="login" class="panel">
+    <h2>Sign in</h2>
+    <div class="row"><label for="user">Username</label><input id="user" type="text" autocomplete="username"></div>
+    <div class="row"><label for="pass">Password</label><input id="pass" type="password" autocomplete="current-password"></div>
+    <button id="signIn">Sign in</button>
+    <div id="loginStatus" class="status"></div>
+  </section>
+
+  <section id="editor" class="panel" hidden>
+    <h2>Live config <span id="version" class="badge"></span></h2>
+
+    <div class="row">
+      <label>Maintenance</label>
+      <label style="min-width:0;color:var(--text)"><input id="mEnabled" type="checkbox"> On - players are refused, admins pass</label>
+    </div>
+    <div class="row"><label for="mMessage">Maintenance message</label><textarea id="mMessage" maxlength="300" placeholder="Shown to players. Empty for a generic message."></textarea></div>
+    <div class="row">
+      <label for="mEnds">Expected end (your local time)</label>
+      <input id="mEnds" type="datetime-local">
+      <button id="mEndsClear" class="ghost" type="button">Clear</button>
+    </div>
+
+    <div class="row"><label for="minVersion">Minimum client version</label><input id="minVersion" type="text" placeholder="1.0.0"></div>
+
+    <div class="row">
+      <label>Features</label>
+      <div class="flags">
+        <label><input id="fGacha" type="checkbox"> Headhunting</label>
+        <label><input id="fShop" type="checkbox"> Store</label>
+        <label><input id="fRanked" type="checkbox"> Ranked play</label>
+        <label><input id="fLeaderboards" type="checkbox"> Leaderboards</label>
+      </div>
+    </div>
+
+    <div class="row"><label for="announcement">Announcement</label><textarea id="announcement" maxlength="300" placeholder="Shown once on the Home screen. Empty for none."></textarea></div>
+    <div class="row"><label for="note">Note (why)</label><input id="note" type="text" maxlength="200" placeholder="Kept in the history"></div>
+
+    <button id="save">Save as new version</button>
+    <button id="reload" class="ghost" type="button">Reload</button>
+    <div id="saveStatus" class="status"></div>
+  </section>
+
+  <section id="history" class="panel" hidden>
+    <h2>History</h2>
+    <div class="scroll">
+    <table>
+      <thead><tr><th>Version</th><th>When</th><th>By</th><th>What</th><th>Note</th><th></th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    </div>
+  </section>
+</main>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const TOKEN = 'promuse.admin.token';
+  let current = null; // { version, document }
+
+  // ------------------------------------------------------------------ transport
+
+  async function api(method, path, body, ifMatch) {
+    const headers = { 'Accept': 'application/json' };
+    const token = sessionStorage.getItem(TOKEN);
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+    if (body !== undefined) headers['Content-Type'] = 'application/json';
+    if (ifMatch !== undefined) headers['If-Match'] = 'W/"' + ifMatch + '"';
+
+    const response = await fetch(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+    let data = null;
+    try { data = await response.json(); } catch { /* 204 / 304 / empty */ }
+
+    if (response.status === 401) { signOut('Your session ended - sign in again.'); }
+    return { ok: response.ok, status: response.status, data };
+  }
+
+  function problemText(result) {
+    const p = result.data || {};
+    if (p.errors) return Object.entries(p.errors).map(([k, v]) => k + ': ' + v.join(' ')).join(' / ');
+    return (p.detail || p.title || ('HTTP ' + result.status));
+  }
+
+  function show(el, text, ok) {
+    el.textContent = text;
+    el.className = 'status ' + (ok ? 'ok' : 'err');
+  }
+
+  // ------------------------------------------------------------------ session
+
+  async function signIn() {
+    const result = await api('POST', '/v1/auth/login', { username: $('user').value.trim(), password: $('pass').value });
+    if (!result.ok) return show($('loginStatus'), problemText(result), false);
+
+    sessionStorage.setItem(TOKEN, result.data.tokens.accessToken);
+    $('pass').value = '';
+
+    // The token proves who this is, not that they are an admin: ask the admin API and let it say.
+    const probe = await api('GET', '/v1/admin/config/history?limit=1');
+    if (!probe.ok) {
+      sessionStorage.removeItem(TOKEN);
+      return show($('loginStatus'), probe.status === 403 ? 'This account is not an administrator.' : problemText(probe), false);
+    }
+
+    enter();
+  }
+
+  function signOut(message) {
+    sessionStorage.removeItem(TOKEN);
+    $('login').hidden = false;
+    $('editor').hidden = $('history').hidden = $('signOut').hidden = true;
+    if (message) show($('loginStatus'), message, false);
+  }
+
+  async function enter() {
+    $('login').hidden = true;
+    $('editor').hidden = $('history').hidden = $('signOut').hidden = false;
+    $('loginStatus').textContent = '';
+    await load();
+  }
+
+  // ------------------------------------------------------------------ config
+
+  function toLocalInput(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    const pad = n => String(n).padStart(2, '0');
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }
+
+  function fill(doc) {
+    $('mEnabled').checked = doc.maintenance.enabled;
+    $('mMessage').value = doc.maintenance.message || '';
+    $('mEnds').value = toLocalInput(doc.maintenance.endsAt);
+    $('minVersion').value = doc.minClientVersion;
+    $('fGacha').checked = doc.features.gacha;
+    $('fShop').checked = doc.features.shop;
+    $('fRanked').checked = doc.features.ranked;
+    $('fLeaderboards').checked = doc.features.leaderboards;
+    $('announcement').value = doc.announcement || '';
+  }
+
+  function read() {
+    const text = id => { const v = $(id).value.trim(); return v === '' ? null : v; };
+    return {
+      maintenance: {
+        enabled: $('mEnabled').checked,
+        message: text('mMessage'),
+        endsAt: $('mEnds').value ? new Date($('mEnds').value).toISOString() : null,
+      },
+      minClientVersion: $('minVersion').value.trim(),
+      features: {
+        gacha: $('fGacha').checked, shop: $('fShop').checked,
+        ranked: $('fRanked').checked, leaderboards: $('fLeaderboards').checked,
+      },
+      announcement: text('announcement'),
+    };
+  }
+
+  async function load() {
+    const live = await api('GET', '/v1/config');
+    if (!live.ok) return show($('saveStatus'), problemText(live), false);
+
+    current = live.data;
+    $('version').textContent = 'v' + current.version;
+    fill(current.document);
+    $('saveStatus').textContent = '';
+    await loadHistory();
+  }
+
+  async function save() {
+    $('save').disabled = true;
+    const result = await api('PUT', '/v1/admin/config', { document: read(), note: $('note').value.trim() || null }, current.version);
+    $('save').disabled = false;
+
+    if (!result.ok) {
+      return show($('saveStatus'), result.status === 412 ? problemText(result) + ' (press Reload)' : problemText(result), false);
+    }
+
+    $('note').value = '';
+    await load();
+    show($('saveStatus'), 'Saved as version ' + result.data.version + '. Live within a few seconds.', true);
+  }
+
+  async function rollback(version) {
+    if (!confirm('Put version ' + version + ' back as a new version?')) return;
+
+    const result = await api('POST', '/v1/admin/config/rollback', { version, note: null }, current.version);
+    if (!result.ok) return show($('saveStatus'), problemText(result), false);
+
+    await load();
+    show($('saveStatus'), 'Version ' + version + ' is live again as version ' + result.data.version + '.', true);
+  }
+
+  // ------------------------------------------------------------------ history
+
+  function summary(doc) {
+    const parts = [];
+    parts.push(doc.maintenance.enabled ? 'MAINTENANCE ON' : 'open');
+    parts.push('min ' + doc.minClientVersion);
+    const off = Object.entries(doc.features).filter(([, on]) => !on).map(([name]) => name);
+    if (off.length) parts.push('off: ' + off.join(', '));
+    if (doc.announcement) parts.push('announcement');
+    return parts.join(' · ');
+  }
+
+  async function loadHistory() {
+    const result = await api('GET', '/v1/admin/config/history?limit=30');
+    const rows = $('rows');
+    rows.replaceChildren();
+    if (!result.ok) return;
+
+    for (const r of result.data.revisions) {
+      const tr = document.createElement('tr');
+      const cell = text => { const td = document.createElement('td'); td.textContent = text; tr.appendChild(td); return td; };
+
+      cell('v' + r.version + (r.rolledBackFrom ? ' (from v' + r.rolledBackFrom + ')' : ''));
+      cell(new Date(r.createdAt).toLocaleString());
+      cell(r.createdBy || 'seed');
+      cell(summary(r.document));
+      cell(r.note || '');
+
+      const action = document.createElement('td');
+      if (r.version !== current.version) {
+        const button = document.createElement('button');
+        button.className = 'ghost';
+        button.textContent = 'Rollback';
+        button.onclick = () => rollback(r.version);
+        action.appendChild(button);
+      } else {
+        action.innerHTML = '<span class="badge off">live</span>';
+      }
+      tr.appendChild(action);
+      rows.appendChild(tr);
+    }
+  }
+
+  // ------------------------------------------------------------------ wiring
+
+  $('signIn').onclick = signIn;
+  $('pass').addEventListener('keydown', e => { if (e.key === 'Enter') signIn(); });
+  $('signOut').onclick = () => signOut();
+  $('save').onclick = save;
+  $('reload').onclick = load;
+  $('mEndsClear').onclick = () => { $('mEnds').value = ''; };
+
+  if (sessionStorage.getItem(TOKEN)) enter(); else signOut();
+})();
+</script>
+</body>
+</html>

@@ -49,4 +49,12 @@
              CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!--
+    The admin page, compiled into the assembly rather than served from wwwroot: it then comes
+    with every build and every test host, whatever directory either runs from.
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="LiveOps\admin.html" LogicalName="Promuse.Api.LiveOps.admin.html" />
+  </ItemGroup>
+
 </Project>

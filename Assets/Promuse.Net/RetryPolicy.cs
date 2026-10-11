@@ -30,6 +30,12 @@ namespace Promuse.Net
                 return true;
             }
 
+            // 关掉的功能不会一秒后自己打开 / A feature switched off by remote config comes back when
+            // an operator turns it on, not in a second - asking again only makes the player wait.
+            // Maintenance stays transient on purpose: a run result refused by it is kept and sent
+            // once the window ends, which is exactly what this answer drives.
+            if (problem.Code == ErrorCodes.FeatureDisabled) return false;
+
             // 5xx is the server's own fault, and the idempotency filter deliberately does not store
             // one - so a retry gets a fresh attempt rather than a replay of the failure. 429 means
             // slow down, not stop.

@@ -40,5 +40,13 @@ public class Account
     /// </summary>
     public DateTimeOffset? BannedAt { get; set; }
 
+    /// <summary>
+    /// May edit remote config. Read from here on every admin request rather than carried in the
+    /// access token, the same way nothing else the server decides on is put in a token: revoking
+    /// it takes effect on the next request, not when the token expires. Granted by hand - see
+    /// SETUP.md - because no endpoint should be able to mint the first admin.
+    /// </summary>
+    public bool IsAdmin { get; set; }
+
     public Player? Player { get; set; }
 }

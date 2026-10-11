@@ -90,6 +90,22 @@ XLua, Spine and DOTween under `Assets/Plugins/`.
    machine's LAN address instead - see `PromuseConfig` in
    `Assets/Promuse.Net/PromuseApi.cs`.
 
+### Remote config and the admin page
+
+Maintenance, the minimum client version, the feature flags (headhunting, store, ranked
+play, leaderboards) and the Home announcement are edited live at
+`http://127.0.0.1:5199/admin/`, without a build or a restart. The page signs in with an
+ordinary account that has been made administrator - and there is deliberately no endpoint
+that can do that, so the first one is granted by hand:
+
+```bash
+docker exec promuse-postgres psql -U promuse -d promuse -c "UPDATE accounts SET is_admin = TRUE WHERE username = 'YOUR_USERNAME';"
+```
+
+Every save is a new version with your note beside it, and any old version can be put back
+from the history. A save is live on the next request through the same API instance, and
+within five seconds on any other.
+
 ### Four red errors on boot are expected
 
 ```
