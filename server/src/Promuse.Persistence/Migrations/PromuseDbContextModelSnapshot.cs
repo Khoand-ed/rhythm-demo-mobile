@@ -691,6 +691,100 @@ namespace Promuse.Persistence.Migrations
                     b.ToTable("leaderboard_scores", (string)null);
                 });
 
+            modelBuilder.Entity("Promuse.Persistence.Entities.MailMessage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Attachments")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("attachments");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("body");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<DateTimeOffset?>("RetractedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("retracted_at");
+
+                    b.Property<string>("Sender")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("sender");
+
+                    b.Property<string>("SenderCharacterId")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("sender_character_id");
+
+                    b.Property<DateTimeOffset>("SentAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sent_at");
+
+                    b.Property<Guid?>("SentBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("sent_by");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("title");
+
+                    b.Property<Guid?>("ToAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("to_account_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_mails");
+
+                    b.HasIndex("SentBy")
+                        .HasDatabaseName("ix_mails_sent_by");
+
+                    b.HasIndex("ToAccountId", "SentAt")
+                        .HasDatabaseName("ix_mails_to_account_id_sent_at");
+
+                    b.ToTable("mails", (string)null);
+                });
+
+            modelBuilder.Entity("Promuse.Persistence.Entities.MailReceipt", b =>
+                {
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("account_id");
+
+                    b.Property<Guid>("MailId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("mail_id");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<DateTimeOffset>("OpenedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("opened_at");
+
+                    b.HasKey("AccountId", "MailId")
+                        .HasName("pk_mail_receipts");
+
+                    b.HasIndex("MailId")
+                        .HasDatabaseName("ix_mail_receipts_mail_id");
+
+                    b.ToTable("mail_receipts", (string)null);
+                });
+
             modelBuilder.Entity("Promuse.Persistence.Entities.MissionClaim", b =>
                 {
                     b.Property<Guid>("AccountId")
@@ -1002,6 +1096,110 @@ namespace Promuse.Persistence.Migrations
                             RequiredPoints = 10,
                             SortOrder = 3
                         });
+                });
+
+            modelBuilder.Entity("Promuse.Persistence.Entities.Notice", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Banner")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("banner");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasMaxLength(8000)
+                        .HasColumnType("character varying(8000)")
+                        .HasColumnName("body");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("category");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset?>("EndsAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ends_at");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("ListTitle")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("list_title");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("sort_order");
+
+                    b.Property<DateTimeOffset>("StartsAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("starts_at");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("title");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_notices");
+
+                    b.HasIndex("UpdatedBy")
+                        .HasDatabaseName("ix_notices_updated_by");
+
+                    b.HasIndex("IsActive", "StartsAt")
+                        .HasDatabaseName("ix_notices_is_active_starts_at");
+
+                    b.ToTable("notices", (string)null);
+                });
+
+            modelBuilder.Entity("Promuse.Persistence.Entities.NoticeRead", b =>
+                {
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("account_id");
+
+                    b.Property<Guid>("NoticeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("notice_id");
+
+                    b.Property<DateTimeOffset>("ReadAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("read_at");
+
+                    b.HasKey("AccountId", "NoticeId")
+                        .HasName("pk_notice_reads");
+
+                    b.HasIndex("NoticeId")
+                        .HasDatabaseName("ix_notice_reads_notice_id");
+
+                    b.ToTable("notice_reads", (string)null);
                 });
 
             modelBuilder.Entity("Promuse.Persistence.Entities.Player", b =>
@@ -1570,6 +1768,78 @@ namespace Promuse.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Promuse.Persistence.Entities.SignInClaim", b =>
+                {
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("account_id");
+
+                    b.Property<string>("MonthKey")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("month_key");
+
+                    b.Property<int>("Day")
+                        .HasColumnType("integer")
+                        .HasColumnName("day");
+
+                    b.Property<DateTimeOffset>("ClaimedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("claimed_at");
+
+                    b.Property<string>("PeriodKey")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("period_key");
+
+                    b.HasKey("AccountId", "MonthKey", "Day")
+                        .HasName("pk_sign_in_claims");
+
+                    b.HasIndex("AccountId", "PeriodKey")
+                        .IsUnique()
+                        .HasDatabaseName("ix_sign_in_claims_account_id_period_key");
+
+                    b.ToTable("sign_in_claims", (string)null);
+                });
+
+            modelBuilder.Entity("Promuse.Persistence.Entities.SignInTable", b =>
+                {
+                    b.Property<string>("Key")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("key");
+
+                    b.Property<string>("Rewards")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("rewards");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Key")
+                        .HasName("pk_sign_in_tables");
+
+                    b.HasIndex("UpdatedBy")
+                        .HasDatabaseName("ix_sign_in_tables_updated_by");
+
+                    b.ToTable("sign_in_tables", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Key = "default",
+                            Rewards = "[{\"itemId\":2,\"amount\":2000},{\"itemId\":11,\"amount\":5},{\"itemId\":6,\"amount\":10},{\"itemId\":12,\"amount\":1},{\"itemId\":13,\"amount\":3},{\"itemId\":2,\"amount\":3000},{\"itemId\":1,\"amount\":100},{\"itemId\":2,\"amount\":2000},{\"itemId\":11,\"amount\":5},{\"itemId\":6,\"amount\":10},{\"itemId\":12,\"amount\":1},{\"itemId\":13,\"amount\":3},{\"itemId\":2,\"amount\":3000},{\"itemId\":1,\"amount\":200},{\"itemId\":2,\"amount\":2000},{\"itemId\":11,\"amount\":5},{\"itemId\":6,\"amount\":10},{\"itemId\":12,\"amount\":1},{\"itemId\":13,\"amount\":3},{\"itemId\":2,\"amount\":3000},{\"itemId\":1,\"amount\":300},{\"itemId\":2,\"amount\":2000},{\"itemId\":11,\"amount\":5},{\"itemId\":6,\"amount\":10},{\"itemId\":12,\"amount\":1},{\"itemId\":13,\"amount\":3},{\"itemId\":2,\"amount\":3000},{\"itemId\":10,\"amount\":1},{\"itemId\":2,\"amount\":2000},{\"itemId\":11,\"amount\":5},{\"itemId\":8,\"amount\":10}]",
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 10, 11, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0))
+                        });
+                });
+
             modelBuilder.Entity("Promuse.Persistence.Entities.SquadSlot", b =>
                 {
                     b.Property<Guid>("AccountId")
@@ -1812,6 +2082,38 @@ namespace Promuse.Persistence.Migrations
                     b.Navigation("Player");
                 });
 
+            modelBuilder.Entity("Promuse.Persistence.Entities.MailMessage", b =>
+                {
+                    b.HasOne("Promuse.Persistence.Entities.Account", null)
+                        .WithMany()
+                        .HasForeignKey("SentBy")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_mails_accounts_sent_by");
+
+                    b.HasOne("Promuse.Persistence.Entities.Account", null)
+                        .WithMany()
+                        .HasForeignKey("ToAccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .HasConstraintName("fk_mails_accounts_to_account_id");
+                });
+
+            modelBuilder.Entity("Promuse.Persistence.Entities.MailReceipt", b =>
+                {
+                    b.HasOne("Promuse.Persistence.Entities.Player", null)
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_mail_receipts_players_account_id");
+
+                    b.HasOne("Promuse.Persistence.Entities.MailMessage", null)
+                        .WithMany()
+                        .HasForeignKey("MailId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_mail_receipts_mails_mail_id");
+                });
+
             modelBuilder.Entity("Promuse.Persistence.Entities.MissionClaim", b =>
                 {
                     b.HasOne("Promuse.Persistence.Entities.Player", "Player")
@@ -1846,6 +2148,32 @@ namespace Promuse.Persistence.Migrations
                         .HasConstraintName("fk_mission_reward_claims_players_account_id");
 
                     b.Navigation("Player");
+                });
+
+            modelBuilder.Entity("Promuse.Persistence.Entities.Notice", b =>
+                {
+                    b.HasOne("Promuse.Persistence.Entities.Account", null)
+                        .WithMany()
+                        .HasForeignKey("UpdatedBy")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_notices_accounts_updated_by");
+                });
+
+            modelBuilder.Entity("Promuse.Persistence.Entities.NoticeRead", b =>
+                {
+                    b.HasOne("Promuse.Persistence.Entities.Player", null)
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_notice_reads_players_account_id");
+
+                    b.HasOne("Promuse.Persistence.Entities.Notice", null)
+                        .WithMany()
+                        .HasForeignKey("NoticeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_notice_reads_notices_notice_id");
                 });
 
             modelBuilder.Entity("Promuse.Persistence.Entities.Player", b =>
@@ -1948,6 +2276,25 @@ namespace Promuse.Persistence.Migrations
                         .HasConstraintName("fk_run_scores_runs_run_id");
 
                     b.Navigation("Run");
+                });
+
+            modelBuilder.Entity("Promuse.Persistence.Entities.SignInClaim", b =>
+                {
+                    b.HasOne("Promuse.Persistence.Entities.Player", null)
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_sign_in_claims_players_account_id");
+                });
+
+            modelBuilder.Entity("Promuse.Persistence.Entities.SignInTable", b =>
+                {
+                    b.HasOne("Promuse.Persistence.Entities.Account", null)
+                        .WithMany()
+                        .HasForeignKey("UpdatedBy")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_sign_in_tables_accounts_updated_by");
                 });
 
             modelBuilder.Entity("Promuse.Persistence.Entities.SquadSlot", b =>

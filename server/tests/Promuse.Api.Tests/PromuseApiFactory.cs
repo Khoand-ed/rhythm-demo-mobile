@@ -46,6 +46,10 @@ public sealed class PromuseApiFactory : WebApplicationFactory<Program>, IAsyncLi
         builder.UseSetting("Jwt:Issuer", "promuse-test");
         builder.UseSetting("Jwt:Audience", "promuse-test-client");
         builder.UseSetting("Jwt:SigningKey", "test-only-signing-key-at-least-32-bytes-long");
+
+        // Uploaded banners go to a folder of this run's own, never into the source tree.
+        builder.UseSetting("Notices:BannerDirectory",
+            Path.Combine(Path.GetTempPath(), "promuse-test-banners-" + Guid.NewGuid().ToString("N")));
     }
 
     // 显式实现 / Explicit, because xunit v2's IAsyncLifetime.DisposeAsync returns

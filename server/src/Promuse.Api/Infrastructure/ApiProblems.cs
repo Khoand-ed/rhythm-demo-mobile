@@ -164,6 +164,13 @@ public static class ApiProblems
         Create(404, ErrorCodes.StoryPatchNotFound, "No such correction",
             $"No correction is held for line '{lineId}' of '{storyId}'.");
 
+    public static ApiProblem MailNotFound() =>
+        Create(404, ErrorCodes.MailNotFound, "No such mail",
+            "That mail is not in your box - it may have expired or been deleted.");
+
+    public static ApiProblem NoticeNotFound() =>
+        Create(404, ErrorCodes.NoticeNotFound, "No such notice", "That notice is not showing.");
+
     public static ApiProblem StageLocked(string previousStageId) =>
         Create(409, ErrorCodes.StageLocked, "Stage is locked",
             $"Clear the stage before it ('{previousStageId}') to unlock this one.");

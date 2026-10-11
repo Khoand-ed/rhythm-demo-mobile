@@ -71,6 +71,18 @@ public class PromuseDbContext(DbContextOptions<PromuseDbContext> options) : DbCo
 
     public DbSet<StoryLinePatch> StoryPatches => Set<StoryLinePatch>();
 
+    public DbSet<MailMessage> Mails => Set<MailMessage>();
+
+    public DbSet<MailReceipt> MailReceipts => Set<MailReceipt>();
+
+    public DbSet<Notice> Notices => Set<Notice>();
+
+    public DbSet<NoticeRead> NoticeReads => Set<NoticeRead>();
+
+    public DbSet<SignInTable> SignInTables => Set<SignInTable>();
+
+    public DbSet<SignInClaim> SignInClaims => Set<SignInClaim>();
+
     /// <summary>Hands every story correction its revision - see <see cref="StoryLinePatch"/>.</summary>
     public const string StoryPatchRevisions = "story_patch_revisions";
 
@@ -483,6 +495,87 @@ public class PromuseDbContext(DbContextOptions<PromuseDbContext> options) : DbCo
             entity.Property(c => c.EventId).HasMaxLength(64);
             entity.Property(c => c.StageId).HasMaxLength(64);
             entity.ToTable(t => t.HasCheckConstraint("ck_event_stage_clears_clears", "clears > 0"));
+            entity.HasOne<Player>().WithMany().HasForeignKey(c => c.AccountId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ---- mail
+        modelBuilder.Entity<MailMessage>(entity =>
+        {
+            entity.ToTable("mails");
+            entity.HasKey(m => m.Id);
+            entity.Property(m => m.Title).HasMaxLength(60).IsRequired();
+            entity.Property(m => m.Body).HasMaxLength(2000).IsRequired();
+            entity.Property(m => m.Sender).HasMaxLength(40).IsRequired();
+            entity.Property(m => m.SenderCharacterId).HasMaxLength(32);
+            entity.Property(m => m.Attachments).HasColumnType("jsonb").IsRequired();
+
+            // "This player's box" reads the mails to them and the mails to everyone, newest first.
+            entity.HasIndex(m => new { m.ToAccountId, m.SentAt });
+
+            entity.HasOne<Account>().WithMany().HasForeignKey(m => m.ToAccountId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<Account>().WithMany().HasForeignKey(m => m.SentBy).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<MailReceipt>(entity =>
+        {
+            entity.ToTable("mail_receipts");
+            entity.HasKey(r => new { r.AccountId, r.MailId });
+            entity.HasIndex(r => r.MailId);
+            entity.HasOne<Player>().WithMany().HasForeignKey(r => r.AccountId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<MailMessage>().WithMany().HasForeignKey(r => r.MailId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ---- notices
+        modelBuilder.Entity<Notice>(entity =>
+        {
+            entity.ToTable("notices");
+            entity.HasKey(n => n.Id);
+            entity.Property(n => n.Version).IsConcurrencyToken();
+            entity.Property(n => n.Category).HasMaxLength(16).IsRequired();
+            entity.Property(n => n.ListTitle).HasMaxLength(40).IsRequired();
+            entity.Property(n => n.Title).HasMaxLength(80).IsRequired();
+            entity.Property(n => n.Body).HasMaxLength(8000).IsRequired();
+            entity.Property(n => n.Banner).HasMaxLength(64);
+            entity.HasIndex(n => new { n.IsActive, n.StartsAt });
+            entity.HasOne<Account>().WithMany().HasForeignKey(n => n.UpdatedBy).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<NoticeRead>(entity =>
+        {
+            entity.ToTable("notice_reads");
+            entity.HasKey(r => new { r.AccountId, r.NoticeId });
+            entity.HasOne<Player>().WithMany().HasForeignKey(r => r.AccountId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<Notice>().WithMany().HasForeignKey(r => r.NoticeId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ---- monthly sign-in
+        modelBuilder.Entity<SignInTable>(entity =>
+        {
+            entity.ToTable("sign_in_tables");
+            entity.HasKey(t => t.Key);
+            entity.Property(t => t.Key).HasMaxLength(16);
+            entity.Property(t => t.Rewards).HasColumnType("jsonb").IsRequired();
+            entity.HasOne<Account>().WithMany().HasForeignKey(t => t.UpdatedBy).OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasData(new SignInTable
+            {
+                Key = SeedSignIn.DefaultKey,
+                Rewards = SeedSignIn.DefaultJson,
+                UpdatedAt = new DateTimeOffset(2026, 10, 11, 0, 0, 0, TimeSpan.Zero),
+            });
+        });
+
+        modelBuilder.Entity<SignInClaim>(entity =>
+        {
+            entity.ToTable("sign_in_claims");
+            entity.HasKey(c => new { c.AccountId, c.MonthKey, c.Day });
+            entity.Property(c => c.MonthKey).HasMaxLength(16);
+            entity.Property(c => c.PeriodKey).HasMaxLength(16);
+
+            // 一天一格 / One square per server day: two taps race to the same day key and the
+            // second insert is refused.
+            entity.HasIndex(c => new { c.AccountId, c.PeriodKey }).IsUnique();
+
             entity.HasOne<Player>().WithMany().HasForeignKey(c => c.AccountId).OnDelete(DeleteBehavior.Cascade);
         });
 

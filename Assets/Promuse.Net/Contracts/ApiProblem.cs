@@ -144,6 +144,12 @@ namespace Promuse.Contracts
         /// <summary>No correction is held for that story line.</summary>
         public const string StoryPatchNotFound = "STORY_PATCH_NOT_FOUND";
 
+        /// <summary>No such mail in this player's box - never sent to them, expired, deleted or retracted.</summary>
+        public const string MailNotFound = "MAIL_NOT_FOUND";
+
+        /// <summary>No such notice, or it is not showing.</summary>
+        public const string NoticeNotFound = "NOTICE_NOT_FOUND";
+
         /// <summary>
         /// The game is down for maintenance. Temporary by definition: a result that could not be
         /// sent is kept and sent afterwards, and the detail says what the operator wrote.

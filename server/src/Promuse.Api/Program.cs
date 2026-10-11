@@ -17,6 +17,9 @@ using Promuse.Api.Missions;
 using Promuse.Api.Players;
 using Promuse.Api.Runs;
 using Promuse.Api.Stories;
+using Promuse.Api.Mailbox;
+using Promuse.Api.Notices;
+using Promuse.Api.SignIn;
 using Microsoft.Extensions.Options;
 using Promuse.Persistence;
 
@@ -92,6 +95,10 @@ builder.Services.AddScoped<EventProgress>();
 builder.Services.AddScoped<EventService>();
 builder.Services.AddScoped<EventAdminService>();
 builder.Services.AddScoped<StoryPatchService>();
+builder.Services.AddScoped<MailService>();
+builder.Services.AddScoped<NoticeService>();
+builder.Services.AddScoped<SignInService>();
+builder.Services.AddOptions<NoticeOptions>().Bind(builder.Configuration.GetSection(NoticeOptions.SectionName));
 
 builder.Services.AddOptions<GameDataOptions>()
     .Bind(builder.Configuration.GetSection(GameDataOptions.SectionName));
@@ -254,6 +261,9 @@ app.MapGachaEndpoints();
 app.MapRemoteConfigEndpoints();
 app.MapEventEndpoints();
 app.MapStoryEndpoints();
+app.MapMailEndpoints();
+app.MapNoticeEndpoints();
+app.MapSignInEndpoints();
 
 
 app.Run();

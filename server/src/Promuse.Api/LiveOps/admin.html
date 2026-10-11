@@ -51,6 +51,8 @@
   table.grid td.sel select { min-width: 140px; }
   select { background: var(--bg); color: var(--text); border: 1px solid var(--edge); border-radius: 6px; padding: 7px 9px; font: inherit; }
   .small { font-size: 12px; }
+  .banner-preview { max-width: 100%; max-height: 180px; border: 1px solid var(--edge); border-radius: 6px; display: block; margin-top: 8px; }
+  table.grid td.num input { width: 90px; min-width: 0; }
   @media (max-width: 640px) { label { min-width: 100%; } }
 </style>
 </head>
@@ -59,7 +61,7 @@
   <div class="top">
     <div>
       <h1>Promuse LiveOps</h1>
-      <div class="muted">Remote config, live events and story corrections, changed without a build or a restart.</div>
+      <div class="muted">Remote config, events, stories, mail, notices and the monthly sign-in - changed without a build or a restart.</div>
     </div>
     <button id="signOut" class="ghost" hidden>Sign out</button>
   </div>
@@ -68,6 +70,9 @@
     <button id="tabConfig" type="button" class="on">Remote config</button>
     <button id="tabEvents" type="button">Events</button>
     <button id="tabStories" type="button">Stories</button>
+    <button id="tabMail" type="button">Mail</button>
+    <button id="tabNotices" type="button">Notices</button>
+    <button id="tabSignIn" type="button">Sign-in</button>
   </nav>
 
   <!-- Sign in with an administrator account. The page holds the access token for this tab only. -->
@@ -189,6 +194,79 @@
       </div>
     </div>
   </section>
+
+  <section id="mail" class="panel" hidden>
+    <h2>Send mail</h2>
+    <div class="row"><label for="mTo">To (username)</label><input id="mTo" type="text" placeholder="Empty sends to every player who exists now"></div>
+    <div class="row"><label for="mSender">Sender</label><input id="mSender" type="text" maxlength="40" value="Rhodes Island"></div>
+    <div class="row"><label for="mPortrait">Sender portrait</label><input id="mPortrait" type="text" maxlength="32" placeholder="An operator id (AMIYA, NOVA...) or empty"></div>
+    <div class="row"><label for="mTitle">Title</label><input id="mTitle" type="text" maxlength="60"></div>
+    <div class="row"><label for="mBody">Body</label><textarea id="mBody" maxlength="2000" style="min-height:110px"></textarea></div>
+    <div class="row"><label for="mDays">Expires after (days)</label><input id="mDays" type="text" value="30"></div>
+    <div class="module">
+      <div class="top"><h3>Attachments</h3><button id="mAdd" class="ghost" type="button">Add item</button></div>
+      <div class="muted small">Collected when the player opens the mail. At most 10.</div>
+      <div class="scroll"><table class="grid"><thead><tr><th>Item id</th><th>Amount</th><th></th></tr></thead><tbody id="mItems"></tbody></table></div>
+    </div>
+    <div style="margin-top:14px"><button id="mSend" type="button">Send</button></div>
+    <div id="mailStatus" class="status"></div>
+
+    <div class="module">
+      <div class="top"><h3>Sent</h3><button id="mReload" class="ghost" type="button">Reload</button></div>
+      <div class="scroll"><table>
+        <thead><tr><th>When</th><th>To</th><th>Title</th><th>Items</th><th>Opened</th><th>Expires</th><th></th></tr></thead>
+        <tbody id="mailRows"></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <section id="notices" class="panel" hidden>
+    <div class="top"><h2>Notices</h2><button id="nNew" type="button">New notice</button></div>
+    <div class="scroll"><table>
+      <thead><tr><th>Tab</th><th>List title</th><th>Showing (your time)</th><th>Status</th><th>Order</th><th>v</th><th></th></tr></thead>
+      <tbody id="noticeRows"></tbody>
+    </table></div>
+    <div id="noticesStatus" class="status"></div>
+  </section>
+
+  <section id="noticeEditor" class="panel" hidden>
+    <h2 id="nEditorTitle">New notice</h2>
+    <div class="row"><label for="nCategory">Tab</label>
+      <select id="nCategory"><option>Event</option><option>System</option><option>News</option></select></div>
+    <div class="row"><label for="nListTitle">List title</label><input id="nListTitle" type="text" maxlength="40" placeholder="Short - shown on the list on the left"></div>
+    <div class="row"><label for="nTitle">Title</label><input id="nTitle" type="text" maxlength="80"></div>
+    <div class="row"><label for="nBody">Body</label><textarea id="nBody" maxlength="8000" style="min-height:160px"
+      placeholder="Rich text: <b>bold</b>, <size=120%>bigger</size>, <color=#2b8fe5>colour</color>"></textarea></div>
+    <div class="row"><label for="nBannerFile">Banner (PNG/JPEG, 2 MB)</label><input id="nBannerFile" type="file" accept="image/png,image/jpeg">
+      <button id="nBannerClear" class="ghost" type="button">No banner</button></div>
+    <img id="nBannerPreview" class="banner-preview" alt="" hidden>
+    <div class="row" style="margin-top:10px"><label for="nStarts">Shows from (your time)</label><input id="nStarts" type="datetime-local" step="1"></div>
+    <div class="row"><label for="nEnds">Until (your time)</label><input id="nEnds" type="datetime-local" step="1">
+      <button id="nEndsClear" class="ghost" type="button">No end</button></div>
+    <div class="row"><label for="nOrder">Order</label><input id="nOrder" type="text" value="0" placeholder="Higher shows first"></div>
+    <div class="row"><label>Status</label><label style="min-width:0;color:var(--text)"><input id="nActive" type="checkbox" checked> Active - off takes it down</label></div>
+    <button id="nSave" type="button">Save</button>
+    <button id="nCancel" class="ghost" type="button">Cancel</button>
+    <div id="noticeStatus" class="status"></div>
+  </section>
+
+  <section id="signin" class="panel" hidden>
+    <h2>Monthly sign-in</h2>
+    <div class="muted small">One square per server day, in order; a new month starts again from square 1. A month with no
+      table of its own uses <b>default</b> (exactly 31 squares; a shorter month uses the first ones).</div>
+    <div class="scroll" style="margin-top:10px"><table>
+      <thead><tr><th>Table</th><th>Squares</th><th>Updated</th><th></th></tr></thead>
+      <tbody id="signRows"></tbody>
+    </table></div>
+    <div class="module">
+      <div class="row"><label for="sKey">Table</label><input id="sKey" type="text" placeholder="default, or a month as 2026-11">
+        <button id="sLoad" class="ghost" type="button">Open</button></div>
+      <div class="scroll"><table class="grid"><thead><tr><th>Day</th><th>Item id</th><th>Amount</th></tr></thead><tbody id="sDays"></tbody></table></div>
+      <div style="margin-top:12px"><button id="sSave" type="button">Save table</button>
+        <button id="sDelete" class="ghost" type="button">Remove month table</button></div>
+      <div id="signStatus" class="status"></div>
+    </div>
+  </section>
 </main>
 
 <script>
@@ -247,7 +325,7 @@
   function signOut(message) {
     sessionStorage.removeItem(TOKEN);
     $('login').hidden = false;
-    for (const id of ['editor', 'history', 'signOut', 'nav', 'events', 'eventEditor', 'stories']) $(id).hidden = true;
+    for (const id of ['editor', 'history', 'signOut', 'nav', 'events', 'eventEditor', 'stories', 'mail', 'notices', 'noticeEditor', 'signin']) $(id).hidden = true;
     if (message) show($('loginStatus'), message, false);
   }
 
@@ -262,13 +340,22 @@
     $('tabConfig').className = which === 'config' ? 'on' : '';
     $('tabEvents').className = which === 'events' ? 'on' : '';
     $('tabStories').className = which === 'stories' ? 'on' : '';
+    $('tabMail').className = which === 'mail' ? 'on' : '';
+    $('tabNotices').className = which === 'notices' ? 'on' : '';
+    $('tabSignIn').className = which === 'signin' ? 'on' : '';
     $('editor').hidden = $('history').hidden = which !== 'config';
     $('events').hidden = which !== 'events';
     $('stories').hidden = which !== 'stories';
-    $('eventEditor').hidden = true;
+    $('mail').hidden = which !== 'mail';
+    $('notices').hidden = which !== 'notices';
+    $('signin').hidden = which !== 'signin';
+    $('eventEditor').hidden = $('noticeEditor').hidden = true;
     if (which === 'config') await load();
     else if (which === 'events') await loadEvents();
-    else await loadPatches();
+    else if (which === 'stories') await loadPatches();
+    else if (which === 'mail') await loadMail();
+    else if (which === 'notices') await loadNotices();
+    else await loadSignIn();
   }
 
   // ------------------------------------------------------------------ config
@@ -778,6 +865,270 @@
     drawStory();
   }
 
+  // ------------------------------------------------------------------ shared item rows
+
+  function itemRow(tbody, item, label) {
+    const tr = document.createElement('tr');
+    if (label !== undefined) { const td = document.createElement('td'); td.textContent = label; td.className = 'muted'; tr.appendChild(td); }
+    for (const [key, value] of [['itemId', item ? item.itemId : ''], ['amount', item ? item.amount : '']]) {
+      const td = document.createElement('td');
+      td.className = 'num';
+      const input = document.createElement('input');
+      input.type = 'number'; input.value = value; input.dataset.key = key;
+      td.appendChild(input);
+      tr.appendChild(td);
+    }
+    if (label === undefined) {
+      const td = document.createElement('td');
+      const remove = document.createElement('button');
+      remove.className = 'ghost'; remove.type = 'button'; remove.textContent = '×';
+      remove.onclick = () => tr.remove();
+      td.appendChild(remove);
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+
+  function readItems(tbody) {
+    return [...tbody.children].map(tr => {
+      const v = k => { const raw = tr.querySelector('[data-key="' + k + '"]').value.trim(); return raw === '' ? 0 : Number(raw); };
+      return { itemId: v('itemId'), amount: v('amount') };
+    });
+  }
+
+  function itemsText(items) {
+    return items.length ? items.map(i => '#' + i.itemId + ' ×' + i.amount).join(', ') : '-';
+  }
+
+  // ------------------------------------------------------------------ mail
+
+  async function sendMail() {
+    const to = $('mTo').value.trim();
+    const request = {
+      title: $('mTitle').value.trim(), body: $('mBody').value, sender: $('mSender').value.trim(),
+      senderCharacterId: $('mPortrait').value.trim() || null,
+      attachments: readItems($('mItems')),
+      expiresInDays: Number($('mDays').value.trim() || 0),
+      toUsername: to || null,
+    };
+    if (!to && !confirm('Send this to every player?')) return;
+
+    $('mSend').disabled = true;
+    const result = await api('POST', '/v1/admin/mail', request);
+    $('mSend').disabled = false;
+    if (!result.ok) return show($('mailStatus'), problemText(result), false);
+
+    $('mTitle').value = ''; $('mBody').value = ''; $('mItems').replaceChildren();
+    await loadMail();
+    show($('mailStatus'), 'Sent' + (to ? ' to ' + to : ' to everyone') + '.', true);
+  }
+
+  async function retractMail(id) {
+    if (!confirm('Take this mail out of every box? Items already collected stay collected.')) return;
+    const result = await api('POST', '/v1/admin/mail/' + id + '/retract');
+    if (!result.ok) return show($('mailStatus'), problemText(result), false);
+    await loadMail();
+    show($('mailStatus'), 'Retracted.', true);
+  }
+
+  async function loadMail() {
+    const result = await api('GET', '/v1/admin/mail');
+    if (!result.ok) return show($('mailStatus'), problemText(result), false);
+
+    const rows = $('mailRows');
+    rows.replaceChildren();
+    for (const m of result.data.mails) {
+      const tr = document.createElement('tr');
+      const cell = t => { const td = document.createElement('td'); td.textContent = t; tr.appendChild(td); return td; };
+      cell(new Date(m.sentAt).toLocaleString()).className = 'small';
+      cell(m.toUsername || 'everyone');
+      cell(m.title);
+      cell(itemsText(m.attachments)).className = 'small';
+      cell(String(m.opened));
+      cell(m.isRetracted ? 'retracted' : new Date(m.expiresAt).toLocaleDateString()).className = 'small';
+      const action = document.createElement('td');
+      if (!m.isRetracted) {
+        const b = document.createElement('button');
+        b.className = 'ghost'; b.type = 'button'; b.textContent = 'Retract';
+        b.onclick = () => retractMail(m.mailId);
+        action.appendChild(b);
+      }
+      tr.appendChild(action);
+      rows.appendChild(tr);
+    }
+  }
+
+  // ------------------------------------------------------------------ notices
+
+  let noticeEditing = null; // { id, version } or null
+  let noticeBanner = null;  // file name
+
+  function setBanner(name, url) {
+    noticeBanner = name;
+    $('nBannerPreview').hidden = !url;
+    if (url) $('nBannerPreview').src = url;
+  }
+
+  function openNotice(n) {
+    noticeEditing = n ? { id: n.noticeId, version: n.version } : null;
+    const d = n ? n.definition : {
+      category: 'Event', listTitle: '', title: '', body: '', banner: null,
+      startsAt: new Date().toISOString(), endsAt: null, isActive: true, sortOrder: 0,
+    };
+    $('nEditorTitle').textContent = n ? 'Edit notice (v' + n.version + ')' : 'New notice';
+    $('nCategory').value = d.category;
+    $('nListTitle').value = d.listTitle;
+    $('nTitle').value = d.title;
+    $('nBody').value = d.body;
+    $('nStarts').value = toLocalInput(d.startsAt);
+    $('nEnds').value = toLocalInput(d.endsAt);
+    $('nOrder').value = d.sortOrder;
+    $('nActive').checked = d.isActive;
+    $('nBannerFile').value = '';
+    setBanner(d.banner, d.banner ? '/v1/notices/banners/' + d.banner : null);
+    $('noticeStatus').textContent = '';
+    $('noticeEditor').hidden = false;
+    $('noticeEditor').scrollIntoView({ behavior: 'smooth' });
+  }
+
+  async function uploadBanner(file) {
+    if (!file) return;
+    const form = new FormData();
+    form.append('file', file);
+    const response = await fetch('/v1/admin/notices/banners', {
+      method: 'POST', body: form,
+      headers: { 'Authorization': 'Bearer ' + sessionStorage.getItem(TOKEN), 'Accept': 'application/json' },
+    });
+    let data = null;
+    try { data = await response.json(); } catch { }
+    if (!response.ok) return show($('noticeStatus'), problemText({ data, status: response.status }), false);
+    setBanner(data.banner, data.url);
+    show($('noticeStatus'), 'Banner uploaded - save to use it.', true);
+  }
+
+  async function saveNotice() {
+    if (!$('nStarts').value) return show($('noticeStatus'), 'Set when it starts showing.', false);
+    const definition = {
+      category: $('nCategory').value,
+      listTitle: $('nListTitle').value.trim(),
+      title: $('nTitle').value.trim(),
+      body: $('nBody').value,
+      banner: noticeBanner,
+      startsAt: new Date($('nStarts').value).toISOString(),
+      endsAt: $('nEnds').value ? new Date($('nEnds').value).toISOString() : null,
+      isActive: $('nActive').checked,
+      sortOrder: Number($('nOrder').value.trim() || 0),
+    };
+
+    $('nSave').disabled = true;
+    const result = noticeEditing
+      ? await api('PUT', '/v1/admin/notices/' + noticeEditing.id, { definition }, noticeEditing.version)
+      : await api('POST', '/v1/admin/notices', { definition });
+    $('nSave').disabled = false;
+    if (!result.ok) return show($('noticeStatus'), problemText(result), false);
+
+    await loadNotices();
+    openNotice(result.data);
+    show($('noticeStatus'), 'Saved as version ' + result.data.version + '.', true);
+  }
+
+  function noticeStatus(d) {
+    const now = Date.now();
+    if (!d.isActive) return 'off';
+    if (now < Date.parse(d.startsAt)) return 'upcoming';
+    if (d.endsAt && now >= Date.parse(d.endsAt)) return 'ended';
+    return 'showing';
+  }
+
+  async function loadNotices() {
+    const result = await api('GET', '/v1/admin/notices');
+    if (!result.ok) return show($('noticesStatus'), problemText(result), false);
+
+    const rows = $('noticeRows');
+    rows.replaceChildren();
+    for (const n of result.data.notices) {
+      const d = n.definition;
+      const tr = document.createElement('tr');
+      const cell = t => { const td = document.createElement('td'); td.textContent = t; tr.appendChild(td); return td; };
+      cell(d.category);
+      cell(d.listTitle);
+      cell(new Date(d.startsAt).toLocaleString() + ' → ' + (d.endsAt ? new Date(d.endsAt).toLocaleString() : 'no end')).className = 'small';
+      const status = noticeStatus(d);
+      cell('').innerHTML = '<span class="badge ' + (status === 'showing' ? 'off' : status === 'off' ? 'on' : '') + '">' + status + '</span>';
+      cell(String(d.sortOrder));
+      cell('v' + n.version);
+      const action = document.createElement('td');
+      const b = document.createElement('button');
+      b.className = 'ghost'; b.type = 'button'; b.textContent = 'Edit';
+      b.onclick = () => openNotice(n);
+      action.appendChild(b);
+      tr.appendChild(action);
+      rows.appendChild(tr);
+    }
+    $('noticesStatus').textContent = result.data.notices.length ? '' : 'No notices yet.';
+  }
+
+  // ------------------------------------------------------------------ sign-in
+
+  let signTables = [];
+
+  function openTable(key) {
+    key = (key || '').trim();
+    if (!key) return show($('signStatus'), 'Name a table: default, or a month like 2026-11.', false);
+    const table = signTables.find(t => t.key === key) || signTables.find(t => t.key === 'default');
+    $('sKey').value = key;
+    const rows = $('sDays');
+    rows.replaceChildren();
+    const squares = table ? table.rewards : [];
+    for (let i = 0; i < 31; i++) itemRow(rows, squares[i] || null, String(i + 1));
+    $('sDelete').hidden = key === 'default';
+    show($('signStatus'), signTables.some(t => t.key === key) ? '' : 'New table, started from the default.', true);
+  }
+
+  async function saveTable() {
+    const key = $('sKey').value.trim();
+    let rewards = readItems($('sDays'));
+    // 一个月只要它的天数 / A month needs as many squares as it has days; trailing empty rows are dropped.
+    while (rewards.length > 0 && rewards[rewards.length - 1].itemId === 0 && rewards[rewards.length - 1].amount === 0) rewards.pop();
+    const result = await api('PUT', '/v1/admin/sign-in/' + encodeURIComponent(key), { rewards });
+    if (!result.ok) return show($('signStatus'), problemText(result), false);
+    await loadSignIn(key);
+    show($('signStatus'), 'Saved ' + key + '.', true);
+  }
+
+  async function deleteTable() {
+    const key = $('sKey').value.trim();
+    if (!confirm('Remove ' + key + '? That month uses the default again.')) return;
+    const result = await api('DELETE', '/v1/admin/sign-in/' + encodeURIComponent(key));
+    if (!result.ok) return show($('signStatus'), problemText(result), false);
+    await loadSignIn('default');
+    show($('signStatus'), 'Removed - ' + key + ' uses the default.', true);
+  }
+
+  async function loadSignIn(open) {
+    const result = await api('GET', '/v1/admin/sign-in');
+    if (!result.ok) return show($('signStatus'), problemText(result), false);
+    signTables = result.data.tables;
+
+    const rows = $('signRows');
+    rows.replaceChildren();
+    for (const t of signTables) {
+      const tr = document.createElement('tr');
+      const cell = x => { const td = document.createElement('td'); td.textContent = x; tr.appendChild(td); return td; };
+      cell(t.key);
+      cell(String(t.rewards.length));
+      cell(new Date(t.updatedAt).toLocaleString() + (t.updatedBy ? ' · ' + t.updatedBy : '')).className = 'small';
+      const action = document.createElement('td');
+      const b = document.createElement('button');
+      b.className = 'ghost'; b.type = 'button'; b.textContent = 'Open';
+      b.onclick = () => openTable(t.key);
+      action.appendChild(b);
+      tr.appendChild(action);
+      rows.appendChild(tr);
+    }
+    openTable(open || $('sKey').value || 'default');
+  }
+
   // ------------------------------------------------------------------ wiring
 
   $('signIn').onclick = signIn;
@@ -789,6 +1140,21 @@
   $('tabConfig').onclick = () => view('config');
   $('tabEvents').onclick = () => view('events');
   $('tabStories').onclick = () => view('stories');
+  $('tabMail').onclick = () => view('mail');
+  $('tabNotices').onclick = () => view('notices');
+  $('tabSignIn').onclick = () => view('signin');
+  $('mAdd').onclick = () => { if ($('mItems').children.length < 10) itemRow($('mItems'), null); };
+  $('mSend').onclick = sendMail;
+  $('mReload').onclick = loadMail;
+  $('nNew').onclick = () => openNotice(null);
+  $('nSave').onclick = saveNotice;
+  $('nCancel').onclick = () => { $('noticeEditor').hidden = true; };
+  $('nBannerFile').onchange = e => uploadBanner(e.target.files[0]);
+  $('nBannerClear').onclick = () => { $('nBannerFile').value = ''; setBanner(null, null); };
+  $('nEndsClear').onclick = () => { $('nEnds').value = ''; };
+  $('sLoad').onclick = () => openTable($('sKey').value);
+  $('sSave').onclick = saveTable;
+  $('sDelete').onclick = deleteTable;
   $('storyFile').onchange = e => openStory(e.target.files[0]);
   $('storyReload').onclick = loadPatches;
   $('newEvent').onclick = () => openEditor(null);
