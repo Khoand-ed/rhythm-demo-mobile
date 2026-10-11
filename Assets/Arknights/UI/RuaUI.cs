@@ -48,6 +48,11 @@ namespace UI {
 
         public override void UpdateView() { //更新
             luaUpdateView?.Invoke();
+
+            // 回到主界面就看一眼配置 / UIManager calls this right after Home shows and again when a
+            // screen on top of it closes - every return to Home, which is when remote config is
+            // checked. The answer is a 304 unless something changed.
+            if (Name == BootIntent.Home) RemoteConfigManager.Inst().CheckOnHome();
         }
 
         public override void Show() {

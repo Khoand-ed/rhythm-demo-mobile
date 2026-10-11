@@ -11,6 +11,7 @@ using System.Text.Json.Serialization;
 using Promuse.Api.Economy;
 using Promuse.Api.Gacha;
 using Promuse.Api.Leaderboards;
+using Promuse.Api.LiveOps;
 using Promuse.Api.Missions;
 using Promuse.Api.Players;
 using Promuse.Api.Runs;
@@ -83,6 +84,8 @@ builder.Services.AddSingleton<MissionPeriod>();
 builder.Services.AddScoped<LeaderboardService>();
 builder.Services.AddScoped<GachaService>();
 builder.Services.AddSingleton<IGachaDice, SecureGachaDice>();
+builder.Services.AddSingleton<RemoteConfigStore>();
+builder.Services.AddScoped<RemoteConfigService>();
 
 builder.Services.AddOptions<GameDataOptions>()
     .Bind(builder.Configuration.GetSection(GameDataOptions.SectionName));
@@ -209,6 +212,10 @@ app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 
+// 维护和版本 / After authentication, so an administrator can be recognised and let through
+// maintenance; before the endpoints, so a refused request never reaches a handler.
+app.UseMiddleware<LiveOpsGate>();
+
 // Liveness: the process is running and can answer. Nothing else - by design.
 app.MapHealthChecks("/health/live", new()
 {
@@ -238,6 +245,8 @@ app.MapRunEndpoints();
 app.MapMissionEndpoints();
 app.MapLeaderboardEndpoints();
 app.MapGachaEndpoints();
+app.MapRemoteConfigEndpoints();
+
 
 app.Run();
 

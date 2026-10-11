@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using Promuse.Api.Infrastructure;
+using Promuse.Api.LiveOps;
 using Promuse.Contracts.Runs;
 
 namespace Promuse.Api.Runs;
@@ -14,6 +15,9 @@ public static class RunEndpoints
             .RequireAuthorization();
 
         group.MapPost("/", StartAsync)
+             // Only opening a run is gated. Closing one is not: a run started before ranked play
+             // was switched off must still be able to hand in its result.
+             .RequireFeature(f => f.Ranked, "Ranked play")
              // 开一局要花理智 / Starting a run spends stamina, so a retry that
              // reached the server the first time must not charge a second bar.
              .AddEndpointFilter<IdempotencyFilter<StartRunRequest>>();

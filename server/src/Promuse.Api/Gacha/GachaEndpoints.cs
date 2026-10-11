@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Promuse.Api.Infrastructure;
+using Promuse.Api.LiveOps;
 using Promuse.Contracts.Gacha;
 
 namespace Promuse.Api.Gacha;
@@ -16,6 +17,7 @@ public static class GachaEndpoints
         group.MapGet("/history", GetHistoryAsync);
 
         group.MapPost("/pulls", PullAsync)
+             .RequireFeature(f => f.Gacha, "Headhunting")
              // 必须幂等 / A pull both charges and grants, and its result is random. A retry after
              // a lost response must replay the first answer - re-running it would charge twice
              // and, worse, roll again until the player liked the result.

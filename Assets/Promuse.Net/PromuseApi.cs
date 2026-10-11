@@ -8,6 +8,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 using Promuse.Contracts;
 using Promuse.Contracts.Auth;
+using Promuse.Contracts.Config;
 using Promuse.Contracts.Gacha;
 using Promuse.Contracts.Leaderboards;
 using Promuse.Contracts.Missions;
@@ -89,12 +90,49 @@ namespace Promuse.Net
             _config = config;
             _tokens = tokens;
             Pending = new PendingRunResults(Application.persistentDataPath);
+            ConfigCache = new RemoteConfigCache(Application.persistentDataPath);
         }
 
         public TokenStore Tokens => _tokens;
 
         /// <summary>Results that could not be sent when their run ended. See <see cref="FlushPendingRunsAsync"/>.</summary>
         public PendingRunResults Pending { get; }
+
+        /// <summary>The last remote config this device read; survives a restart. See <see cref="GetConfigAsync"/>.</summary>
+        public RemoteConfigCache ConfigCache { get; }
+
+        // --------------------------------------------------------------- config
+
+        /// <summary>
+        /// The live remote config. Anonymous - a build has to be able to learn it is out of date
+        /// or that the game is in maintenance before it can sign in.
+        ///
+        /// 带上手里的版本 / Sends the version already held as If-None-Match, so an unchanged config
+        /// is a 304 with no body; the held copy is returned then. On a failure the held copy stays
+        /// in <see cref="ConfigCache"/> for the screens to use.
+        /// </summary>
+        public async Task<ApiResult<RemoteConfig>> GetConfigAsync()
+        {
+            RemoteConfig? held = ConfigCache.Current;
+            string? etag = held != null ? "W/\"" + held.Version + "\"" : null;
+
+            ApiResult<RemoteConfig> result = await SendAsync<RemoteConfig>(
+                UnityWebRequest.kHttpVerbGET, "/v1/config", body: null, ifNoneMatch: etag);
+
+            if (!result.IsSuccess) return result;
+
+            // 304: nothing new, and nothing in the body to parse.
+            if (result.Value == null)
+            {
+                return held != null
+                    ? ApiResult<RemoteConfig>.Ok(held)
+                    : ApiResult<RemoteConfig>.Fail(Transport(TransportErrorCodes.Malformed,
+                        "The server's reply could not be read", "304 without a config to keep"));
+            }
+
+            ConfigCache.Store(result.Value);
+            return result;
+        }
 
         // ----------------------------------------------------------------- auth
 
@@ -386,9 +424,10 @@ namespace Promuse.Net
             object? body,
             bool authenticate = false,
             string? idempotencyKey = null,
-            string? ifMatch = null)
+            string? ifMatch = null,
+            string? ifNoneMatch = null)
         {
-            ApiResult<T> first = await SendWithRetriesAsync<T>(method, path, body, authenticate, idempotencyKey, ifMatch);
+            ApiResult<T> first = await SendWithRetriesAsync<T>(method, path, body, authenticate, idempotencyKey, ifMatch, ifNoneMatch);
 
             if (!authenticate || !first.Is(ErrorCodes.Unauthorized)) return first;
 
@@ -397,7 +436,7 @@ namespace Promuse.Net
             // 幂等键要沿用 / The SAME idempotency key on the retry. A fresh one
             // would make the server treat this as a new request and do the work
             // twice, which is the exact failure the header exists to prevent.
-            return await SendWithRetriesAsync<T>(method, path, body, authenticate, idempotencyKey, ifMatch);
+            return await SendWithRetriesAsync<T>(method, path, body, authenticate, idempotencyKey, ifMatch, ifNoneMatch);
         }
 
         /// <summary>
@@ -407,13 +446,13 @@ namespace Promuse.Net
         /// </summary>
         private async Task<ApiResult<T>> SendWithRetriesAsync<T>(
             string method, string path, object? body,
-            bool authenticate, string? idempotencyKey, string? ifMatch)
+            bool authenticate, string? idempotencyKey, string? ifMatch, string? ifNoneMatch)
         {
             bool repeatable = RetryPolicy.IsSafeToRepeat(method, idempotencyKey);
 
             for (int attempt = 0; ; attempt++)
             {
-                ApiResult<T> result = await SendOnceAsync<T>(method, path, body, authenticate, idempotencyKey, ifMatch);
+                ApiResult<T> result = await SendOnceAsync<T>(method, path, body, authenticate, idempotencyKey, ifMatch, ifNoneMatch);
 
                 if (result.IsSuccess || !repeatable || attempt >= _config.maxRetries
                     || !RetryPolicy.IsTransient(result.Problem))
@@ -438,7 +477,7 @@ namespace Promuse.Net
 
             ApiResult<TokenPair> result = await SendOnceAsync<TokenPair>(
                 UnityWebRequest.kHttpVerbPOST, "/v1/auth/refresh", new RefreshRequest(refresh!),
-                authenticate: false, idempotencyKey: null, ifMatch: null);
+                authenticate: false, idempotencyKey: null, ifMatch: null, ifNoneMatch: null);
 
             if (result.IsSuccess)
             {
@@ -461,7 +500,7 @@ namespace Promuse.Net
 
         private async Task<ApiResult<T>> SendOnceAsync<T>(
             string method, string path, object? body,
-            bool authenticate, string? idempotencyKey, string? ifMatch)
+            bool authenticate, string? idempotencyKey, string? ifMatch, string? ifNoneMatch)
         {
             using UnityWebRequest request = new UnityWebRequest(_config.baseUrl + path, method);
 
@@ -488,6 +527,11 @@ namespace Promuse.Net
 
             if (idempotencyKey != null) request.SetRequestHeader("Idempotency-Key", idempotencyKey);
             if (ifMatch != null) request.SetRequestHeader("If-Match", ifMatch);
+            if (ifNoneMatch != null) request.SetRequestHeader("If-None-Match", ifNoneMatch);
+
+            // 每个请求都报版本 / Every request says which build sent it, so the server can turn away
+            // a build older than the remote config's minimum.
+            request.SetRequestHeader(ClientVersion.Header, Application.version);
 
             await AwaitAsync(request);
 

@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using Data.Player;
 using DG.Tweening;
+using Manager;
 using Promuse.Contracts.Leaderboards;
 using Promuse.Net;
 using TMPro;
@@ -127,6 +128,13 @@ public sealed class LeaderboardPanel
 
         PaintTabs();
         DrawRows(null, null);
+
+        if (!RemoteConfigManager.Inst().IsOn(f => f.Leaderboards))
+        {
+            note.text = "LEADERBOARD UNAVAILABLE";
+            return;
+        }
+
         note.text = "LOADING...";
 
         ApiResult<LeaderboardPage> result =

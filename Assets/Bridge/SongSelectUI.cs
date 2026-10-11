@@ -5,6 +5,7 @@ using Manager;
 using Tools;
 using TMPro;
 using UI;
+using UI.Sub;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
@@ -381,6 +382,14 @@ public class SongSelectUI : UIBase
         private void StartSong(PlayMode mode)
         {
             if (selected == null) return;
+
+            // 练习不受影响 / Only ranked play can be switched off - practice never reaches the server.
+            if (mode == PlayMode.Ranked && !RemoteConfigManager.Inst().IsOn(f => f.Ranked))
+            {
+                CommonDialogUI.Message(CommonDialogUI.GroundType.BLACK,
+                    RemoteConfigManager.Unavailable("Ranked play") + " PRACTICE still works.");
+                return;
+            }
 
             CharSelectUI.Show(selected, mode);
         }

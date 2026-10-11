@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Promuse.Api.Infrastructure;
+using Promuse.Api.LiveOps;
 using Promuse.Contracts.Leaderboards;
 
 namespace Promuse.Api.Leaderboards;
@@ -12,7 +13,8 @@ public static class LeaderboardEndpoints
             .WithTags("leaderboards")
             .RequireAuthorization();
 
-        group.MapGet("/{stageId}", GetAsync);
+        group.MapGet("/{stageId}", GetAsync)
+             .RequireFeature(f => f.Leaderboards, "The leaderboard");
     }
 
     /// <summary>

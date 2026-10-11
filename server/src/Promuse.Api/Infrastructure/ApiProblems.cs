@@ -143,6 +143,30 @@ public static class ApiProblems
         Create(409, ErrorCodes.BannerClosed, "Banner is not open",
             notYetOpen ? "This banner has not opened yet." : "This banner has ended.");
 
+    public static ApiProblem Maintenance(string? message, DateTimeOffset? endsAt) =>
+        Create(503, ErrorCodes.Maintenance, "Under maintenance",
+            !string.IsNullOrWhiteSpace(message)
+                ? message
+                : endsAt is { } end
+                    ? $"The game is under maintenance until {end.UtcDateTime:yyyy-MM-dd HH:mm} UTC."
+                    : "The game is under maintenance. Please try again later.");
+
+    public static ApiProblem ClientOutdated(string minimum) =>
+        Create(426, ErrorCodes.ClientOutdated, "Update required",
+            $"This version of the game is no longer supported. Please update to {minimum} or later.");
+
+    public static ApiProblem FeatureDisabled(string feature) =>
+        Create(503, ErrorCodes.FeatureDisabled, "Temporarily unavailable",
+            $"{feature} is temporarily unavailable. Please try again later.");
+
+    public static ApiProblem ConfigConflict(int currentVersion) =>
+        Create(412, ErrorCodes.StateConflict, "Config has moved on",
+            $"Someone saved the config first; it is now at version {currentVersion}. Reload it and make the change again.");
+
+    public static ApiProblem Forbidden() =>
+        Create(403, ErrorCodes.Forbidden, "Not allowed",
+            "This needs an administrator account.");
+
     public static ApiProblem RunNotOpen() =>
         Create(409, ErrorCodes.RunNotOpen, "No such open run",
             "That run is unknown, belongs to someone else, or has already been closed.");

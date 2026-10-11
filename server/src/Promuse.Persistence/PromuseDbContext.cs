@@ -55,6 +55,19 @@ public class PromuseDbContext(DbContextOptions<PromuseDbContext> options) : DbCo
 
     public DbSet<GachaPull> GachaPulls => Set<GachaPull>();
 
+    public DbSet<RemoteConfigVersion> RemoteConfigVersions => Set<RemoteConfigVersion>();
+
+    /// <summary>
+    /// 第一版 / Version 1: no maintenance, every build accepted, every feature on, nothing
+    /// announced - the game exactly as it behaved before remote config existed. Written as the
+    /// JSON the API serialises ConfigDocument to, so the first read needs no special case.
+    /// </summary>
+    public const string DefaultConfigDocument =
+        "{\"maintenance\":{\"enabled\":false,\"message\":null,\"endsAt\":null}," +
+        "\"minClientVersion\":\"0.0.0\"," +
+        "\"features\":{\"gacha\":true,\"shop\":true,\"ranked\":true,\"leaderboards\":true}," +
+        "\"announcement\":null}";
+
     // 卡池内容 / The four playable operators and their rarities (AMIYA.asset and friends), and
     // what a second copy is worth. Both seeded banners roll the same pool.
     private static readonly (string Id, int Rarity, int Duplicate)[] SeedPool =
@@ -365,6 +378,33 @@ public class PromuseDbContext(DbContextOptions<PromuseDbContext> options) : DbCo
                 Offer(6, sell: (13, 1), price: (6, 12)),
                 Offer(7, sell: (10, 1), price: (CertificateItemId, 40)),
                 Offer(8, sell: (2, 2000), price: (CertificateItemId, 5)));
+        });
+
+        modelBuilder.Entity<RemoteConfigVersion>(entity =>
+        {
+            entity.ToTable("remote_config_versions");
+            entity.HasKey(v => v.Version);
+
+            // 不自增 / Not generated: the API writes current + 1 itself, which is what lets the
+            // primary key refuse a second writer that read the same current version.
+            entity.Property(v => v.Version).ValueGeneratedNever();
+            entity.Property(v => v.Document).HasColumnType("jsonb").IsRequired();
+            entity.Property(v => v.Note).HasMaxLength(200);
+
+            entity.ToTable(t => t.HasCheckConstraint("ck_remote_config_versions_positive", "version > 0"));
+
+            // SetNull, not Cascade: deleting an admin's account must not delete the history of
+            // what they changed.
+            entity.HasOne<Account>().WithMany()
+                  .HasForeignKey(v => v.CreatedBy).OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasData(new RemoteConfigVersion
+            {
+                Version = 1,
+                Document = DefaultConfigDocument,
+                CreatedAt = new DateTimeOffset(2026, 10, 11, 0, 0, 0, TimeSpan.Zero),
+                Note = "Initial config",
+            });
         });
 
         modelBuilder.Entity<GachaBanner>(entity =>

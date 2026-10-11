@@ -2,12 +2,12 @@ openapi: 3.1.0
 
 info:
   title: Promuse Backend API
-  version: 1.0.0-draft.6
+  version: 1.0.0-draft.7
   summary: Authentication and player state for the Promuse mobile rhythm game.
   description: |
     **Phase 1** authentication, **Phase 2** player state, **Phase 3** the economy -
     shop, runs and missions, **Phase 4** scored results and leaderboards, then headhunting
-    (gacha) with the server rolling the dice. Each written
+    (gacha) with the server rolling the dice, and remote config for live operations. Each written
     before its implementation, so the client and the server are built against one
     agreement rather than the client being written against whatever the server happened
     to return.
@@ -85,6 +85,19 @@ tags:
       The client's banner asset keeps only presentation - title, text, which operator to
       draw large. The odds, the guarantee, the price, the schedule and the pool are served
       from here, so the Details screen can only ever print what the server actually rolls.
+  - name: config
+    description: |
+      Remote config: maintenance, the minimum client version, feature flags and an announcement.
+
+      Read anonymously by every client, before sign-in. Every switch is enforced by the server:
+      maintenance answers 503 `MAINTENANCE` on every game endpoint (administrators pass), a
+      request whose `X-Client-Version` is older than the minimum answers 426 `CLIENT_OUTDATED`,
+      and a switched-off feature answers 503 `FEATURE_DISABLED` on the endpoint behind it.
+  - name: admin
+    description: |
+      Changing remote config. Administrator accounts only - the flag is on the account and read
+      on every request, never carried in the token. Every save is a new version; nothing is
+      edited in place, so the history is the audit log and a rollback is a new version too.
   - name: missions
     description: |
       The two mission boards. Phase 3.
@@ -839,6 +852,137 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /v1/config:
+    get:
+      tags: [config]
+      operationId: getConfig
+      summary: The live remote config.
+      security: []
+      description: |
+        Anonymous, so a build can learn it is out of date or that the game is in maintenance
+        before it signs in. The version is the ETag; a client holding it gets 304.
+      parameters:
+        - $ref: '#/components/parameters/IfNoneMatch'
+      responses:
+        '200':
+          description: The live config.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteConfig'
+        '304':
+          description: Unchanged since the version in If-None-Match.
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/admin/config:
+    put:
+      tags: [admin]
+      operationId: updateConfig
+      summary: Save a new version of the config.
+      description: |
+        Needs If-Match with the version the change was made from: two administrators editing at
+        once cannot silently overwrite each other - the second is refused with 412.
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfigUpdateRequest'
+      responses:
+        '201':
+          description: Saved; live on the next request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteConfig'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: '`FORBIDDEN` - signed in, but not an administrator.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+
+  /v1/admin/config/rollback:
+    post:
+      tags: [admin]
+      operationId: rollbackConfig
+      summary: Put an earlier version back, as a new version.
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfigRollbackRequest'
+      responses:
+        '201':
+          description: The old document is live again under a new version.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteConfig'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: '`FORBIDDEN`.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+
+  /v1/admin/config/history:
+    get:
+      tags: [admin]
+      operationId: getConfigHistory
+      summary: Every version, newest first, with who saved it and why.
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: The history.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigHistory'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: '`FORBIDDEN`.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
   /v1/missions:
     get:
       tags: [missions]
@@ -966,6 +1110,16 @@ components:
         decision the server is actually making.
 
   parameters:
+    ClientVersion:
+      name: X-Client-Version
+      in: header
+      required: false
+      description: |
+        The game build sending the request, "major.minor.patch". Older than the config's
+        `minClientVersion` is refused with 426 `CLIENT_OUTDATED` on every endpoint but
+        `/v1/config`, health and admin. Absent: not checked.
+      schema:
+        type: string
     IdempotencyKey:
       name: Idempotency-Key
       in: header
@@ -1057,6 +1211,26 @@ components:
 
     PreconditionRequired:
       description: The write needs an `If-Match` and did not carry one.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+
+    ServiceUnavailable:
+      description: |
+        `MAINTENANCE` (the game is closed; `detail` is the operator's message and Retry-After is
+        set when an end time is known) or `FEATURE_DISABLED` (the feature behind this endpoint is
+        switched off by remote config).
+      headers:
+        Retry-After:
+          $ref: '#/components/headers/RetryAfter'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+
+    ClientOutdated:
+      description: '`CLIENT_OUTDATED` - this build is older than the minimum the config accepts.'
       content:
         application/problem+json:
           schema:
@@ -1909,3 +2083,115 @@ components:
           type: [integer, 'null']
           format: int64
           description: Pass as `before` for the next page; null on the last one.
+
+    MaintenanceWindow:
+      type: object
+      required: [enabled]
+      properties:
+        enabled:
+          type: boolean
+        message:
+          type: [string, 'null']
+          maxLength: 300
+          description: Shown to players while it is on.
+        endsAt:
+          type: [string, 'null']
+          format: date-time
+          description: The expected end, shown and sent as Retry-After.
+
+    FeatureFlags:
+      type: object
+      required: [gacha, shop, ranked, leaderboards]
+      description: Each one is enforced by the server on the endpoint behind it.
+      properties:
+        gacha:
+          type: boolean
+          description: POST /v1/gacha/pulls.
+        shop:
+          type: boolean
+          description: POST /v1/shop/purchases.
+        ranked:
+          type: boolean
+          description: POST /v1/runs. Completing a run already open is never refused.
+        leaderboards:
+          type: boolean
+          description: GET /v1/leaderboards/{stageId}. Scores are still recorded while off.
+
+    ConfigDocument:
+      type: object
+      required: [maintenance, minClientVersion, features]
+      properties:
+        maintenance:
+          $ref: '#/components/schemas/MaintenanceWindow'
+        minClientVersion:
+          type: string
+          examples: ['1.0.0']
+        features:
+          $ref: '#/components/schemas/FeatureFlags'
+        announcement:
+          type: [string, 'null']
+          maxLength: 300
+          description: Shown once per version on the Home screen.
+
+    RemoteConfig:
+      type: object
+      required: [version, document, updatedAt, serverTime]
+      properties:
+        version:
+          type: integer
+          description: Also the ETag.
+        document:
+          $ref: '#/components/schemas/ConfigDocument'
+        updatedAt:
+          type: string
+          format: date-time
+        serverTime:
+          $ref: '#/components/schemas/ServerTime'
+
+    ConfigUpdateRequest:
+      type: object
+      required: [document]
+      properties:
+        document:
+          $ref: '#/components/schemas/ConfigDocument'
+        note:
+          type: [string, 'null']
+          maxLength: 200
+
+    ConfigRollbackRequest:
+      type: object
+      required: [version]
+      properties:
+        version:
+          type: integer
+        note:
+          type: [string, 'null']
+          maxLength: 200
+
+    ConfigRevision:
+      type: object
+      required: [version, document, createdAt]
+      properties:
+        version:
+          type: integer
+        document:
+          $ref: '#/components/schemas/ConfigDocument'
+        createdAt:
+          type: string
+          format: date-time
+        createdBy:
+          type: [string, 'null']
+          description: The administrator's username; null for the seeded first version.
+        note:
+          type: [string, 'null']
+        rolledBackFrom:
+          type: [integer, 'null']
+
+    ConfigHistory:
+      type: object
+      required: [revisions]
+      properties:
+        revisions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConfigRevision'

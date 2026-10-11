@@ -126,6 +126,24 @@ namespace Promuse.Contracts
         /// <summary>The banner exists but is not open right now - not yet started, or ended.</summary>
         public const string BannerClosed = "BANNER_CLOSED";
 
+        /// <summary>
+        /// The game is down for maintenance. Temporary by definition: a result that could not be
+        /// sent is kept and sent afterwards, and the detail says what the operator wrote.
+        /// </summary>
+        public const string Maintenance = "MAINTENANCE";
+
+        /// <summary>This build is older than the minimum the server accepts. Update to continue.</summary>
+        public const string ClientOutdated = "CLIENT_OUTDATED";
+
+        /// <summary>
+        /// The feature behind this endpoint has been switched off by remote config. Not worth
+        /// retrying in a second - it comes back when an operator turns it back on.
+        /// </summary>
+        public const string FeatureDisabled = "FEATURE_DISABLED";
+
+        /// <summary>The caller is signed in but is not an administrator.</summary>
+        public const string Forbidden = "FORBIDDEN";
+
         public const string RateLimited = "RATE_LIMITED";
         public const string InternalError = "INTERNAL_ERROR";
     }

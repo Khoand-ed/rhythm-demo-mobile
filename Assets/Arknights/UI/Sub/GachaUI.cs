@@ -5,6 +5,7 @@ using System.Text;
 using Data.Char;
 using Data.Gacha;
 using Data.Player;
+using Manager;
 using DG.Tweening;
 using Promuse.Contracts;
 using Promuse.Contracts.Gacha;
@@ -298,6 +299,8 @@ namespace UI.Sub {
         // renderer alpha on every hover and press, so a dim set there is undone by the pointer.
         // The group also dims the label and cost along with the face.
         private void SetPullable(bool open) {
+            // 远程关掉也算不能抽 / Switched off by remote config reads the same as closed.
+            open &= RemoteConfigManager.Inst().IsOn(f => f.Gacha);
             float alpha = open ? 1f : 0.45f;
             SetAlpha(singleButton, alpha);
             SetAlpha(multiButton, alpha);
@@ -349,6 +352,11 @@ namespace UI.Sub {
             GachaBanner banner = Current;
             GachaBannerInfo rules = CurrentRules;
             if (banner == null || rules == null) return;
+
+            if (!RemoteConfigManager.Inst().IsOn(f => f.Gacha)) {
+                CommonDialogUI.Message(CommonDialogUI.GroundType.BLACK, RemoteConfigManager.Unavailable("Headhunting"));
+                return;
+            }
 
             if (!GachaManager.Inst().IsOpen(rules)) {
                 bool early = rules.StartsAt.HasValue && GachaManager.Inst().ServerNow < rules.StartsAt.Value.UtcDateTime;
