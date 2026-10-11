@@ -53,7 +53,7 @@ public static class RunEndpoints
     {
         if (!user.TryGetAccountId(out Guid accountId)) return ApiProblems.Unauthorized().ToResult();
 
-        var outcome = await runs.StartAsync(accountId, request.StageId, request.CharacterId, request.EventId, ct);
+        var outcome = await runs.StartAsync(accountId, request.StageId, request.CharacterId, request.EventId, request.CampaignStageId, ct);
 
         return outcome.IsSuccess
             ? Results.Json(outcome.Value, statusCode: StatusCodes.Status201Created)

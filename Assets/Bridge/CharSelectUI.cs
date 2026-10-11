@@ -299,7 +299,8 @@ public class CharSelectUI : UIBase
     private async void StartRunAsync(SongChart starting, CharData operatorChosen)
     {
         ApiResult<RunTicket> ticket =
-            await PlayerManager.Inst().Api.StartRunAsync(starting.stageId, operatorChosen.GetId(), SongSession.EventId);
+            await PlayerManager.Inst().Api.StartRunAsync(starting.stageId, operatorChosen.GetId(),
+                SongSession.EventId, SongSession.CampaignStageId);
 
         if (!ticket.IsSuccess)
         {

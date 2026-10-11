@@ -22,7 +22,16 @@ namespace Promuse.Contracts.Runs
     /// such a run pays the event currency and clears the stage, and it is refused while the event is
     /// not running or the stage is still locked. Null for every other run.
     /// </param>
-    public sealed record StartRunRequest(string StageId, string CharacterId, string? EventId = null);
+    /// <param name="CampaignStageId">
+    /// 主线关卡 / Set when the song is played as that stage of the main campaign. Only such a run
+    /// clears the stage, pays its first-clear Orundum and rolls its drops; it is refused while the
+    /// stage is locked. Never set together with <paramref name="EventId"/>.
+    /// </param>
+    public sealed record StartRunRequest(
+        string StageId,
+        string CharacterId,
+        string? EventId = null,
+        string? CampaignStageId = null);
 
     /// <summary>
     /// Permission to play one song, and what it cost.
@@ -177,11 +186,29 @@ namespace Promuse.Contracts.Runs
     /// was rejected.
     /// </param>
     /// <param name="Review">Null when no result was sent, which only a failed run may do.</param>
+    /// <param name="Rewards">What the run paid, for the results screen. Null from a server older than it.</param>
     public sealed record RunCompletion(
         Guid RunId,
         bool Won,
         ScoreReview? Review,
         MissionBoards Boards,
         PlayerState Player,
-        DateTimeOffset ServerTime);
+        DateTimeOffset ServerTime,
+        RunRewards? Rewards = null);
+
+    /// <summary>
+    /// 这一局给了什么 / What a run paid: everything is already in <see cref="RunCompletion.Player"/>; this
+    /// says where it came from, so the results screen can show it.
+    /// </summary>
+    /// <param name="FirstClearOrundum">A campaign stage's first clear; 0 otherwise.</param>
+    /// <param name="Drops">A campaign stage's drops this clear, rolled by the server.</param>
+    /// <param name="Exp">Player EXP gained.</param>
+    /// <param name="PrimeFromLevels">Originite Prime from the levels gained - each new level pays level / 5.</param>
+    public sealed record RunRewards(
+        int FirstClearOrundum,
+        IReadOnlyList<ItemStack> Drops,
+        int Exp,
+        int LevelBefore,
+        int LevelAfter,
+        int PrimeFromLevels);
 }

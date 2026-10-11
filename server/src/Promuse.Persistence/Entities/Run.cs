@@ -40,6 +40,12 @@ public class Run
     /// </summary>
     public string? EventId { get; set; }
 
+    /// <summary>
+    /// 主线关卡 / The campaign stage this run was played as, from the campaign screen; null for every
+    /// other run. Only such a run clears the stage, pays its first-clear Orundum and rolls its drops.
+    /// </summary>
+    public string? CampaignStageId { get; set; }
+
     /// <summary>What entering cost, recorded so a refund knows the amount.</summary>
     public int StaminaSpent { get; set; }
 

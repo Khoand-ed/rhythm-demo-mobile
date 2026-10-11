@@ -13,7 +13,7 @@ phone:
   3. Line ids (#a1f3 - 4 to 8 lower-case letters and digits) are unique within
      a script. With --strict a line without one is an error: it could never be
      corrected from the admin page once shipped.
-  4. Every story the seeded event names (server SeedEvents.cs) is in the build.
+  4. Every story the seeded event and campaign name (SeedEvents.cs, SeedCampaign.cs) is in the build.
 
 Exit 0 when clean, 1 otherwise.
 """
@@ -26,7 +26,7 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 STORY_DIR = ROOT / "Assets" / "Arknights" / "Resources" / "Story"
 BACKGROUND_DIR = STORY_DIR / "Backgrounds"
-SEED = ROOT / "server" / "src" / "Promuse.Persistence" / "SeedEvents.cs"
+SEEDS = [ROOT / "server" / "src" / "Promuse.Persistence" / name for name in ("SeedEvents.cs", "SeedCampaign.cs")]
 
 STORY_ID = re.compile(r"^[a-z0-9_]{1,64}$")
 LINE_ID = re.compile(r"^[a-z0-9]{4,8}$")
@@ -34,10 +34,8 @@ MAX_TEXT = 500
 MAX_SPEAKER = 32
 IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg")
 
-# new("stage_AIW", 30, "RD-1", "before_id", "after_id") in SeedEvents.cs
-SEED_STAGE = re.compile(
-    r'new\(\s*"[^"]+"\s*,\s*\d+\s*,\s*(?:"[^"]*"|null)\s*,\s*(?:"([a-z0-9_]+)"|null)\s*(?:,\s*(?:"([a-z0-9_]+)"|null))?\s*\)'
-)
+# A story the seeded data names: by convention every story id ends in _before or _after.
+SEED_STORY = re.compile(r'"([a-z0-9_]+_(?:before|after))"')
 
 
 def split_line_id(line):
@@ -151,13 +149,14 @@ def main():
         failed |= bool(errors)
 
     shipped = {p.stem for p in scripts}
-    if SEED.is_file():
-        for match in SEED_STAGE.finditer(SEED.read_text(encoding="utf-8-sig")):
-            for story in match.groups():
-                if story and story not in shipped:
-                    print(f"ERROR   {SEED.relative_to(ROOT).as_posix()}: the seeded event names story "
-                          f"'{story}', which is not under {STORY_DIR.relative_to(ROOT).as_posix()}")
-                    failed = True
+    for seed in SEEDS:
+        if not seed.is_file():
+            continue
+        for story in sorted(set(SEED_STORY.findall(seed.read_text(encoding="utf-8-sig")))):
+            if story not in shipped:
+                print(f"ERROR   {seed.relative_to(ROOT).as_posix()}: the seed names story '{story}', "
+                      f"which is not under {STORY_DIR.relative_to(ROOT).as_posix()}")
+                failed = True
 
     print(f"{len(scripts)} story script(s) checked" + (" - FAILED" if failed else ", all good"))
     return 1 if failed else 0

@@ -799,7 +799,7 @@ public class SongSelectUISetup
         {
             Transform results = gameManager.resultsScreen != null ? gameManager.resultsScreen.transform : null;
 
-            foreach (string path in new[] { "RetryButton", "RankingText" })
+            foreach (string path in new[] { "RetryButton", "RankingText", "RewardsText" })
             {
                 Transform node = results != null ? results.Find(path) : null;
                 if (node != null) Object.DestroyImmediate(node.gameObject);
@@ -811,6 +811,7 @@ public class SongSelectUISetup
             gameManager.resultsRetryButton = null;
             gameManager.resultsRetryLabel = null;
             gameManager.rankingText = null;
+            gameManager.rewardsText = null;
             gameManager.noticeRoot = null;
             gameManager.noticeText = null;
 
@@ -936,6 +937,27 @@ public class SongSelectUISetup
         }
 
         if (gameManager.rankingText == null) { gameManager.rankingText = ranking.GetComponent<TextMeshProUGUI>(); assigned = true; }
+
+        Transform rewards = results.Find("RewardsText");
+        if (rewards == null)
+        {
+            // 奖励在最上面 / The run's rewards along the top of the panel, above the title - the one
+            // strip the score rows leave free: first-clear Orundum, drops, EXP, and a second line when
+            // the player levelled up.
+            TextMeshProUGUI line = NewText("RewardsText", results, 19f, Color.white, TextAlignmentOptions.Top);
+            line.overflowMode = TextOverflowModes.Ellipsis;
+            RectTransform rect = (RectTransform)line.transform;
+            rect.anchorMin = new Vector2(0.5f, 1f);
+            rect.anchorMax = new Vector2(0.5f, 1f);
+            rect.pivot = new Vector2(0.5f, 1f);
+            rect.anchoredPosition = new Vector2(0f, -8f);
+            rect.sizeDelta = new Vector2(1100f, 56f);
+
+            rewards = rect;
+            added.Add("rewards line");
+        }
+
+        if (gameManager.rewardsText == null) { gameManager.rewardsText = rewards.GetComponent<TextMeshProUGUI>(); assigned = true; }
 
         // 最后一个子节点, 盖过暂停面板 / The canvas's last child, so it draws over the pause panel -
         // a refused retry from the pause menu has to be readable over it.

@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Promuse Backend API
-  version: 1.0.0-draft.10
+  version: 1.0.0-draft.11
   summary: Authentication and player state for the Promuse mobile rhythm game.
   description: |
     **Phase 1** authentication, **Phase 2** player state, **Phase 3** the economy -
@@ -110,6 +110,12 @@ tags:
       Corrections to story lines. The stories ship inside the game; the server holds only the
       fixes an administrator made after release, each applied by the game only while its own
       line still reads what the fix was written against.
+  - name: campaign
+    description: |
+      The main campaign: chapters of stages played in order. A stage's first clear pays Orundum
+      once; every clear rolls its drops on the server. Every cleared ranked run also pays player
+      EXP (Sanity x the config's expPerSanity), and each level reached pays level/5 Originite Prime
+      and refills Sanity.
   - name: mail
     description: |
       The mailbox. An administrator sends to one player or to every player who exists then;
@@ -1430,6 +1436,59 @@ paths:
         '422':
           $ref: '#/components/responses/ValidationFailed'
 
+  /v1/campaign:
+    get:
+      tags: [campaign]
+      operationId: getCampaign
+      summary: The chapters and stages, with which this player has open and cleared.
+      responses:
+        '200':
+          description: The campaign.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignView'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /v1/admin/campaign:
+    get:
+      tags: [admin]
+      operationId: getAdminCampaign
+      summary: The whole campaign document and its version (also the ETag).
+      responses:
+        '200':
+          description: The campaign.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminCampaign'
+    put:
+      tags: [admin]
+      operationId: saveCampaign
+      summary: Save a new version of the whole campaign (If-Match).
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampaignUpsertRequest'
+      responses:
+        '200':
+          description: Saved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminCampaign'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+
   /v1/mail:
     get:
       tags: [mail]
@@ -2430,6 +2489,12 @@ components:
           type: [string, 'null']
           maxLength: 64
           description: Set when the chart is played as a stage of this event, from the event screen.
+        campaignStageId:
+          type: [string, 'null']
+          maxLength: 64
+          description: |
+            Set when the chart is played as this stage of the main campaign. Refused while the stage
+            is locked (`STAGE_LOCKED`) or when it plays another chart; never together with eventId.
 
     RunTicket:
       type: object
@@ -2706,6 +2771,31 @@ components:
           $ref: '#/components/schemas/PlayerState'
         serverTime:
           $ref: '#/components/schemas/ServerTime'
+        rewards:
+          oneOf:
+            - $ref: '#/components/schemas/RunRewards'
+            - type: 'null'
+          description: What a cleared run paid; null when it paid nothing (a failed or rejected run).
+
+    RunRewards:
+      type: object
+      required: [firstClearOrundum, drops, exp, levelBefore, levelAfter, primeFromLevels]
+      properties:
+        firstClearOrundum:
+          type: integer
+        drops:
+          type: array
+          items:
+            $ref: '#/components/schemas/ItemStack'
+        exp:
+          type: integer
+        levelBefore:
+          type: integer
+        levelAfter:
+          type: integer
+        primeFromLevels:
+          type: integer
+          description: Originite Prime from the levels gained - each new level pays level / 5.
 
     LeaderboardPeriod:
       type: string
@@ -2968,6 +3058,11 @@ components:
           type: [string, 'null']
           maxLength: 300
           description: Shown once per version on the Home screen.
+        expPerSanity:
+          type: [integer, 'null']
+          minimum: 0
+          maximum: 1000
+          description: Player EXP per point of Sanity a cleared ranked run cost; null for the default, 12.
 
     RemoteConfig:
       type: object
@@ -3755,3 +3850,135 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ItemStack'
+
+    DropRarity:
+      type: string
+      enum: [Common, Uncommon, Rare]
+
+    CampaignDrop:
+      type: object
+      required: [itemId, min, max, chance, rarity]
+      properties:
+        itemId:
+          type: integer
+        min:
+          type: integer
+          minimum: 1
+        max:
+          type: integer
+        chance:
+          type: integer
+          minimum: 1
+          maximum: 10000
+          description: Basis points - 10000 always drops.
+        rarity:
+          $ref: '#/components/schemas/DropRarity'
+
+    CampaignStage:
+      type: object
+      required: [stageId, code, chartId, firstClearOrundum, drops]
+      properties:
+        stageId:
+          type: string
+          pattern: '^[a-z0-9_]{1,64}$'
+        code:
+          type: string
+          maxLength: 8
+        chartId:
+          type: string
+        firstClearOrundum:
+          type: integer
+          minimum: 0
+          maximum: 10000
+        drops:
+          type: array
+          maxItems: 6
+          items:
+            $ref: '#/components/schemas/CampaignDrop'
+        storyBefore:
+          type: [string, 'null']
+        storyAfter:
+          type: [string, 'null']
+
+    CampaignChapter:
+      type: object
+      required: [chapterId, title, stages]
+      properties:
+        chapterId:
+          type: string
+        title:
+          type: string
+          maxLength: 60
+        stages:
+          type: array
+          items:
+            $ref: '#/components/schemas/CampaignStage'
+
+    CampaignDefinition:
+      type: object
+      required: [chapters]
+      properties:
+        chapters:
+          type: array
+          items:
+            $ref: '#/components/schemas/CampaignChapter'
+
+    CampaignStageState:
+      type: object
+      required: [stage, isUnlocked, isCleared, staminaCost]
+      properties:
+        stage:
+          $ref: '#/components/schemas/CampaignStage'
+        isUnlocked:
+          type: boolean
+        isCleared:
+          type: boolean
+        staminaCost:
+          type: integer
+
+    CampaignChapterState:
+      type: object
+      required: [chapterId, title, isUnlocked, stages]
+      properties:
+        chapterId:
+          type: string
+        title:
+          type: string
+        isUnlocked:
+          type: boolean
+        stages:
+          type: array
+          items:
+            $ref: '#/components/schemas/CampaignStageState'
+
+    CampaignView:
+      type: object
+      required: [chapters, serverTime]
+      properties:
+        chapters:
+          type: array
+          items:
+            $ref: '#/components/schemas/CampaignChapterState'
+        serverTime:
+          $ref: '#/components/schemas/ServerTime'
+
+    AdminCampaign:
+      type: object
+      required: [version, definition, updatedAt]
+      properties:
+        version:
+          type: integer
+        definition:
+          $ref: '#/components/schemas/CampaignDefinition'
+        updatedAt:
+          type: string
+          format: date-time
+        updatedBy:
+          type: [string, 'null']
+
+    CampaignUpsertRequest:
+      type: object
+      required: [definition]
+      properties:
+        definition:
+          $ref: '#/components/schemas/CampaignDefinition'

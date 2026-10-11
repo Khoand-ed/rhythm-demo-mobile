@@ -74,6 +74,77 @@ namespace Promuse.Persistence.Migrations
                     b.ToTable("accounts", (string)null);
                 });
 
+            modelBuilder.Entity("Promuse.Persistence.Entities.Campaign", b =>
+                {
+                    b.Property<string>("Key")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("key");
+
+                    b.Property<string>("Definition")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("definition");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
+                    b.HasKey("Key")
+                        .HasName("pk_campaigns");
+
+                    b.HasIndex("UpdatedBy")
+                        .HasDatabaseName("ix_campaigns_updated_by");
+
+                    b.ToTable("campaigns", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Key = "main",
+                            Definition = "{\"chapters\":[{\"chapterId\":\"chapter_1\",\"title\":\"Chapter 1: First Light\",\"stages\":[{\"stageId\":\"main_1_1\",\"code\":\"1-1\",\"chartId\":\"stage_001\",\"firstClearOrundum\":50,\"drops\":[{\"itemId\":2,\"min\":300,\"max\":500,\"chance\":10000,\"rarity\":\"Common\"},{\"itemId\":6,\"min\":1,\"max\":2,\"chance\":6000,\"rarity\":\"Common\"}],\"storyBefore\":\"campaign_1_1_before\",\"storyAfter\":\"campaign_1_1_after\"},{\"stageId\":\"main_1_2\",\"code\":\"1-2\",\"chartId\":\"stage_AIW\",\"firstClearOrundum\":50,\"drops\":[{\"itemId\":6,\"min\":1,\"max\":2,\"chance\":7000,\"rarity\":\"Common\"},{\"itemId\":11,\"min\":1,\"max\":1,\"chance\":3500,\"rarity\":\"Uncommon\"}],\"storyBefore\":\"campaign_1_2_before\",\"storyAfter\":null},{\"stageId\":\"main_1_3\",\"code\":\"1-3\",\"chartId\":\"stage_AIW_hard\",\"firstClearOrundum\":100,\"drops\":[{\"itemId\":6,\"min\":2,\"max\":3,\"chance\":8000,\"rarity\":\"Common\"},{\"itemId\":11,\"min\":1,\"max\":2,\"chance\":4000,\"rarity\":\"Uncommon\"},{\"itemId\":13,\"min\":1,\"max\":1,\"chance\":1000,\"rarity\":\"Rare\"}],\"storyBefore\":null,\"storyAfter\":\"campaign_1_3_after\"}]},{\"chapterId\":\"chapter_2\",\"title\":\"Chapter 2: Resonance\",\"stages\":[{\"stageId\":\"main_2_1\",\"code\":\"2-1\",\"chartId\":\"stage_001\",\"firstClearOrundum\":80,\"drops\":[{\"itemId\":2,\"min\":500,\"max\":800,\"chance\":10000,\"rarity\":\"Common\"},{\"itemId\":11,\"min\":1,\"max\":1,\"chance\":4000,\"rarity\":\"Uncommon\"}],\"storyBefore\":null,\"storyAfter\":null},{\"stageId\":\"main_2_2\",\"code\":\"2-2\",\"chartId\":\"stage_AIW\",\"firstClearOrundum\":80,\"drops\":[{\"itemId\":6,\"min\":2,\"max\":3,\"chance\":8000,\"rarity\":\"Common\"},{\"itemId\":13,\"min\":1,\"max\":1,\"chance\":1500,\"rarity\":\"Rare\"}],\"storyBefore\":null,\"storyAfter\":null},{\"stageId\":\"main_2_3\",\"code\":\"2-3\",\"chartId\":\"stage_AIW_hard\",\"firstClearOrundum\":150,\"drops\":[{\"itemId\":11,\"min\":2,\"max\":3,\"chance\":5000,\"rarity\":\"Uncommon\"},{\"itemId\":13,\"min\":1,\"max\":2,\"chance\":2000,\"rarity\":\"Rare\"}],\"storyBefore\":null,\"storyAfter\":null}]}]}",
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 10, 12, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            Version = 1
+                        });
+                });
+
+            modelBuilder.Entity("Promuse.Persistence.Entities.CampaignClear", b =>
+                {
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("account_id");
+
+                    b.Property<string>("StageId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("stage_id");
+
+                    b.Property<int>("Clears")
+                        .HasColumnType("integer")
+                        .HasColumnName("clears");
+
+                    b.Property<DateTimeOffset>("FirstClearedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("first_cleared_at");
+
+                    b.HasKey("AccountId", "StageId")
+                        .HasName("pk_campaign_clears");
+
+                    b.ToTable("campaign_clears", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_campaign_clears_clears", "clears > 0");
+                        });
+                });
+
             modelBuilder.Entity("Promuse.Persistence.Entities.EventCheckIn", b =>
                 {
                     b.Property<Guid>("AccountId")
@@ -1477,6 +1548,11 @@ namespace Promuse.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("account_id");
 
+                    b.Property<string>("CampaignStageId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("campaign_stage_id");
+
                     b.Property<string>("CharacterId")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")
@@ -1952,6 +2028,25 @@ namespace Promuse.Persistence.Migrations
                         .HasDatabaseName("ix_story_patches_updated_by");
 
                     b.ToTable("story_patches", (string)null);
+                });
+
+            modelBuilder.Entity("Promuse.Persistence.Entities.Campaign", b =>
+                {
+                    b.HasOne("Promuse.Persistence.Entities.Account", null)
+                        .WithMany()
+                        .HasForeignKey("UpdatedBy")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_campaigns_accounts_updated_by");
+                });
+
+            modelBuilder.Entity("Promuse.Persistence.Entities.CampaignClear", b =>
+                {
+                    b.HasOne("Promuse.Persistence.Entities.Player", null)
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_campaign_clears_players_account_id");
                 });
 
             modelBuilder.Entity("Promuse.Persistence.Entities.EventCheckIn", b =>

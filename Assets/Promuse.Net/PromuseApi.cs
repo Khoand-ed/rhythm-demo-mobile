@@ -20,6 +20,7 @@ using Promuse.Contracts.Stories;
 using Promuse.Contracts.Mail;
 using Promuse.Contracts.Notices;
 using Promuse.Contracts.SignIn;
+using Promuse.Contracts.Campaign;
 using UnityEngine;
 using UnityEngine.Networking;
 
@@ -321,6 +322,12 @@ namespace Promuse.Net
             return result;
         }
 
+        // ------------------------------------------------------------- campaign
+
+        /// <summary>The main campaign's chapters and stages, with this player's progress through them.</summary>
+        public Task<ApiResult<CampaignView>> GetCampaignAsync() =>
+            SendAsync<CampaignView>(UnityWebRequest.kHttpVerbGET, "/v1/campaign", body: null, authenticate: true);
+
         // ----------------------------------------------------------------- mail
 
         public Task<ApiResult<MailBox>> GetMailAsync() =>
@@ -445,11 +452,13 @@ namespace Promuse.Net
         /// back the seed this run must be played with.
         /// </summary>
         /// <param name="eventId">Set when the chart is played as a stage of that event.</param>
-        public async Task<ApiResult<RunTicket>> StartRunAsync(string stageId, string characterId, string? eventId = null)
+        /// <param name="campaignStageId">Set when the chart is played as that stage of the main campaign.</param>
+        public async Task<ApiResult<RunTicket>> StartRunAsync(
+            string stageId, string characterId, string? eventId = null, string? campaignStageId = null)
         {
             ApiResult<RunTicket> result = await SendAsync<RunTicket>(
                 UnityWebRequest.kHttpVerbPOST, "/v1/runs",
-                new StartRunRequest(stageId, characterId, eventId),
+                new StartRunRequest(stageId, characterId, eventId, campaignStageId),
                 authenticate: true,
                 idempotencyKey: Guid.NewGuid().ToString());
 

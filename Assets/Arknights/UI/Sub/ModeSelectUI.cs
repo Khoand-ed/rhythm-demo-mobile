@@ -8,7 +8,7 @@ using UnityEngine.UI;
 namespace UI.Sub {
     /// <summary>
     /// 选模式 / Where Home's Operation tile leads: EVENT, the live events, and STORY, the main
-    /// campaign - the stages every player has, which open the song list.
+    /// campaign - its chapters and stages, played in order.
     ///
     /// The news screen on Home skips this and goes straight to the event screen.
     ///
@@ -20,8 +20,8 @@ namespace UI.Sub {
         /// <summary>Opened by name - it lives in the Bridge assembly, which this one cannot see.</summary>
         public const string EventUIName = "EventUI";
 
-        /// <summary>The song list, the main campaign's stages - Bridge too, so also by name.</summary>
-        public const string StoryUIName = "SongSelectUI";
+        /// <summary>The main campaign's chapters (CampaignUI) - Bridge too, so also by name.</summary>
+        public const string StoryUIName = "CampaignUI";
 
         public Button backButton;
 
