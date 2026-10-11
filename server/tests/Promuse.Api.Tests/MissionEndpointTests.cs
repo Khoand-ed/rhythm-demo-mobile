@@ -135,7 +135,9 @@ public class MissionEndpointTests(PromuseApiFactory factory)
         Assert.All(boards.Daily.Rewards, r => Assert.False(r.IsClaimable));
 
         Assert.True(boards.Daily.ResetsAt > boards.ServerTime);
-        Assert.True(boards.Weekly.ResetsAt > boards.Daily.ResetsAt);
+        // 周日会相等 / Equal, not later, from Sunday 04:00 to Monday 04:00: the next daily
+        // reset then IS the weekly one. A strict > made this test fail every Sunday.
+        Assert.True(boards.Weekly.ResetsAt >= boards.Daily.ResetsAt);
     }
 
     // ------------------------------------------------------------- counting
