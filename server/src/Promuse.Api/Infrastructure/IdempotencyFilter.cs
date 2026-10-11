@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Npgsql;
 using Promuse.Persistence;
 using Promuse.Persistence.Entities;
 
@@ -22,6 +23,15 @@ namespace Promuse.Api.Infrastructure;
 ///   - Record with the same request hash: replay it. The handler does not run.
 ///   - Record with a different hash: 409. The same key for a different request
 ///     is not a retry, and answering it with the first response would be a lie.
+///
+/// 同一个键排队 / Requests carrying the same key take turns. Without that, retries
+/// that overlap - a client firing again before the first answer arrived - all read
+/// "no record" and all run the handler: a pull is rolled and charged once per copy,
+/// and whichever copy stores its answer first becomes the key's answer, even when it
+/// is a loser's 409 and the account it lost to was created by the very same key. CI
+/// caught exactly that on register. The queue is a Postgres advisory lock held on a
+/// connection of its own, so it costs no table and is released by the database
+/// itself if this process dies holding it.
 ///
 /// 记录按账号分开 / Records are scoped to the caller. A replay hands back a stored
 /// response in full, and those responses carry player state, so two accounts
@@ -72,6 +82,10 @@ public sealed class IdempotencyFilter<TRequest> : IEndpointFilter
         string endpoint = $"{Subject(http)} {http.Request.Method} {http.Request.Path}";
         string requestHash = HashRequest(context.Arguments.OfType<TRequest>().FirstOrDefault(), json);
 
+        // 拿到锁才往下 / Held until the response is stored. The second copy of a request
+        // waits here, then finds the first one's record below and replays it.
+        await using Gate gate = await Gate.EnterAsync(db, key, endpoint, ct);
+
         IdempotencyRecord? existing = await db.IdempotencyRecords
             .AsNoTracking()
             .FirstOrDefaultAsync(r => r.Key == key && r.Endpoint == endpoint, ct);
@@ -105,10 +119,10 @@ public sealed class IdempotencyFilter<TRequest> : IEndpointFilter
             }
             catch (DbUpdateException)
             {
-                // 并发重试 / Two retries raced: both read nothing, both ran, and
-                // the unique index refused this insert. The other one's response
-                // is the authoritative answer for this key, so replay that
-                // rather than returning a second, differently-shaped success.
+                // 兜底 / The gate makes this unreachable for two requests through this
+                // filter; the unique index stays as the last word if anything else ever
+                // writes a record for the key. The record already there is the
+                // authoritative answer, so replay it.
                 db.ChangeTracker.Clear();
 
                 IdempotencyRecord? winner = await db.IdempotencyRecords
@@ -166,4 +180,60 @@ public sealed class IdempotencyFilter<TRequest> : IEndpointFilter
     private static string HashRequest(TRequest? request, JsonSerializerOptions json) =>
         Convert.ToHexStringLower(SHA256.HashData(
             Encoding.UTF8.GetBytes(JsonSerializer.Serialize(request, json))));
+
+    /// <summary>
+    /// A transaction-scoped advisory lock on a connection of its own, named by the key
+    /// and endpoint. Leaving the scope rolls the empty transaction back, which releases
+    /// the lock; a dropped connection releases it too.
+    ///
+    /// 不用请求自己的连接 / Not the request's own DbContext connection: handlers open
+    /// their own transactions on that one, and a transaction already open there would
+    /// make every one of them throw.
+    /// </summary>
+    private sealed class Gate : IAsyncDisposable
+    {
+        private readonly NpgsqlConnection _connection;
+        private readonly NpgsqlTransaction _transaction;
+
+        private Gate(NpgsqlConnection connection, NpgsqlTransaction transaction)
+        {
+            _connection = connection;
+            _transaction = transaction;
+        }
+
+        public static async Task<Gate> EnterAsync(
+            PromuseDbContext db, string key, string endpoint, CancellationToken ct)
+        {
+            var connection = new NpgsqlConnection(db.Database.GetConnectionString());
+
+            try
+            {
+                await connection.OpenAsync(ct);
+                NpgsqlTransaction transaction = await connection.BeginTransactionAsync(ct);
+
+                await using var command = new NpgsqlCommand("SELECT pg_advisory_xact_lock(@id)", connection, transaction);
+                command.Parameters.AddWithValue("id", LockId(key, endpoint));
+                await command.ExecuteNonQueryAsync(ct);
+
+                return new Gate(connection, transaction);
+            }
+            catch
+            {
+                await connection.DisposeAsync();
+                throw;
+            }
+        }
+
+        // 64 位就够 / The first 64 bits of a SHA-256. Two different keys landing on one
+        // lock is astronomically unlikely, and if it happened they would only queue
+        // behind each other - correctness never depends on the id being unique.
+        private static long LockId(string key, string endpoint) =>
+            BitConverter.ToInt64(SHA256.HashData(Encoding.UTF8.GetBytes(endpoint + "\n" + key)), 0);
+
+        public async ValueTask DisposeAsync()
+        {
+            await _transaction.DisposeAsync();
+            await _connection.DisposeAsync();
+        }
+    }
 }

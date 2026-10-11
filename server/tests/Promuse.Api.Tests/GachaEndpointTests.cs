@@ -339,6 +339,28 @@ public class GachaEndpointTests(PromuseApiFactory factory)
         Assert.Equal(320, await BalanceAsync(session.PlayerId, Orundum));
     }
 
+    [Fact]
+    public async Task Retries_with_one_key_racing_each_other_still_charge_once()
+    {
+        AuthSession session = await SignInAsync();
+        await GrantAsync(session.PlayerId, Orundum, 1800);
+        string key = Unique;
+
+        // 同时到 / All five at once, which is what a client firing its retry before the first
+        // answer arrives looks like. Each one reading "no record yet" and running the pull would
+        // charge five times and roll five times.
+        HttpResponseMessage[] responses = await Task.WhenAll(
+            Enumerable.Range(0, 5).Select(_ => PullAsync(session, "standard", 1, key)));
+
+        Assert.All(responses, r => Assert.Equal(HttpStatusCode.Created, r.StatusCode));
+
+        GachaPullResult[] results = await Task.WhenAll(
+            responses.Select(async r => (await r.Content.ReadFromJsonAsync<GachaPullResult>())!));
+
+        Assert.Single(results.Select(r => r.BatchId).Distinct());
+        Assert.Equal(2300 - 180, await BalanceAsync(session.PlayerId, Orundum));
+    }
+
     // ---------------------------------------------------------------- history
 
     [Fact]
