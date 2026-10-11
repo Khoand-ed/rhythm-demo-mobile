@@ -8,6 +8,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 using Promuse.Contracts;
 using Promuse.Contracts.Auth;
+using Promuse.Contracts.Gacha;
 using Promuse.Contracts.Leaderboards;
 using Promuse.Contracts.Missions;
 using Promuse.Contracts.Players;
@@ -202,6 +203,43 @@ namespace Promuse.Net
             if (result.IsSuccess) _playerETag = ETagFor(result.Value!.Player);
 
             return result;
+        }
+
+        // ---------------------------------------------------------------- gacha
+
+        /// <summary>The banners open now or later, with the rules the server rolls them by.</summary>
+        public Task<ApiResult<GachaBannerList>> GetGachaBannersAsync() =>
+            SendAsync<GachaBannerList>(UnityWebRequest.kHttpVerbGET, "/v1/gacha/banners",
+                body: null, authenticate: true);
+
+        /// <summary>
+        /// 只说抽哪个池几次 / Names a banner and a count, nothing else - the server decides the
+        /// price, the payment and every card.
+        ///
+        /// 重试不会重抽 / One key for the whole press, kept across retries: a retry after a lost
+        /// response replays the first result rather than rolling again.
+        /// </summary>
+        public async Task<ApiResult<GachaPullResult>> PullGachaAsync(string bannerId, int times)
+        {
+            ApiResult<GachaPullResult> result = await SendAsync<GachaPullResult>(
+                UnityWebRequest.kHttpVerbPOST, "/v1/gacha/pulls",
+                new GachaPullRequest(bannerId, times),
+                authenticate: true,
+                idempotencyKey: Guid.NewGuid().ToString());
+
+            // The roster and the bag both changed, so the version in hand is stale.
+            if (result.IsSuccess) _playerETag = ETagFor(result.Value!.Player);
+
+            return result;
+        }
+
+        /// <summary>The caller's pulls, newest first. Pass the last page's NextBefore for the next.</summary>
+        public Task<ApiResult<GachaHistoryPage>> GetGachaHistoryAsync(long? before = null, int limit = 10)
+        {
+            string path = "/v1/gacha/history?limit=" + limit;
+            if (before.HasValue) path += "&before=" + before.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+            return SendAsync<GachaHistoryPage>(UnityWebRequest.kHttpVerbGET, path, body: null, authenticate: true);
         }
 
         // ------------------------------------------------------------- missions

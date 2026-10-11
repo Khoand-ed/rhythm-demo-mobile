@@ -323,13 +323,15 @@ public sealed class AuthService(
     };
 
     /// <summary>
-    /// 和客户端的初始化保持一致 / The starting roster and bag, matching
-    /// <c>PlayerData.Initialization</c>: the four playable operators from the
-    /// GDD's MVP roster, and the same three stacks. Kept in step with that method
-    /// - a new player who does not own what the character select screen expects
-    /// draws a cell with no data behind it.
+    /// The starting roster and bag.
+    ///
+    /// 只送 PULSE / One 3-star operator, so the song list is playable from the first minute
+    /// and the other three are what headhunting is for. Every operator used to be handed out
+    /// here, which left every pull a duplicate. Accounts created before the change keep what
+    /// they were given. The character select screen draws whatever the server says is owned,
+    /// so it needs nothing else to agree with this.
     /// </summary>
-    private static readonly string[] StartingRoster = ["AMIYA", "NOVA", "ECHO", "PULSE"];
+    private static readonly string[] StartingRoster = ["PULSE"];
 
     private static readonly (int Id, int Amount)[] StartingItems = [(0, 5), (1, 500), (2, 1000)];
 

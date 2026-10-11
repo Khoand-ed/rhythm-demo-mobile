@@ -8,7 +8,11 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 寻访界面 / Builds the headhunting screen, its banner data, and the HomeUI hook that opens it.
+/// 寻访界面 / Builds the headhunting screen, its banner art, and the HomeUI hook that opens it.
+///
+/// 规则不在这里 / The banner assets hold presentation only. The odds, the guarantee, the price, the
+/// schedule and the pool are seeded on the server (PromuseDbContext) and served by
+/// GET /v1/gacha/banners; a banner shows when both sides have it.
 ///
 /// Layout follows the reference wish screen - tabs across the top, wallet top right, one large
 /// banner card in the middle with the rules on the left and the operator art on the right, shop
@@ -27,8 +31,6 @@ public static class GachaUISetup
     private const string EventPath = DataDir + "/Banner_Event_Amiya.asset";
     private const string StandardPath = DataDir + "/Banner_Standard.asset";
     private const string HeadhuntTileName = "HeadhuntTile";
-
-    private static readonly string[] Roster = { "AMIYA", "NOVA", "ECHO", "PULSE" };
 
     private static readonly Vector2 CardSize = new Vector2(1280f, 660f);
     private const float InfoWidth = 520f;
@@ -71,10 +73,13 @@ public static class GachaUISetup
             built = true;
         }
 
+        string overlays = built ? "built with the screen" : EnsureOverlays(path);
+
         bool hooked = HookHeadhuntTile();
 
         Debug.Log($"[GachaUISetup] {(built ? "Built" : "Kept")} {path}\n" +
                   $"  data: {dataSummary}\n" +
+                  $"  results / history: {overlays}\n" +
                   $"  HomeUI {HeadhuntTileName}: {(hooked ? "opens " + GachaUI.UIName : "NOT hooked - see warning above")}\n" +
                   (built ? "" : "  Use Arknights/Gacha/Rebuild Gacha UI to regenerate the prefab."));
     }
@@ -150,10 +155,6 @@ public static class GachaUISetup
         banner.description = "AMIYA leads this event. Every operator in the standard pool can appear " +
                              "as well, at the same odds - see Details.";
         banner.featuredCharId = "AMIYA";
-        banner.poolCharIds = (string[])Roster.Clone();
-        banner.startsAtUtc = "2026-10-01T00:00:00Z";
-        banner.endsAtUtc = "2026-12-31T23:59:59Z";
-        SeedRules(banner);
     }
 
     private static void SeedStandard(GachaBanner banner)
@@ -165,22 +166,6 @@ public static class GachaUISetup
         banner.description = "The permanent pool. Every operator can appear, and its pity is counted " +
                              "separately from event banners.";
         banner.featuredCharId = "";
-        banner.poolCharIds = (string[])Roster.Clone();
-        banner.startsAtUtc = "";
-        banner.endsAtUtc = "";
-        SeedRules(banner);
-    }
-
-    // GDD 的数字 / The GDD's numbers: 2 / 10 / 88, pity at 30, 180 Orundum a pull.
-    private static void SeedRules(GachaBanner banner)
-    {
-        banner.rateFiveStar = 0.02f;
-        banner.rateFourStar = 0.10f;
-        banner.rateThreeStar = 0.88f;
-        banner.pityThreshold = 30;
-        banner.currencyItemId = 1;
-        banner.costSingle = 180;
-        banner.costMulti = 1800;
     }
 
     private static T FindOrCreate<T>(string path, out bool created) where T : ScriptableObject
@@ -221,6 +206,8 @@ public static class GachaUISetup
         BuildBottomLeft(rootRect, ui);
         BuildPullButtons(rootRect, ui);
         BuildDetails(rootRect, ui);
+        ui.resultView = BuildResult(rootRect);
+        ui.historyView = BuildHistory(rootRect);
 
         Directory.CreateDirectory(UiPrefabDir);
         PrefabUtility.SaveAsPrefabAsset(root, $"{UiPrefabDir}/{GachaUI.UIName}.prefab");
@@ -639,6 +626,224 @@ public static class GachaUISetup
         ui.detailsClose = SquareButton("Close", panelRect, TopRight, new Vector2(-24f, -24f), new Vector2(64f, 64f), "×", 46f);
 
         overlay.gameObject.SetActive(false);
+    }
+
+
+    // -------------------------------------------------------------- results / history
+
+    /// <summary>
+    /// 给已有的界面补上结果和记录 / Adds the results and history overlays to a GachaUI prefab built
+    /// before they existed, and wires them. Find-or-create: an overlay already there - moved or
+    /// restyled by hand - is only wired, never rebuilt. Rebuild Gacha UI is the reset.
+    /// </summary>
+    private static string EnsureOverlays(string path)
+    {
+        GameObject contents = PrefabUtility.LoadPrefabContents(path);
+        List<string> done = new List<string>();
+
+        try
+        {
+            GachaUI ui = contents.GetComponent<GachaUI>();
+            RectTransform root = (RectTransform)contents.transform;
+
+            if (ui.resultView == null)
+            {
+                Transform found = root.Find(ResultName);
+                ui.resultView = found != null ? found.GetComponent<GachaResultView>() : BuildResult(root);
+                done.Add(found != null ? "results wired" : "results added");
+            }
+
+            if (ui.historyView == null)
+            {
+                Transform found = root.Find(HistoryName);
+                ui.historyView = found != null ? found.GetComponent<GachaHistoryView>() : BuildHistory(root);
+                done.Add(found != null ? "history wired" : "history added");
+            }
+
+            if (done.Count == 0) return "already there";
+
+            PrefabUtility.SaveAsPrefabAsset(contents, path);
+            return string.Join(", ", done);
+        }
+        finally
+        {
+            PrefabUtility.UnloadPrefabContents(contents);
+        }
+    }
+
+    private const string ResultName = "ResultOverlay";
+    private const string HistoryName = "HistoryOverlay";
+
+    /// <summary>
+    /// The full-screen results: a dark field that is itself the tap target, the card template the
+    /// view clones up to ten times, a hint top centre and the summary line at the bottom.
+    /// </summary>
+    private static GachaResultView BuildResult(RectTransform root)
+    {
+        // 完全不透明 / Fully opaque, like every panel here: in linear space even 6% lets the pull
+        // buttons behind read through the summary line.
+        UnityEngine.UI.Image field = NewImage(ResultName, root, Ink, true);
+        RectTransform overlay = (RectTransform)field.transform;
+        Stretch(overlay);
+
+        GachaResultView view = overlay.gameObject.AddComponent<GachaResultView>();
+        view.group = overlay.gameObject.AddComponent<CanvasGroup>();
+
+        // 整个遮罩就是按钮 / The whole field is the button: tap anywhere to skip, then to close.
+        Button tap = overlay.gameObject.AddComponent<Button>();
+        tap.targetGraphic = field;
+        tap.transition = Selectable.Transition.None;
+        view.tapArea = tap;
+
+        view.grid = NewRect("Grid", overlay);
+        Place(view.grid, Center, Center, Center, new Vector2(0f, 20f), Vector2.zero);
+
+        view.cardTemplate = BuildResultCard(view.grid);
+
+        view.hint = NewText("Hint", overlay, 26f, Dim, TextAlignmentOptions.Center);
+        Place(view.hint.rectTransform, TopCenter, TopCenter, TopCenter, new Vector2(0f, -40f), new Vector2(900f, 40f));
+        view.hint.characterSpacing = 4f;
+
+        view.summary = NewText("Summary", overlay, 24f, Color.white, TextAlignmentOptions.Center);
+        Place(view.summary.rectTransform, BottomCenter, BottomCenter, BottomCenter, new Vector2(0f, 40f), new Vector2(1500f, 40f));
+
+        overlay.gameObject.SetActive(false);
+        return view;
+    }
+
+    /// <summary>One result card, 216 x 340: a face-down back, and the face the flip reveals.</summary>
+    private static RectTransform BuildResultCard(RectTransform grid)
+    {
+        RectTransform card = NewRect("CardTemplate", grid);
+        Place(card, Center, Center, Center, Vector2.zero, new Vector2(216f, 340f));
+        card.gameObject.AddComponent<CanvasGroup>();
+
+        UnityEngine.UI.Image back = NewImage("Back", card, Slab, false);
+        Stretch((RectTransform)back.transform);
+        AddEdges((RectTransform)back.transform, Edge, 2f);
+        Diamond("Mark", (RectTransform)back.transform, new Vector2(108f, 0f), new Color(1f, 1f, 1f, 0.35f), 46f);
+
+        RectTransform face = NewRect("Face", card);
+        Stretch(face);
+
+// 光晕在最底下 / The glow sits under everything and spills 6 px past the card's edge -
+        // no more, or the glows of neighbouring cards meet across the 20 px gap and read as one frame.
+        UnityEngine.UI.Image glow = NewImage("Glow", face, new Color(1f, 1f, 1f, 0.2f), false);
+        Place((RectTransform)glow.transform, Center, Center, Center, Vector2.zero, new Vector2(228f, 352f));
+
+        UnityEngine.UI.Image plate = NewImage("Plate", face, PanelInk, false);
+        Stretch((RectTransform)plate.transform);
+
+        UnityEngine.UI.Image portrait = NewImage("Portrait", face, Color.white, false);
+        Place((RectTransform)portrait.transform, TopCenter, TopCenter, TopCenter, new Vector2(0f, -10f), new Vector2(200f, 230f));
+        portrait.preserveAspect = true;
+
+        UnityEngine.UI.Image band = NewImage("Band", face, Color.white, false);
+        Place((RectTransform)band.transform, BottomLeft, BottomRight, BottomCenter, new Vector2(0f, 96f), new Vector2(0f, 6f));
+
+        TextMeshProUGUI name = NewText("Name", face, 26f, Color.white, TextAlignmentOptions.Center);
+        Place(name.rectTransform, BottomCenter, BottomCenter, BottomCenter, new Vector2(0f, 56f), new Vector2(200f, 36f));
+        name.fontStyle = FontStyles.Bold;
+
+        UnityEngine.UI.Image stars = NewImage("Stars", face, Color.white, false);
+        Place(stars.rectTransform, BottomCenter, BottomCenter, BottomCenter, new Vector2(0f, 30f), new Vector2(140f, 24f));
+        stars.preserveAspect = true;
+
+        TextMeshProUGUI badge = NewText("Badge", face, 20f, Color.white, TextAlignmentOptions.Center);
+        Place(badge.rectTransform, BottomCenter, BottomCenter, BottomCenter, new Vector2(0f, 4f), new Vector2(200f, 26f));
+        badge.fontStyle = FontStyles.Bold;
+
+        AddEdges(face, Edge, 2f);
+        face.gameObject.SetActive(false);
+        return card;
+    }
+
+    /// <summary>
+    /// The history panel - the same 980-wide panel and header the details use, ten rows, and a
+    /// pager underneath.
+    /// </summary>
+    private static GachaHistoryView BuildHistory(RectTransform root)
+    {
+        UnityEngine.UI.Image dim = NewImage(HistoryName, root, new Color(0f, 0f, 0f, 0.72f), true);
+        RectTransform overlay = (RectTransform)dim.transform;
+        Stretch(overlay);
+
+        GachaHistoryView view = overlay.gameObject.AddComponent<GachaHistoryView>();
+
+        UnityEngine.UI.Image panel = NewImage("Panel", overlay, PanelInk, true);
+        RectTransform panelRect = (RectTransform)panel.transform;
+        Place(panelRect, Center, Center, Center, Vector2.zero, new Vector2(1180f, 820f));
+        AddEdges(panelRect, Edge, 2f);
+
+        UnityEngine.UI.Image mark = NewImage("Mark", panelRect, Accent, false);
+        Place((RectTransform)mark.transform, TopLeft, TopLeft, TopLeft, new Vector2(44f, -40f), new Vector2(8f, 36f));
+
+        TextMeshProUGUI header = NewText("Header", panelRect, 32f, Color.white, TextAlignmentOptions.Left);
+        Place(header.rectTransform, TopLeft, TopLeft, TopLeft, new Vector2(66f, -36f), new Vector2(600f, 44f));
+        header.fontStyle = FontStyles.Bold;
+        header.characterSpacing = 3f;
+        header.text = "HISTORY";
+
+        view.closeButton = SquareButton("Close", panelRect, TopRight, new Vector2(-24f, -24f), new Vector2(64f, 64f), "×", 46f);
+
+        view.rows = NewRect("Rows", panelRect);
+        view.rows.anchorMin = Vector2.zero;
+        view.rows.anchorMax = Vector2.one;
+        view.rows.offsetMin = new Vector2(44f, 110f);
+        view.rows.offsetMax = new Vector2(-44f, -110f);
+        VerticalLayoutGroup layout = view.rows.gameObject.AddComponent<VerticalLayoutGroup>();
+        layout.spacing = 6f;
+        layout.childAlignment = TextAnchor.UpperCenter;
+        layout.childControlWidth = true;
+        layout.childControlHeight = false;
+        layout.childForceExpandWidth = true;
+        layout.childForceExpandHeight = false;
+
+        view.rowTemplate = BuildHistoryRow(view.rows);
+
+        view.note = NewText("Note", panelRect, 24f, Dim, TextAlignmentOptions.Center);
+        Place(view.note.rectTransform, Center, Center, Center, Vector2.zero, new Vector2(800f, 40f));
+
+        view.prevButton = SquareButton("Prev", panelRect, BottomCenter, new Vector2(-150f, 30f), new Vector2(120f, 56f), "‹", 40f);
+        view.nextButton = SquareButton("Next", panelRect, BottomCenter, new Vector2(150f, 30f), new Vector2(120f, 56f), "›", 40f);
+
+        view.pageLabel = NewText("Page", panelRect, 24f, Color.white, TextAlignmentOptions.Center);
+        Place(view.pageLabel.rectTransform, BottomCenter, BottomCenter, BottomCenter, new Vector2(0f, 40f), new Vector2(160f, 40f));
+
+        overlay.gameObject.SetActive(false);
+        return view;
+    }
+
+    private static RectTransform BuildHistoryRow(RectTransform rows)
+    {
+        UnityEngine.UI.Image back = NewImage("RowTemplate", rows, new Color(1f, 1f, 1f, 0.05f), false);
+        RectTransform row = (RectTransform)back.transform;
+        row.sizeDelta = new Vector2(0f, 52f);
+
+// 列宽按最长的内容定 / Widths sized for the longest thing each column holds - "Standard
+        // Headhunting" and "DUPLICATE" - inside the 1092 px the panel leaves a row.
+        Column(row, "Time", 20f, 220f, 22f, Dim, TextAlignmentOptions.Left);
+        Column(row, "Banner", 250f, 290f, 22f, Color.white, TextAlignmentOptions.Left);
+        Column(row, "Operator", 550f, 190f, 24f, Color.white, TextAlignmentOptions.Left).fontStyle = FontStyles.Bold;
+
+        UnityEngine.UI.Image stars = NewImage("Stars", row, Color.white, false);
+        Place(stars.rectTransform, MiddleLeft, MiddleLeft, MiddleLeft, new Vector2(750f, 0f), new Vector2(130f, 22f));
+        stars.preserveAspect = true;
+
+        Column(row, "Result", 890f, 182f, 22f, Color.white, TextAlignmentOptions.Right).fontStyle = FontStyles.Bold;
+
+        row.gameObject.SetActive(false);
+        return row;
+    }
+
+    private static TextMeshProUGUI Column(RectTransform row, string name, float x, float width, float size,
+                                          Color color, TextAlignmentOptions alignment)
+    {
+        TextMeshProUGUI text = NewText(name, row, size, color, alignment);
+        Place(text.rectTransform, MiddleLeft, MiddleLeft, MiddleLeft, new Vector2(x, 0f), new Vector2(width, 40f));
+        text.textWrappingMode = TextWrappingModes.NoWrap;
+        text.overflowMode = TextOverflowModes.Ellipsis;
+        return text;
     }
 
     // --------------------------------------------------------------------- wiring

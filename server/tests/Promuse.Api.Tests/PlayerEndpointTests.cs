@@ -1,9 +1,12 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Promuse.Contracts;
 using Promuse.Contracts.Auth;
 using Promuse.Contracts.Players;
+using Promuse.Persistence;
 
 namespace Promuse.Api.Tests;
 
@@ -14,8 +17,14 @@ public class PlayerEndpointTests(PromuseApiFactory factory)
 
     private static string Unique => Guid.NewGuid().ToString("N");
 
-    /// <summary>A signed-in guest, which is the cheapest way to get a player.</summary>
-    private async Task<AuthSession> SignInAsync()
+    /// <summary>
+    /// A signed-in guest, which is the cheapest way to get a player.
+    ///
+    /// 默认给齐四个干员 / Given all four operators unless asked not to. A new account starts with
+    /// PULSE alone and earns the rest through headhunting; the squad and desktop tests below are
+    /// about ownership rules, not about pulling, so they start from a player who owns everyone.
+    /// </summary>
+    private async Task<AuthSession> SignInAsync(bool fullRoster = true)
     {
         var request = new HttpRequestMessage(HttpMethod.Post, "/v1/auth/guest")
         {
@@ -26,7 +35,24 @@ public class PlayerEndpointTests(PromuseApiFactory factory)
         HttpResponseMessage response = await _client.SendAsync(request);
         response.EnsureSuccessStatusCode();
 
-        return (await response.Content.ReadFromJsonAsync<AuthSession>())!;
+        AuthSession session = (await response.Content.ReadFromJsonAsync<AuthSession>())!;
+
+        if (fullRoster)
+        {
+            using IServiceScope scope = factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<PromuseDbContext>();
+
+            foreach (string id in new[] { "AMIYA", "NOVA", "ECHO" })
+            {
+                await db.Database.ExecuteSqlInterpolatedAsync($"""
+                    INSERT INTO player_characters (account_id, character_id, elite, level, exp, trust)
+                    VALUES ({session.PlayerId}, {id}, 0, 1, 0, 0)
+                    ON CONFLICT DO NOTHING
+                    """);
+            }
+        }
+
+        return session;
     }
 
     private HttpRequestMessage Get(string url, AuthSession session, string? ifNoneMatch = null)
@@ -67,15 +93,15 @@ public class PlayerEndpointTests(PromuseApiFactory factory)
     [Fact]
     public async Task A_new_player_starts_with_the_roster_and_bag_the_client_expects()
     {
-        AuthSession session = await SignInAsync();
+        AuthSession session = await SignInAsync(fullRoster: false);
 
         (PlayerState state, string etag) = await ReadAsync(session);
 
         Assert.Equal(session.PlayerId, state.PlayerId);
         Assert.Equal(1, state.Level);
 
-        // The four playable operators from PlayerData.Initialization.
-        Assert.Equal(["AMIYA", "ECHO", "NOVA", "PULSE"], state.Characters.Select(c => c.CharacterId));
+        // PULSE alone: the other three come from headhunting.
+        Assert.Equal(["PULSE"], state.Characters.Select(c => c.CharacterId));
 
         // ItemStack(0, 5), ItemStack(1, 500), ItemStack(2, 1000).
         Assert.Equal([(0, 5), (1, 500), (2, 1000)],

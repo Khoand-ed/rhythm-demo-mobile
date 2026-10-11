@@ -21,17 +21,3 @@ MonoBehaviour:
   description: AMIYA leads this event. Every operator in the standard pool can appear
     as well, at the same odds - see Details.
   featuredCharId: AMIYA
-  poolCharIds:
-  - AMIYA
-  - NOVA
-  - ECHO
-  - PULSE
-  startsAtUtc: 2026-10-01T00:00:00Z
-  endsAtUtc: 2026-12-31T23:59:59Z
-  rateFiveStar: 0.02
-  rateFourStar: 0.1
-  rateThreeStar: 0.88
-  pityThreshold: 30
-  currencyItemId: 1
-  costSingle: 180
-  costMulti: 1800

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Data.Char;
 using Data.Gacha;
+using Promuse.Contracts.Gacha;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -50,13 +51,17 @@ namespace UI.Sub {
 
         public GachaBanner Banner { get; private set; }
 
+        /// <summary>The server's rules for <see cref="Banner"/>: schedule, guarantee and pool.</summary>
+        public GachaBannerInfo Rules { get; private set; }
+
         // ---------------------------------------------------------------------- draw
 
-        public void Draw(GachaBanner banner, int index) {
+        public void Draw(GachaBanner banner, GachaBannerInfo rules, int index) {
             Banner = banner;
+            Rules = rules;
             Index = index;
 
-            if (banner == null) {
+            if (banner == null || rules == null) {
                 kindLabel.text = "";
                 titleText.text = "No banners";
                 return;
@@ -69,7 +74,7 @@ namespace UI.Sub {
 
             // 保底说明从数值生成 / Generated from the threshold rather than typed into the asset,
             // so the sentence can never disagree with the number it describes.
-            guaranteeText.text = $"No 5-star in {banner.pityThreshold} pulls? The next one is guaranteed.";
+            guaranteeText.text = $"No 5-star in {rules.PityThreshold} pulls? The next one is guaranteed.";
 
             DrawArt(banner);
             DrawTime();
@@ -80,22 +85,24 @@ namespace UI.Sub {
         /// GachaUI calls it once a second.
         /// </summary>
         public void DrawTime() {
-            if (Banner == null) return;
+            if (Banner == null || Rules == null) return;
 
-            DateTime now = DateTime.UtcNow;
+            // 服务端时间 / The server's clock, so the countdown ends when the banner does.
+            DateTime now = GachaManager.Inst().ServerNow;
 
-            if (Banner.TryGetStart(out DateTime start) && now < start) {
+            if (Rules.StartsAt.HasValue && now < Rules.StartsAt.Value.UtcDateTime) {
                 timeCaption.text = "OPENS IN";
-                timeValue.text = Span(start - now);
+                timeValue.text = Span(Rules.StartsAt.Value.UtcDateTime - now);
                 return;
             }
 
-            if (!Banner.TryGetEnd(out DateTime end)) {
+            if (!Rules.EndsAt.HasValue) {
                 timeCaption.text = "AVAILABILITY";
                 timeValue.text = "Permanent";
                 return;
             }
 
+            DateTime end = Rules.EndsAt.Value.UtcDateTime;
             timeCaption.text = "TIME REMAINING";
             timeValue.text = now >= end ? "Ended" : Span(end - now);
         }
@@ -130,7 +137,9 @@ namespace UI.Sub {
         private void FillLineup(RectTransform root, Image template, GachaBanner banner, string skip) {
             template.gameObject.SetActive(false);
 
-            foreach (string id in banner.poolCharIds) {
+            // 卡池来自服务端 / The pool is the server's, so the lineup is exactly who can be pulled.
+            foreach (GachaPoolEntry entry in Rules.Pool) {
+                string id = entry.CharacterId;
                 if (id == skip) continue;
 
                 CharMeta meta = GachaUI.SafeMeta(id);
