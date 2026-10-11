@@ -217,8 +217,8 @@ public static class LoadingScreenSetup
 
         Child(bar, "Fill", -1, made, rect =>
         {
-            // 锚点在运行时驱动 / The anchors are driven at runtime: x 0 - progress when the
-            // progress is known, a sliding segment when it is not.
+            // 锚点在运行时驱动 / The anchors are driven at runtime: x runs 0 to the scene's
+            // load progress.
             rect.anchorMin = new Vector2(0f, 0f);
             rect.anchorMax = new Vector2(0f, 1f);
             rect.offsetMin = rect.offsetMax = Vector2.zero;
