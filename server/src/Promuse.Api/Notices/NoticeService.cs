@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Promuse.Api.Infrastructure;
@@ -27,10 +28,21 @@ public sealed class NoticeOptions
 /// <summary>
 /// The announcement board: notices players read, and the admin side that writes them and their
 /// banners.
+///
+/// 分块 / A notice is either one body of rich text, or blocks - paragraphs with pictures between
+/// them. A notice in blocks still writes its paragraphs, joined, into the body, so a build from before
+/// blocks shows its text rather than nothing. Pictures are uploaded and served the way banners are.
 /// </summary>
 public sealed class NoticeService(PromuseDbContext db, TimeProvider clock, IOptions<NoticeOptions> options, IWebHostEnvironment env)
 {
     public const string BannerRoute = "/v1/notices/banners/";
+
+    public const int MaxBlocks = 30;
+    public const int MaxImages = 10;
+    public const int MaxBlockText = 4000;
+    public const int MaxBody = 8000;
+
+    private const string ParagraphBreak = "\n\n";
 
     // ------------------------------------------------------------------ player
 
@@ -67,7 +79,10 @@ public sealed class NoticeService(PromuseDbContext db, TimeProvider clock, IOpti
 
     private static NoticeView ToView(NoticeRow n, bool read) =>
         new(n.Id, Enum.Parse<NoticeCategory>(n.Category), n.ListTitle, n.Title, n.Body,
-            n.Banner is null ? null : BannerRoute + n.Banner, n.StartsAt, n.EndsAt, n.SortOrder, read);
+            n.Banner is null ? null : BannerRoute + n.Banner, n.StartsAt, n.EndsAt, n.SortOrder, read,
+            ReadBlocks(n.Blocks) is { } blocks
+                ? [.. blocks.Select(b => new NoticeBlock(b.Type, b.Text, b.Image is null ? null : BannerRoute + b.Image))]
+                : null);
 
     // ------------------------------------------------------------------ admin
 
@@ -105,11 +120,14 @@ public sealed class NoticeService(PromuseDbContext db, TimeProvider clock, IOpti
             if (expected != row.Version) return Outcome<AdminNotice>.Fail(Conflict(row.Version));
         }
 
+        IReadOnlyList<NoticeBlockDefinition>? blocks = Blocks(d);
+
         row.Version += 1;
         row.Category = d.Category.ToString();
         row.ListTitle = d.ListTitle.Trim();
         row.Title = d.Title.Trim();
-        row.Body = d.Body;
+        row.Body = blocks is null ? d.Body : BodyOf(blocks);
+        row.Blocks = blocks is null ? null : JsonSerializer.Serialize(blocks, SeedEvents.Json);
         row.Banner = string.IsNullOrWhiteSpace(d.Banner) ? null : d.Banner;
         row.StartsAt = d.StartsAt;
         row.EndsAt = d.EndsAt;
@@ -145,7 +163,9 @@ public sealed class NoticeService(PromuseDbContext db, TimeProvider clock, IOpti
         if (!Enum.IsDefined(d.Category)) errors["category"] = ["Event, System or News."];
         if (string.IsNullOrWhiteSpace(d.ListTitle) || d.ListTitle.Trim().Length > 40) errors["listTitle"] = ["1-40 characters."];
         if (string.IsNullOrWhiteSpace(d.Title) || d.Title.Trim().Length > 80) errors["title"] = ["1-80 characters."];
-        if (string.IsNullOrWhiteSpace(d.Body) || d.Body.Length > 8000) errors["body"] = ["1-8000 characters."];
+
+        if (Blocks(d) is { } blocks) ValidateBlocks(blocks, errors);
+        else if (string.IsNullOrWhiteSpace(d.Body) || d.Body.Length > MaxBody) errors["body"] = [$"1-{MaxBody} characters."];
         if (d.EndsAt is { } end && end <= d.StartsAt) errors["endsAt"] = ["Must be after startsAt, or empty."];
         if (!string.IsNullOrWhiteSpace(d.Banner) && (!IsBannerName(d.Banner) || !File.Exists(BannerPath(d.Banner))))
         {
@@ -155,6 +175,53 @@ public sealed class NoticeService(PromuseDbContext db, TimeProvider clock, IOpti
         return errors;
     }
 
+    private void ValidateBlocks(IReadOnlyList<NoticeBlockDefinition> blocks, Dictionary<string, string[]> errors)
+    {
+        var whole = new List<string>();
+        if (blocks.Count > MaxBlocks) whole.Add($"At most {MaxBlocks} blocks.");
+        if (blocks.Count(b => b?.Type == NoticeBlockType.Image) > MaxImages) whole.Add($"At most {MaxImages} pictures.");
+        if (!blocks.Any(b => b?.Type == NoticeBlockType.Text)) whole.Add("At least one paragraph.");
+        if (whole.Count > 0) errors["blocks"] = [.. whole];
+
+        for (int i = 0; i < blocks.Count; i++)
+        {
+            NoticeBlockDefinition? b = blocks[i];
+            string at = $"blocks[{i}]";
+            if (b is null || !Enum.IsDefined(b.Type))
+            {
+                errors[at + ".type"] = ["Text or Image."];
+            }
+            else if (b.Type == NoticeBlockType.Text)
+            {
+                if (string.IsNullOrWhiteSpace(b.Text) || b.Text.Length > MaxBlockText) errors[at + ".text"] = [$"1-{MaxBlockText} characters."];
+            }
+            else if (!IsBannerName(b.Image) || !File.Exists(BannerPath(b.Image!)))
+            {
+                errors[at + ".image"] = [$"No uploaded image '{b.Image}'."];
+            }
+        }
+
+        if (!errors.Keys.Any(k => k.StartsWith("blocks", StringComparison.Ordinal)) && BodyOf(blocks).Length > MaxBody)
+        {
+            errors["blocks"] = [$"The paragraphs come to more than {MaxBody} characters together."];
+        }
+    }
+
+    /// <summary>The blocks to keep, each with only what its type uses; null for a notice that is only its body.</summary>
+    private static IReadOnlyList<NoticeBlockDefinition>? Blocks(NoticeDefinition d) =>
+        d.Blocks is not { Count: > 0 } blocks
+            ? null
+            : [.. blocks.Select(b => b is null ? null! : b.Type == NoticeBlockType.Text
+                ? new NoticeBlockDefinition(NoticeBlockType.Text, b.Text, null)
+                : new NoticeBlockDefinition(b.Type, null, b.Image))];
+
+    /// <summary>The paragraphs joined - the body a build from before blocks shows.</summary>
+    private static string BodyOf(IReadOnlyList<NoticeBlockDefinition> blocks) =>
+        string.Join(ParagraphBreak, blocks.Where(b => b.Type == NoticeBlockType.Text).Select(b => b.Text));
+
+    private static List<NoticeBlockDefinition>? ReadBlocks(string? json) =>
+        json is null ? null : JsonSerializer.Deserialize<List<NoticeBlockDefinition>>(json, SeedEvents.Json);
+
     private static ApiProblem Conflict(int version) =>
         ApiProblems.Create(412, ErrorCodes.StateConflict, "Notice has moved on",
             $"Someone saved this notice first; it is now at version {version}. Reload it and make the change again.");
@@ -162,7 +229,7 @@ public sealed class NoticeService(PromuseDbContext db, TimeProvider clock, IOpti
     private static AdminNotice ToAdmin(NoticeRow n, string? by) =>
         new(n.Id, n.Version,
             new NoticeDefinition(Enum.Parse<NoticeCategory>(n.Category), n.ListTitle, n.Title, n.Body, n.Banner,
-                n.StartsAt, n.EndsAt, n.IsActive, n.SortOrder),
+                n.StartsAt, n.EndsAt, n.IsActive, n.SortOrder, ReadBlocks(n.Blocks)),
             n.UpdatedAt, by);
 
     // ------------------------------------------------------------------ banners

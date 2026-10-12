@@ -1,6 +1,8 @@
 using System.Security.Claims;
 using Promuse.Api.Infrastructure;
 using Promuse.Api.LiveOps;
+using Promuse.Api.Runs;
+using Promuse.Contracts.Items;
 using Promuse.Contracts.Shop;
 
 namespace Promuse.Api.Economy;
@@ -21,6 +23,14 @@ public static class EconomyEndpoints
              // response must replay the first answer rather than charging twice.
              // This is the case the header exists for.
              .AddEndpointFilter<IdempotencyFilter<PurchaseRequest>>();
+
+        // 物品目录 / Every item by id and name, for the admin page's item pickers. Read from
+        // gamedata/items.json at startup - see GameData.
+        app.MapGroup("/v1/admin/items")
+           .WithTags("admin")
+           .RequireAuthorization()
+           .AddEndpointFilter<AdminOnly>()
+           .MapGet("", (GameData data) => Results.Json(new ItemCatalogList(data.Items)));
     }
 
     private static async Task<IResult> GetOffersAsync(

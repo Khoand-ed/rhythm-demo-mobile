@@ -44,6 +44,11 @@
              Link="gamedata\ruleset.json"
              CopyToOutputDirectory="PreserveNewest" />
 
+    <!-- The game's items by id and name, for the admin page: written by Arknights/Depot/Export Item Catalog. -->
+    <Content Include="..\..\data\items.json"
+             Link="gamedata\items.json"
+             CopyToOutputDirectory="PreserveNewest" />
+
     <Content Include="..\..\..\Assets\Beatmaps\**\*.json"
              Link="gamedata\charts\%(RecursiveDir)%(Filename)%(Extension)"
              CopyToOutputDirectory="PreserveNewest" />

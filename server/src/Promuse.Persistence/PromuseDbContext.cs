@@ -539,6 +539,7 @@ public class PromuseDbContext(DbContextOptions<PromuseDbContext> options) : DbCo
             entity.Property(n => n.ListTitle).HasMaxLength(40).IsRequired();
             entity.Property(n => n.Title).HasMaxLength(80).IsRequired();
             entity.Property(n => n.Body).HasMaxLength(8000).IsRequired();
+            entity.Property(n => n.Blocks).HasColumnType("jsonb");
             entity.Property(n => n.Banner).HasMaxLength(64);
             entity.HasIndex(n => new { n.IsActive, n.StartsAt });
             entity.HasOne<Account>().WithMany().HasForeignKey(n => n.UpdatedBy).OnDelete(DeleteBehavior.SetNull);

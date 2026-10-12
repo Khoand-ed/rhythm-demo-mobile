@@ -67,16 +67,17 @@ has other `Image` types in scope.
 
 ## Checks
 
-Run before pushing. All four are stdlib Python, no dependencies:
+Run before pushing. All five are stdlib Python, no dependencies:
 
 ```bash
 python ci/check_meta.py              # missing/orphan .meta, duplicate GUIDs
 python ci/check_beatmaps.py --all --strict
 python ci/check_stories.py --strict  # story scripts parse, carry line ids, name real backgrounds
+python ci/check_items.py             # server/data/items.json matches the ItemMetas
 python ci/check_repo_hygiene.py      # stray build output, LFS integrity, conflict markers
 ```
 
-`.github/workflows/project-checks.yml` runs the same four on every PR — no Unity
+`.github/workflows/project-checks.yml` runs the same five on every PR — no Unity
 licence, no secrets. There is no CI that compiles C#; only the Editor can do that.
 
 ## Traps
@@ -94,9 +95,9 @@ licence, no secrets. There is no CI that compiles C#; only the Editor can do tha
 | Importing a Spine atlas | `SpineSettings.asset`'s `defaultShader` must name a shader that exists (`Spine/Skeleton`), or the importer throws on every atlas. An atlas page is premultiplied: import it as Default with Alpha Is Transparency **off** - this project's default texture preset (Sprite, alpha dilation on) puts light speckles round every edge. `Arknights/Art/Install Placeholder Operator Art` does both |
 | Adding or changing a headhunting banner | The server owns the rules: odds, pity, price, schedule and pool live in `gacha_banners` / `gacha_pool_entries` (seeded in `PromuseDbContext`). The `GachaBanner` asset is art only. A banner shows only when both exist with the same `bannerId` - either alone shows nothing |
 | Adding a remote-config feature flag | Three places or it is only half a switch: the field in `FeatureFlags` (shared contract), `.RequireFeature(...)` on the endpoint it guards (the server refuses), and a `RemoteConfigManager.IsOn` check on the screen (the client explains). A flag only the client obeys is a suggestion an old build ignores |
-| An event paying an item the client has no `ItemMeta` for | The server pays it and the bag holds it, but every screen shows "Item #id" with no icon. Add the meta (`DepotUISetup`'s seed list) in the same change as the event that first uses the item |
+| An event paying an item the client has no `ItemMeta` for | The server pays it and the bag holds it, but every screen shows "Item #id" with no icon. Add the meta (`DepotUISetup`'s seed list) in the same change as the event that first uses the item, then run `Arknights/Depot/Export Item Catalog`: the admin page names items from `server/data/items.json`, `ci/check_items.py` fails until it matches the metas, and `ItemCatalogTests` fails when the server seeds an item it does not list |
 | Changing or reusing a story line's `#id` after it shipped | The admin page corrects a line by `(story, id)`, and the game applies a correction only while the line still reads what it was written against. A new id orphans its correction; a reused id points an old one at a different line. Add lines with `Arknights/Story/Assign Missing Line Ids`, never by hand-copying an id |
-| Moving the API to a new machine or container | Notice banners uploaded on the admin page are files in `server/src/Promuse.Api/App_Data/banners/` (gitignored), not database rows. Copy that folder, or point `Notices:BannerDirectory` at storage that is kept - otherwise every notice shows without its banner |
+| Moving the API to a new machine or container | Notice banners and the pictures between a notice's paragraphs are files in `server/src/Promuse.Api/App_Data/banners/` (gitignored), not database rows. Copy that folder, or point `Notices:BannerDirectory` at storage that is kept - otherwise every notice shows without its banner and pictures |
 | Playing a campaign stage from anywhere but the campaign screen | Same rule as event stages: only a run started with `campaignStageId` (`SongSession.SetReturn(ui, null, stageId)`) clears it, pays its first-clear Orundum and rolls its drops. The same chart from the song list pays EXP only |
 | Playing an event stage from anywhere but the event screen | Only a run started with `eventId` (`SongSession.SetReturn(ui, eventId)`) clears the stage, unlocks the next and pays the currency; the server refuses a locked stage before charging stamina |
 | Showing an operator's standing art | `SplashFrame.Show(image, meta)` (Lua: `CS.UI.SplashFrame.Show`), never `image.sprite = meta.GetImage()`. The splash is whole and uncut; only a frame keeps its proportions. A new screen's `Image` needs a frame - add it to the list in `OperatorSplashFrames` |

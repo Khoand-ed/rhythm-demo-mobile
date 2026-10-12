@@ -183,11 +183,20 @@ Home's three top-left icons open them, and the admin page has a tab for each:
 - **Mail** - send to one player by username, or to every player who exists at that moment, with
   up to ten items attached and an expiry. Opening a mail collects its items; a box shows the
   newest hundred. A sent mail can be retracted from every box.
-- **Notices** - the announcement board's Event / System / News tabs. The body is TextMeshPro rich
-  text (`<b>`, `<size>`, `<color>`), and a banner is a PNG or JPEG uploaded on the page. Uploads are
-  kept in `server/src/Promuse.Api/App_Data/banners/` (gitignored; `Notices:BannerDirectory` moves it).
+- **Notices** - the announcement board's Event / System / News tabs. A notice is a banner and then
+  its content in blocks: paragraphs, with pictures between them, added and reordered on the page.
+  A paragraph is TextMeshPro rich text, and its toolbar wraps the selected text in bold, italic,
+  underline, a size or a colour; the preview beside it draws the notice the way the game does.
+  Banners and pictures are PNG or JPEG uploads, kept in `server/src/Promuse.Api/App_Data/banners/`
+  (gitignored; `Notices:BannerDirectory` moves it). The server also writes the paragraphs into the
+  notice's plain body, so a build from before blocks still shows the text.
 - **Sign-in** - one square per server day, in order, starting over each month. `default` holds 31
   squares; a month (`2026-11`) can have its own table, and falls back to the default without one.
+
+Every item field on the admin page - mail attachments, sign-in squares, event rewards and shop,
+campaign drops - is a picker reading `1 · Orundum`. The names come from `server/data/items.json`,
+which `Arknights/Depot/Export Item Catalog` writes from the game's ItemMetas: run it after adding or
+renaming one. An id the list does not know still shows, as `#99 (unknown)`, so nothing is lost.
 
 The first time Home shows each server day, the calendar opens (and signs today's square) if it is
 waiting, then the notice board if anything is showing. The screens are built by
@@ -314,6 +323,7 @@ The same checks CI runs, runnable locally:
 python ci/check_meta.py              # every asset has a .meta, no orphans, no duplicate GUIDs
 python ci/check_beatmaps.py --all --strict
 python ci/check_stories.py --strict  # every story script parses, has line ids, names real backgrounds
+python ci/check_items.py             # server/data/items.json matches the ItemMetas
 python ci/check_repo_hygiene.py      # stray build output, LFS integrity, conflict markers
 ```
 

@@ -1,0 +1,16 @@
+{
+  "source": "Assets/Arknights/Resources/Meta/Item - written by Arknights/Depot/Export Item Catalog, do not edit by hand",
+  "items": [
+    { "id": 0, "name": "Originite Prime", "rarity": 5 },
+    { "id": 1, "name": "Orundum", "rarity": 4 },
+    { "id": 2, "name": "LMD", "rarity": 4 },
+    { "id": 6, "name": "Orirock", "rarity": 3 },
+    { "id": 7, "name": "Sugar Substitute", "rarity": 3 },
+    { "id": 8, "name": "Purchase Certificate", "rarity": 4 },
+    { "id": 10, "name": "Headhunting Permit", "rarity": 5 },
+    { "id": 11, "name": "Basic Battle Record", "rarity": 3 },
+    { "id": 12, "name": "Recruitment Permit", "rarity": 4 },
+    { "id": 13, "name": "Skill Summary Vol.1", "rarity": 3 },
+    { "id": 20, "name": "Event Token", "rarity": 4 }
+  ]
+}

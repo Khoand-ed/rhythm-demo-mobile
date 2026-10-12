@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Promuse Backend API
-  version: 1.0.0-draft.11
+  version: 1.0.0-draft.12
   summary: Authentication and player state for the Promuse mobile rhythm game.
   description: |
     **Phase 1** authentication, **Phase 2** player state, **Phase 3** the economy -
@@ -1697,6 +1697,30 @@ paths:
         '404':
           description: No such banner.
 
+  /v1/admin/items:
+    get:
+      tags: [admin]
+      operationId: listItems
+      summary: Every item the game knows, by id and name - for the admin page's item pickers.
+      description: |
+        Read from server/data/items.json, which Arknights/Depot/Export Item Catalog writes from
+        the game's ItemMetas; ci/check_items.py keeps the two in step.
+      responses:
+        '200':
+          description: The items, by id.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemCatalogList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: '`FORBIDDEN`.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
   /v1/admin/notices:
     get:
       tags: [admin]
@@ -1766,7 +1790,7 @@ paths:
     post:
       tags: [admin]
       operationId: uploadNoticeBanner
-      summary: Upload a banner - PNG or JPEG, judged by its bytes, at most 2 MB.
+      summary: Upload a banner or a picture for a notice's blocks - PNG or JPEG, judged by its bytes, at most 2 MB.
       requestBody:
         required: true
         content:
@@ -3667,6 +3691,38 @@ components:
       type: string
       enum: [Event, System, News]
 
+    NoticeBlockType:
+      type: string
+      enum: [Text, Image]
+
+    NoticeBlock:
+      type: object
+      description: One block of a notice as players see it - a paragraph, or a picture between paragraphs.
+      required: [type]
+      properties:
+        type:
+          $ref: '#/components/schemas/NoticeBlockType'
+        text:
+          type: [string, 'null']
+          description: A Text block's TextMeshPro rich text.
+        imageUrl:
+          type: [string, 'null']
+          description: An Image block's path on this server, served like a banner.
+
+    NoticeBlockDefinition:
+      type: object
+      description: One block as the admin page writes it.
+      required: [type]
+      properties:
+        type:
+          $ref: '#/components/schemas/NoticeBlockType'
+        text:
+          type: [string, 'null']
+          maxLength: 4000
+        image:
+          type: [string, 'null']
+          description: A file name from the image upload.
+
     Notice:
       type: object
       required: [noticeId, category, listTitle, title, body, startsAt, sortOrder, isRead]
@@ -3682,7 +3738,9 @@ components:
           type: string
         body:
           type: string
-          description: TextMeshPro rich text.
+          description: |
+            TextMeshPro rich text. For a notice in blocks, its paragraphs joined by a blank line -
+            what a build from before blocks shows.
         bannerUrl:
           type: [string, 'null']
         startsAt:
@@ -3695,6 +3753,11 @@ components:
           type: integer
         isRead:
           type: boolean
+        blocks:
+          type: [array, 'null']
+          description: The content in order; null for a notice that is only its body.
+          items:
+            $ref: '#/components/schemas/NoticeBlock'
 
     NoticeList:
       type: object
@@ -3722,6 +3785,7 @@ components:
         body:
           type: string
           maxLength: 8000
+          description: The text of a notice with no blocks. With blocks it is ignored and written from their paragraphs.
         banner:
           type: [string, 'null']
           description: A file name from the banner upload.
@@ -3735,6 +3799,15 @@ components:
           type: boolean
         sortOrder:
           type: integer
+        blocks:
+          type: [array, 'null']
+          description: |
+            Paragraphs and pictures in order: at most 30 blocks and 10 pictures, at least one
+            paragraph, each paragraph 1-4000 characters and 8000 together, each picture an
+            uploaded file. Null or empty for a notice that is only its body.
+          maxItems: 30
+          items:
+            $ref: '#/components/schemas/NoticeBlockDefinition'
 
     NoticeUpsertRequest:
       type: object
@@ -3777,6 +3850,26 @@ components:
           type: string
         url:
           type: string
+
+    CatalogItem:
+      type: object
+      required: [itemId, name, rarity]
+      properties:
+        itemId:
+          type: integer
+        name:
+          type: string
+        rarity:
+          type: integer
+
+    ItemCatalogList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CatalogItem'
 
     SignInMonth:
       type: object
