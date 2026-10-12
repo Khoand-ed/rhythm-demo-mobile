@@ -186,7 +186,7 @@ public class CharSelectUI : UIBase
 
         if (armed)
         {
-            portrait.sprite = meta.GetImage();
+            SplashFrame.Show(portrait, meta);
             portraitName.text = meta.GetEnglishName();
             portraitStars.sprite = SafeSprite(() => CharManager.Inst().GetStarImage("info_" + meta.GetRarity()));
             portraitProfession.sprite = SafeSprite(() => CharManager.Inst().GetProfessionSmallImage(meta.GetProfession()));

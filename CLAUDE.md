@@ -99,6 +99,7 @@ licence, no secrets. There is no CI that compiles C#; only the Editor can do tha
 | Moving the API to a new machine or container | Notice banners uploaded on the admin page are files in `server/src/Promuse.Api/App_Data/banners/` (gitignored), not database rows. Copy that folder, or point `Notices:BannerDirectory` at storage that is kept - otherwise every notice shows without its banner |
 | Playing a campaign stage from anywhere but the campaign screen | Same rule as event stages: only a run started with `campaignStageId` (`SongSession.SetReturn(ui, null, stageId)`) clears it, pays its first-clear Orundum and rolls its drops. The same chart from the song list pays EXP only |
 | Playing an event stage from anywhere but the event screen | Only a run started with `eventId` (`SongSession.SetReturn(ui, eventId)`) clears the stage, unlocks the next and pays the currency; the server refuses a locked stage before charging stamina |
+| Showing an operator's standing art | `SplashFrame.Show(image, meta)` (Lua: `CS.UI.SplashFrame.Show`), never `image.sprite = meta.GetImage()`. The splash is whole and uncut; only a frame keeps its proportions. A new screen's `Image` needs a frame - add it to the list in `OperatorSplashFrames` |
 | Anything in `CharacterPresenter` choosing by chance | It is presentation, and the server replays a run from its seed. Pick from the event (lane, note type), never from `RunState.NextRoll()` or `UnityEngine.Random` |
 
 ## Working here

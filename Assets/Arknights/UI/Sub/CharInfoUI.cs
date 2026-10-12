@@ -193,7 +193,8 @@ namespace UI.Sub {
 
             public void init() {
                 CharMeta meta = charData.GetCharMeta();
-                transform.GetComponent<Image>("img_char").sprite = meta.GetImage();
+                // 整张立绘按人取景 / The whole splash, scaled to the operator - see SplashFrame.
+                SplashFrame.Show(transform.GetComponent<Image>("img_char"), meta);
                 transform.GetComponent<Image>("img_camp").sprite = CharManager.Inst().GetCampImage(meta.getCamp().ToString());
 
                 transform.GetComponent<Text>("CharInfoPanel/MiddleLeftPanel/Trust/txt_trust_percentage").text = charData.GetTrust() + "%";

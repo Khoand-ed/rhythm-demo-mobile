@@ -119,8 +119,10 @@ namespace UI.Sub {
             lineupFull.gameObject.SetActive(featured == null);
 
             if (featured != null) {
-                featuredImage.sprite = featured.GetImage();
-                featuredImage.color = featured.GetImage() != null ? Color.white : Color.clear;
+                SplashFrame.Show(featuredImage, featured);
+                if (featuredImage.GetComponent<SplashFrame>() == null) {
+                    featuredImage.color = featured.GetImage() != null ? Color.white : Color.clear;
+                }
 
                 upBadge.SetActive(banner.kind == GachaBannerKind.Event);
                 featuredName.text = featured.GetEnglishName();
@@ -146,7 +148,7 @@ namespace UI.Sub {
                 if (meta == null || meta.GetImage() == null) continue;
 
                 Image clone = Instantiate(template, root);
-                clone.sprite = meta.GetImage();
+                SplashFrame.Show(clone, meta);
                 clone.gameObject.SetActive(true);
                 lineupClones.Add(clone);
             }

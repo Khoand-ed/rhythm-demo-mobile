@@ -209,6 +209,8 @@ public static class GachaUISetup
         ui.resultView = BuildResult(rootRect);
         ui.historyView = BuildHistory(rootRect);
 
+        OperatorSplashFrames.FitInto(root, GachaUI.UIName);
+
         Directory.CreateDirectory(UiPrefabDir);
         PrefabUtility.SaveAsPrefabAsset(root, $"{UiPrefabDir}/{GachaUI.UIName}.prefab");
         Object.DestroyImmediate(root);

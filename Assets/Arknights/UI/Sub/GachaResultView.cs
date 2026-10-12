@@ -195,7 +195,8 @@ namespace UI.Sub {
                 CharMeta meta = GachaUI.SafeMeta(pull.CharacterId);
                 Sprite art = meta != null ? GachaUI.SafeSprite(meta.GetImage) : null;
 
-                portrait.sprite = art;
+                // 整张立绘铺满卡面 / The whole splash, filling the card framed on the face - SplashFrame.
+                SplashFrame.Show(portrait, art != null ? meta : null);
                 portrait.enabled = art != null;
 
                 Color colour = RarityColor(pull.Rarity);

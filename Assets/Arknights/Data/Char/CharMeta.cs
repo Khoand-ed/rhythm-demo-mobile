@@ -95,6 +95,15 @@ namespace Data.Char {
         [Header("战斗动作"), SerializeField]
         private OperatorMotion battleMotion;
 
+        // 立绘取景 / Where on image1 the operator stands and where the face is, 0-1 of the sprite with
+        // the origin bottom-left - how SplashFrame frames the whole splash without cutting it. Empty
+        // shows the sprite whole.
+        [Header("立绘取景 / Splash framing"), SerializeField]
+        private Rect imageFigure;
+
+        [SerializeField]
+        private Rect imageFace;
+
         
         public string GetId() => id;
         public string GetChineseName() => chineseName;
@@ -119,6 +128,18 @@ namespace Data.Char {
         public Sprite GetImage() {
             CharArtOverrides.Entry local = LocalArt();
             return local != null && local.portrait != null ? local.portrait : image1;
+        }
+
+        /// <summary>The figure on <see cref="GetImage"/>, 0-1 of the sprite; empty when unknown.</summary>
+        public Rect GetImageFigure() {
+            CharArtOverrides.Entry local = LocalArt();
+            return local != null && local.portrait != null ? local.figure : imageFigure;
+        }
+
+        /// <summary>The face on <see cref="GetImage"/>, 0-1 of the sprite; empty when unknown.</summary>
+        public Rect GetImageFace() {
+            CharArtOverrides.Entry local = LocalArt();
+            return local != null && local.portrait != null ? local.face : imageFace;
         }
 
         public Sprite GetCharImage() {

@@ -74,6 +74,7 @@ public static class StorySetup
         else
         {
             GameObject root = BuildStoryScreen();
+            OperatorSplashFrames.FitInto(root, StoryUI.UIName);
             PrefabUtility.SaveAsPrefabAsset(root, UiPrefabPath);
             Object.DestroyImmediate(root);
             done.Add($"{StoryUI.UIName}: built at {UiPrefabPath}");

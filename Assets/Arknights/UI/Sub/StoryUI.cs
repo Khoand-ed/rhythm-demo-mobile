@@ -268,8 +268,12 @@ namespace UI.Sub {
             if (id == portraitFor) return;
             portraitFor = id;
 
-            Sprite sprite = meta != null ? (meta.GetImage() != null ? meta.GetImage() : meta.GetAvatar()) : null;
-            portrait.sprite = sprite;
+            bool whole = meta != null && meta.GetImage() != null;
+            Sprite sprite = meta != null ? (whole ? meta.GetImage() : meta.GetAvatar()) : null;
+
+            // 整张立绘按人取景 / The whole splash scaled to the operator (SplashFrame); the avatar
+            // stands in, shown whole, for an operator with no splash.
+            SplashFrame.Show(portrait, sprite, whole ? meta.GetImageFigure() : default, whole ? meta.GetImageFace() : default);
             portrait.enabled = sprite != null;
             portraitGroup.alpha = 0f;
             if (sprite != null) portraitGroup.DOFade(1f, 0.25f).SetUpdate(true);
