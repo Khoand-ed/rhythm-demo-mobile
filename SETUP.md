@@ -121,11 +121,28 @@ event screen clears a stage and pays the currency; the same song played from the
 not.
 
 Home's **Operation** tile opens the mode select screen: **EVENT** leads to the events, **STORY**
-to the main campaign's stages (the song list). The little news screen on Home goes straight to
+to the main campaign. The little news screen on Home goes straight to
 the event screen. The screens are built by `Arknights/Events/Build Event UI`, which also creates
 the Event Token item (id 20) and points the Operation tile at the mode select. An event's
 currency and rewards can be any item id, but only items with an `ItemMeta` under
 `Resources/Meta/Item` show a name and icon.
+
+### The main campaign
+
+STORY opens the campaign's chapters: stages played in order, a chapter opening when the last stage
+of the one before is cleared. A stage is a chart plus what it pays - Orundum on its first clear
+only, and drops rolled by the server on every clear (shown on the stage as Common / Uncommon /
+Rare). Each stage can have a story before and after it. SONG LIST, top right, still opens the old
+song map for practice and the leaderboards.
+
+The admin page's **Campaign** tab edits it all: chapters, stages, the chart each plays, Orundum,
+drops (chance in %), stories. Sanity is the chart's own price. The database starts with two
+chapters built from the charts the game ships; adding a song is a row there, not a code change.
+The screen is built by `Arknights/Campaign/Build Campaign UI`.
+
+Every cleared ranked run - campaign, event or song list - also pays player EXP: Sanity × the
+config's **EXP per Sanity** (12 when empty). Each level reached pays level / 5 Originite Prime and
+refills Sanity; the results screen shows all of it.
 
 ### Stories
 
@@ -224,7 +241,7 @@ above and for device builds.
 
 | Menu | What lives there |
 |---|---|
-| **`Arknights/`** | Content pipeline — AssetBundles, placeholder art, audio import, local character art, the Home / Depot / event / mail, notice and calendar screen builders, and the story tools |
+| **`Arknights/`** | Content pipeline — AssetBundles, placeholder art, audio import, local character art, the Home / Depot / event / campaign / mail, notice and calendar screen builders, and the story tools |
 | **`Beatmap/`** | Charting — `Beatmap Studio...` and `Timeline Editor...` author charts; `Import All Beatmaps` turns the JSON under `Assets/Beatmaps/` into `SongChart` assets |
 | **`Tools/Rhythm/`** | Gameplay scene setup — note system, HUD, hit feedback, character stage, skip button, song-select wiring, loading screen |
 

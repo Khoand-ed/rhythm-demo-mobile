@@ -71,15 +71,22 @@ public static class SongSession
     public static string EventId { get; private set; }
 
     /// <summary>
+    /// 主线关卡 / The campaign stage the song is played as, null otherwise. Sent with every run opened
+    /// for it, like <see cref="EventId"/>, and kept across <see cref="Clear"/> for the same reason.
+    /// </summary>
+    public static string CampaignStageId { get; private set; }
+
+    /// <summary>
     /// The screens that were open under <see cref="ReturnUI"/> when the song started, bottom to top,
     /// put back on the way out so Back retraces the way in. Written by CharSelectUI.
     /// </summary>
     public static string[] ReturnBeneath { get; private set; } = new string[0];
 
-    public static void SetReturn(string uiName, string eventId = null)
+    public static void SetReturn(string uiName, string eventId = null, string campaignStageId = null)
     {
         ReturnUI = uiName;
         EventId = eventId;
+        CampaignStageId = campaignStageId;
     }
 
     public static void SetReturnBeneath(string[] screens)

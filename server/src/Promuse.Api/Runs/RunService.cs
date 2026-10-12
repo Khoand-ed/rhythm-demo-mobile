@@ -30,6 +30,8 @@ public sealed class RunService(
     MissionService missions,
     LeaderboardService leaderboards,
     Events.EventProgress events,
+    Campaign.CampaignService campaign,
+    PlayerLevels levels,
     Economy.Inventory inventory,
     GameData gameData,
     IOptions<StaminaOptions> stamina)
@@ -38,12 +40,17 @@ public sealed class RunService(
     /// Set when the song is played as a stage of that event. Checked before anything is charged: a
     /// stage that is locked, or an event that is not running, costs nothing to be refused.
     /// </param>
+    /// <param name="campaignStageId">
+    /// Set when the song is played as that stage of the main campaign; checked the same way, before
+    /// anything is charged. Never together with <paramref name="eventId"/>.
+    /// </param>
     public async Task<Outcome<RunTicket>> StartAsync(
-        Guid accountId, string stageId, string characterId, string? eventId, CancellationToken ct)
+        Guid accountId, string stageId, string characterId, string? eventId, string? campaignStageId, CancellationToken ct)
     {
         var errors = new Dictionary<string, string[]>();
         if (string.IsNullOrWhiteSpace(stageId)) errors["stageId"] = ["Required."];
         if (string.IsNullOrWhiteSpace(characterId)) errors["characterId"] = ["Required."];
+        if (eventId is not null && campaignStageId is not null) errors["campaignStageId"] = ["A run is an event stage or a campaign stage, not both."];
 
         if (errors.Count > 0) return Outcome<RunTicket>.Fail(ApiProblems.ValidationFailed(errors));
 
@@ -65,6 +72,12 @@ public sealed class RunService(
             await events.CanStartAsync(accountId, eventId, stage.StageId, clock.GetUtcNow(), ct) is { } refused)
         {
             return Outcome<RunTicket>.Fail(refused);
+        }
+
+        if (campaignStageId is not null &&
+            await campaign.CanStartAsync(accountId, campaignStageId, stage.StageId, ct) is { } locked)
+        {
+            return Outcome<RunTicket>.Fail(locked);
         }
 
         Player? player = await db.Players.FirstOrDefaultAsync(p => p.AccountId == accountId, ct);
@@ -109,6 +122,7 @@ public sealed class RunService(
             StageId = stage.StageId,
             CharacterId = characterId,
             EventId = eventId,
+            CampaignStageId = campaignStageId,
             StaminaSpent = stage.StaminaCost,
             Seed = NewSeed(),
             StartedAt = now,
@@ -178,6 +192,7 @@ public sealed class RunService(
         bool countsAsClear = request.Won && review is not null && review.Verdict != ScoreVerdict.Rejected;
         bool ranked = countsAsClear && review!.Verdict == ScoreVerdict.Accepted;
         bool personalBest = false;
+        RunRewards? rewards = null;
 
         await using (var transaction = await db.Database.BeginTransactionAsync(ct))
         {
@@ -206,6 +221,25 @@ public sealed class RunService(
                     submission?.Result.Score, now, ct))
             {
                 await inventory.BumpStateVersionAsync(accountId, now, ct);
+            }
+
+            // 主线和经验 / A cleared run pays its EXP - and, played as a campaign stage, that stage's
+            // first-clear Orundum and drops - in the same transaction that closes it.
+            if (countsAsClear)
+            {
+                (int orundum, List<ItemStack> drops) = run.CampaignStageId is { } campaignStage
+                    ? await campaign.OnClearedAsync(accountId, campaignStage, now, ct)
+                    : (0, []);
+
+                ExpGain exp = await levels.GrantAsync(accountId, run.StaminaSpent, now, ct);
+
+                // GrantAsync moves the state version whenever it writes; the bag alone needs a bump.
+                if ((orundum > 0 || drops.Count > 0) && exp.Exp == 0)
+                {
+                    await inventory.BumpStateVersionAsync(accountId, now, ct);
+                }
+
+                rewards = new RunRewards(orundum, drops, exp.Exp, exp.LevelBefore, exp.LevelAfter, exp.Prime);
             }
 
             if (ranked)
@@ -251,7 +285,7 @@ public sealed class RunService(
         if (!state.IsSuccess) return Outcome<RunCompletion>.Fail(state.Problem!);
 
         return Outcome<RunCompletion>.Ok(new RunCompletion(
-            runId, countsAsClear, answer, boards.Value!, state.Value!, now));
+            runId, countsAsClear, answer, boards.Value!, state.Value!, now, rewards));
     }
 
     /// <summary>A result that parsed, with its trace unwrapped.</summary>

@@ -73,6 +73,7 @@
     <button id="tabMail" type="button">Mail</button>
     <button id="tabNotices" type="button">Notices</button>
     <button id="tabSignIn" type="button">Sign-in</button>
+    <button id="tabCampaign" type="button">Campaign</button>
   </nav>
 
   <!-- Sign in with an administrator account. The page holds the access token for this tab only. -->
@@ -110,6 +111,7 @@
       </div>
     </div>
 
+    <div class="row"><label for="expPerSanity">EXP per Sanity</label><input id="expPerSanity" type="text" placeholder="12 - player EXP for each point of Sanity a cleared ranked run cost"></div>
     <div class="row"><label for="announcement">Announcement</label><textarea id="announcement" maxlength="300" placeholder="Shown once on the Home screen. Empty for none."></textarea></div>
     <div class="row"><label for="note">Note (why)</label><input id="note" type="text" maxlength="200" placeholder="Kept in the history"></div>
 
@@ -267,6 +269,19 @@
       <div id="signStatus" class="status"></div>
     </div>
   </section>
+
+  <section id="campaign" class="panel" hidden>
+    <div class="top"><h2>Main campaign <span id="cVersion" class="badge"></span></h2><button id="cAddChapter" class="ghost" type="button">Add chapter</button></div>
+    <div class="muted small">Stages open in the order listed, across chapters: a chapter opens when the last stage of the one
+      before is cleared. Orundum is paid on a stage's first clear only; every clear rolls each drop on its own
+      (chance in %). Sanity is the chart's own price. Stories are script names under Resources/Story.</div>
+    <div id="cChapters"></div>
+    <div style="margin-top:16px">
+      <button id="cSave" type="button">Save campaign</button>
+      <button id="cReload" class="ghost" type="button">Reload</button>
+    </div>
+    <div id="campaignStatus" class="status"></div>
+  </section>
 </main>
 
 <script>
@@ -325,7 +340,7 @@
   function signOut(message) {
     sessionStorage.removeItem(TOKEN);
     $('login').hidden = false;
-    for (const id of ['editor', 'history', 'signOut', 'nav', 'events', 'eventEditor', 'stories', 'mail', 'notices', 'noticeEditor', 'signin']) $(id).hidden = true;
+    for (const id of ['editor', 'history', 'signOut', 'nav', 'events', 'eventEditor', 'stories', 'mail', 'notices', 'noticeEditor', 'signin', 'campaign']) $(id).hidden = true;
     if (message) show($('loginStatus'), message, false);
   }
 
@@ -343,6 +358,8 @@
     $('tabMail').className = which === 'mail' ? 'on' : '';
     $('tabNotices').className = which === 'notices' ? 'on' : '';
     $('tabSignIn').className = which === 'signin' ? 'on' : '';
+    $('tabCampaign').className = which === 'campaign' ? 'on' : '';
+    $('campaign').hidden = which !== 'campaign';
     $('editor').hidden = $('history').hidden = which !== 'config';
     $('events').hidden = which !== 'events';
     $('stories').hidden = which !== 'stories';
@@ -355,6 +372,7 @@
     else if (which === 'stories') await loadPatches();
     else if (which === 'mail') await loadMail();
     else if (which === 'notices') await loadNotices();
+    else if (which === 'campaign') await loadCampaign();
     else await loadSignIn();
   }
 
@@ -379,6 +397,7 @@
     $('fRanked').checked = doc.features.ranked;
     $('fLeaderboards').checked = doc.features.leaderboards;
     $('announcement').value = doc.announcement || '';
+    $('expPerSanity').value = doc.expPerSanity ?? '';
   }
 
   function read() {
@@ -395,6 +414,7 @@
         ranked: $('fRanked').checked, leaderboards: $('fLeaderboards').checked,
       },
       announcement: text('announcement'),
+      expPerSanity: $('expPerSanity').value.trim() === '' ? null : Number($('expPerSanity').value),
     };
   }
 
@@ -1129,6 +1149,160 @@
     openTable(open || $('sKey').value || 'default');
   }
 
+  // ------------------------------------------------------------------ campaign
+
+  // 整份文档在内存里 / The whole campaign lives in this object while it is edited; inputs write into
+  // it as they change, and only adding, removing or moving rebuilds the tables.
+  let campaign = null;      // { version, definition }
+  let charts = [];
+  const RARITIES = ['Common', 'Uncommon', 'Rare'];
+
+  function field(value, onInput, kind, width) {
+    let el;
+    if (kind === 'chart' || kind === 'rarity') {
+      el = document.createElement('select');
+      for (const o of (kind === 'chart' ? charts : RARITIES)) {
+        const opt = document.createElement('option'); opt.value = o; opt.textContent = o; el.appendChild(opt);
+      }
+      el.value = value ?? '';
+    } else {
+      el = document.createElement('input');
+      el.type = kind === 'number' ? 'number' : 'text';
+      el.value = value ?? '';
+      if (kind === 'number') el.step = 'any';
+    }
+    if (width) el.style.width = width;
+    el.oninput = () => onInput(kind === 'number' ? (el.value === '' ? null : Number(el.value)) : (el.value.trim() === '' ? null : el.value.trim()));
+    return el;
+  }
+
+  function cell(tr, child) { const td = document.createElement('td'); if (child) td.appendChild(child); tr.appendChild(td); return td; }
+
+  function button(label, onClick, ghost) {
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = label;
+    if (ghost !== false) b.className = 'ghost';
+    b.onclick = onClick; return b;
+  }
+
+  function move(list, i, by) {
+    const j = i + by; if (j < 0 || j >= list.length) return;
+    [list[i], list[j]] = [list[j], list[i]];
+    drawCampaign();
+  }
+
+  function drawCampaign() {
+    const host = $('cChapters');
+    host.replaceChildren();
+    const chapters = campaign.definition.chapters;
+
+    chapters.forEach((chapter, ci) => {
+      const block = document.createElement('div');
+      block.className = 'module';
+
+      const head = document.createElement('div');
+      head.className = 'row';
+      const label = document.createElement('label'); label.textContent = 'Chapter ' + (ci + 1);
+      head.appendChild(label);
+      const id = field(chapter.chapterId, v => chapter.chapterId = v, 'text', '160px'); id.placeholder = 'chapter_1';
+      const title = field(chapter.title, v => chapter.title = v, 'text'); title.placeholder = 'Chapter 1: First Light';
+      head.append(id, title,
+        button('↑', () => move(chapters, ci, -1)), button('↓', () => move(chapters, ci, 1)),
+        button('Remove chapter', () => { if (confirm('Remove this chapter and its stages?')) { chapters.splice(ci, 1); drawCampaign(); } }));
+      block.appendChild(head);
+
+      const scroll = document.createElement('div'); scroll.className = 'scroll';
+      const table = document.createElement('table'); table.className = 'grid';
+      table.innerHTML = '<thead><tr><th>Stage id</th><th>Code</th><th>Chart</th><th>First-clear Orundum</th><th>Story before</th><th>Story after</th><th>Drops</th><th></th></tr></thead>';
+      const body = document.createElement('tbody');
+      table.appendChild(body);
+      scroll.appendChild(table);
+      block.appendChild(scroll);
+
+      chapter.stages.forEach((stage, si) => {
+        const tr = document.createElement('tr');
+        cell(tr, field(stage.stageId, v => stage.stageId = v, 'text', '130px'));
+        cell(tr, field(stage.code, v => stage.code = v, 'text', '64px'));
+        cell(tr, field(stage.chartId, v => stage.chartId = v, 'chart')).className = 'sel';
+        cell(tr, field(stage.firstClearOrundum, v => stage.firstClearOrundum = v ?? 0, 'number', '90px'));
+        cell(tr, field(stage.storyBefore, v => stage.storyBefore = v, 'text', '150px'));
+        cell(tr, field(stage.storyAfter, v => stage.storyAfter = v, 'text', '150px'));
+        const dropsCell = cell(tr, button('Drops (' + stage.drops.length + ')', () => {
+          stage._open = !stage._open; drawCampaign();
+        }));
+        dropsCell.style.whiteSpace = 'nowrap';
+        const actions = cell(tr);
+        actions.style.whiteSpace = 'nowrap';
+        actions.append(button('↑', () => move(chapter.stages, si, -1)), button('↓', () => move(chapter.stages, si, 1)),
+          button('×', () => { chapter.stages.splice(si, 1); drawCampaign(); }));
+        body.appendChild(tr);
+
+        if (!stage._open) return;
+
+        // 掉落子表 / The stage's drops, in a row of their own under it.
+        const sub = document.createElement('tr');
+        const td = document.createElement('td'); td.colSpan = 8;
+        const dt = document.createElement('table'); dt.className = 'grid';
+        dt.innerHTML = '<thead><tr><th>Item id</th><th>Min</th><th>Max</th><th>Chance %</th><th>Shown as</th><th></th></tr></thead>';
+        const db = document.createElement('tbody');
+        stage.drops.forEach((drop, di) => {
+          const r = document.createElement('tr');
+          cell(r, field(drop.itemId, v => drop.itemId = v ?? 0, 'number', '80px'));
+          cell(r, field(drop.min, v => drop.min = v ?? 0, 'number', '80px'));
+          cell(r, field(drop.max, v => drop.max = v ?? 0, 'number', '80px'));
+          cell(r, field(drop.chance / 100, v => drop.chance = Math.round((v ?? 0) * 100), 'number', '90px'));
+          cell(r, field(drop.rarity, v => drop.rarity = v, 'rarity')).className = 'sel';
+          cell(r, button('×', () => { stage.drops.splice(di, 1); drawCampaign(); }));
+          db.appendChild(r);
+        });
+        dt.appendChild(db);
+        td.append(dt, button('Add drop', () => {
+          stage.drops.push({ itemId: 6, min: 1, max: 1, chance: 5000, rarity: 'Common' }); drawCampaign();
+        }));
+        sub.appendChild(td);
+        body.appendChild(sub);
+      });
+
+      block.appendChild(button('Add stage', () => {
+        const n = chapter.stages.length + 1;
+        chapter.stages.push({
+          stageId: 'main_' + (ci + 1) + '_' + n, code: (ci + 1) + '-' + n, chartId: charts[0] || '',
+          firstClearOrundum: 50, drops: [], storyBefore: null, storyAfter: null,
+        });
+        drawCampaign();
+      }));
+      host.appendChild(block);
+    });
+  }
+
+  // 去掉界面状态 / What is sent is the document alone: the "open drops" flags stay on this page.
+  function campaignForSave() {
+    return {
+      chapters: campaign.definition.chapters.map(c => ({
+        chapterId: c.chapterId, title: c.title,
+        stages: c.stages.map(({ _open, ...stage }) => stage),
+      })),
+    };
+  }
+
+  async function loadCampaign() {
+    const [current, cat] = await Promise.all([api('GET', '/v1/admin/campaign'), api('GET', '/v1/admin/events/catalog')]);
+    if (!current.ok) return show($('campaignStatus'), problemText(current), false);
+    if (cat.ok) charts = cat.data.stageIds;
+    campaign = current.data;
+    $('cVersion').textContent = 'v' + campaign.version;
+    drawCampaign();
+    $('campaignStatus').textContent = '';
+  }
+
+  async function saveCampaign() {
+    $('cSave').disabled = true;
+    const result = await api('PUT', '/v1/admin/campaign', { definition: campaignForSave() }, campaign.version);
+    $('cSave').disabled = false;
+    if (!result.ok) return show($('campaignStatus'), problemText(result) + (result.status === 412 ? ' (press Reload)' : ''), false);
+    await loadCampaign();
+    show($('campaignStatus'), 'Saved as version ' + result.data.version + '. Players see it the next time they open the campaign.', true);
+  }
+
   // ------------------------------------------------------------------ wiring
 
   $('signIn').onclick = signIn;
@@ -1143,6 +1317,14 @@
   $('tabMail').onclick = () => view('mail');
   $('tabNotices').onclick = () => view('notices');
   $('tabSignIn').onclick = () => view('signin');
+  $('tabCampaign').onclick = () => view('campaign');
+  $('cSave').onclick = saveCampaign;
+  $('cReload').onclick = loadCampaign;
+  $('cAddChapter').onclick = () => {
+    const n = campaign.definition.chapters.length + 1;
+    campaign.definition.chapters.push({ chapterId: 'chapter_' + n, title: 'Chapter ' + n, stages: [] });
+    drawCampaign();
+  };
   $('mAdd').onclick = () => { if ($('mItems').children.length < 10) itemRow($('mItems'), null); };
   $('mSend').onclick = sendMail;
   $('mReload').onclick = loadMail;

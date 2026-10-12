@@ -20,6 +20,7 @@ using Promuse.Api.Stories;
 using Promuse.Api.Mailbox;
 using Promuse.Api.Notices;
 using Promuse.Api.SignIn;
+using Promuse.Api.Campaign;
 using Microsoft.Extensions.Options;
 using Promuse.Persistence;
 
@@ -98,6 +99,8 @@ builder.Services.AddScoped<StoryPatchService>();
 builder.Services.AddScoped<MailService>();
 builder.Services.AddScoped<NoticeService>();
 builder.Services.AddScoped<SignInService>();
+builder.Services.AddScoped<CampaignService>();
+builder.Services.AddScoped<PlayerLevels>();
 builder.Services.AddOptions<NoticeOptions>().Bind(builder.Configuration.GetSection(NoticeOptions.SectionName));
 
 builder.Services.AddOptions<GameDataOptions>()
@@ -264,6 +267,7 @@ app.MapStoryEndpoints();
 app.MapMailEndpoints();
 app.MapNoticeEndpoints();
 app.MapSignInEndpoints();
+app.MapCampaignEndpoints();
 
 
 app.Run();

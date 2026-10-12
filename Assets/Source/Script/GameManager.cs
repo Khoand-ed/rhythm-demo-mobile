@@ -44,6 +44,10 @@ public class GameManager : MonoBehaviour
              "Left unassigned, the verdict is only logged.")]
     public TextMeshProUGUI rankingText;
 
+    // 这一局给了什么 / What the run paid - first-clear Orundum, drops, EXP, a level up - under the
+    // ranking line. Added by Tools/Rhythm/Wire Song Flow.
+    public TextMeshProUGUI rewardsText;
+
     [Tooltip("The results screen's RETRY. Its label is rewritten per run to say what another attempt " +
              "costs. Added by Tools/Rhythm/Wire Song Flow.")]
     public Button resultsRetryButton;
@@ -784,6 +788,7 @@ void Update()
         scoreText.text = "Score: 0";
         multiText.text = "0";
         if (rankingText != null) rankingText.text = "";
+        if (rewardsText != null) rewardsText.text = "";
         resultsScreen.SetActive(false);
     }
 
@@ -1006,7 +1011,8 @@ void Update()
         openingRun = true;
         ShowNotice("OPENING A NEW RUN...", 0f);
 
-        ApiResult<RunTicket> ticket = await Data.Player.PlayerManager.Inst().Api.StartRunAsync(stageId, operatorId, SongSession.EventId);
+        ApiResult<RunTicket> ticket = await Data.Player.PlayerManager.Inst().Api.StartRunAsync(
+            stageId, operatorId, SongSession.EventId, SongSession.CampaignStageId);
 
         openingRun = false;
 
@@ -1214,6 +1220,40 @@ void Update()
         Debug.Log($"[GameManager] Run {reporting} closed: {(review != null ? review.Verdict.ToString() : "no result")}. {verdict}");
 
         ShowRanking(verdict);
+        ShowRewards(result.Value.Rewards);
+    }
+
+    private void ShowRewards(RunRewards rewards)
+    {
+        if (this == null || rewardsText == null) return;
+        rewardsText.text = DescribeRewards(rewards);
+    }
+
+    /// <summary>
+    /// "FIRST CLEAR +50 Orundum · LMD ×350 · Orirock ×2 · +72 EXP", and on a new line
+    /// "LEVEL UP 9 → 10 · +2 Originite Prime". Empty when nothing was paid.
+    /// </summary>
+    private static string DescribeRewards(RunRewards rewards)
+    {
+        if (rewards == null) return "";
+
+        var parts = new System.Collections.Generic.List<string>();
+        if (rewards.FirstClearOrundum > 0) parts.Add("<color=#F5BA0D>FIRST CLEAR</color> +" + rewards.FirstClearOrundum + " " + global::UI.ItemVisual.Name(1));
+        foreach (Promuse.Contracts.Players.ItemStack drop in rewards.Drops)
+        {
+            parts.Add(global::UI.ItemVisual.Name(drop.ItemId) + " ×" + global::UI.ItemVisual.Amount(drop.Amount));
+        }
+        if (rewards.Exp > 0) parts.Add("+" + rewards.Exp + " EXP");
+
+        string text = string.Join("  ·  ", parts);
+        if (rewards.LevelAfter > rewards.LevelBefore)
+        {
+            text += "\n<color=#F5BA0D>LEVEL UP</color> " + rewards.LevelBefore + " → " + rewards.LevelAfter +
+                    (rewards.PrimeFromLevels > 0 ? "  ·  +" + rewards.PrimeFromLevels + " " + global::UI.ItemVisual.Name(0) : "") +
+                    "  ·  Sanity refilled";
+        }
+
+        return text;
     }
 
     /// <summary>

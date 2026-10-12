@@ -161,6 +161,8 @@ public sealed class RemoteConfigService(PromuseDbContext db, TimeProvider clock,
             errors["document.announcement"] = [$"At most {MaxText} characters."];
         }
 
+        if (document.ExpPerSanity is < 0 or > 1000) errors["document.expPerSanity"] = ["Between 0 and 1000, or empty for the default."];
+
         if (note is { Length: > MaxNote }) errors["note"] = [$"At most {MaxNote} characters."];
 
         return errors;

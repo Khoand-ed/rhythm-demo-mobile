@@ -83,6 +83,10 @@ public class PromuseDbContext(DbContextOptions<PromuseDbContext> options) : DbCo
 
     public DbSet<SignInClaim> SignInClaims => Set<SignInClaim>();
 
+    public DbSet<Campaign> Campaigns => Set<Campaign>();
+
+    public DbSet<CampaignClear> CampaignClears => Set<CampaignClear>();
+
     /// <summary>Hands every story correction its revision - see <see cref="StoryLinePatch"/>.</summary>
     public const string StoryPatchRevisions = "story_patch_revisions";
 
@@ -579,6 +583,34 @@ public class PromuseDbContext(DbContextOptions<PromuseDbContext> options) : DbCo
             entity.HasOne<Player>().WithMany().HasForeignKey(c => c.AccountId).OnDelete(DeleteBehavior.Cascade);
         });
 
+        // ---- main campaign
+        modelBuilder.Entity<Campaign>(entity =>
+        {
+            entity.ToTable("campaigns");
+            entity.HasKey(c => c.Key);
+            entity.Property(c => c.Key).HasMaxLength(16);
+            entity.Property(c => c.Definition).HasColumnType("jsonb").IsRequired();
+            entity.Property(c => c.Version).IsConcurrencyToken();
+            entity.HasOne<Account>().WithMany().HasForeignKey(c => c.UpdatedBy).OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasData(new Campaign
+            {
+                Key = SeedCampaign.Key,
+                Version = 1,
+                Definition = SeedCampaign.MainJson,
+                UpdatedAt = new DateTimeOffset(2026, 10, 12, 0, 0, 0, TimeSpan.Zero),
+            });
+        });
+
+        modelBuilder.Entity<CampaignClear>(entity =>
+        {
+            entity.ToTable("campaign_clears");
+            entity.HasKey(c => new { c.AccountId, c.StageId });
+            entity.Property(c => c.StageId).HasMaxLength(64);
+            entity.ToTable(t => t.HasCheckConstraint("ck_campaign_clears_clears", "clears > 0"));
+            entity.HasOne<Player>().WithMany().HasForeignKey(c => c.AccountId).OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.HasSequence<int>(StoryPatchRevisions);
 
         modelBuilder.Entity<StoryLinePatch>(entity =>
@@ -743,6 +775,7 @@ public class PromuseDbContext(DbContextOptions<PromuseDbContext> options) : DbCo
             entity.Property(r => r.StageId).HasMaxLength(64).IsRequired();
             entity.Property(r => r.CharacterId).HasMaxLength(32);
             entity.Property(r => r.EventId).HasMaxLength(64);
+            entity.Property(r => r.CampaignStageId).HasMaxLength(64);
             entity.HasIndex(r => new { r.AccountId, r.StartedAt });
 
             entity.HasOne(r => r.Player)

@@ -29,11 +29,19 @@ namespace Promuse.Contracts.Config
     /// </summary>
     /// <param name="MinClientVersion">"major.minor.patch"; a build older than this is told to update.</param>
     /// <param name="Announcement">One line shown once per version on the Home screen. Null for none.</param>
+    /// <param name="ExpPerSanity">
+    /// Player EXP per point of Sanity a cleared ranked run cost. Null for the default,
+    /// <see cref="DefaultExpPerSanity"/> - a config written before this existed reads as that.
+    /// </param>
     public sealed record ConfigDocument(
         MaintenanceWindow Maintenance,
         string MinClientVersion,
         FeatureFlags Features,
-        string? Announcement);
+        string? Announcement,
+        int? ExpPerSanity = null)
+    {
+        public const int DefaultExpPerSanity = 12;
+    }
 
     /// <summary>The live config as every client reads it. The ETag is the version.</summary>
     public sealed record RemoteConfig(
