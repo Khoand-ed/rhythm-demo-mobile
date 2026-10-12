@@ -31,8 +31,18 @@ namespace Data.Char {
             [Tooltip("The CharMeta asset name, e.g. AMIYA.")]
             public string charId;
 
-            [Tooltip("Tall portrait: CharSelect, the Gacha card, the results screen. CharMeta.GetImage.")]
+            [Tooltip("The splash art, whole and uncut: every screen that shows the operator standing. CharMeta.GetImage.")]
             public Sprite portrait;
+
+            // 取景, 不是裁剪 / Framing, not cropping: where on the splash the operator stands and where
+            // the face is, in 0-1 of the sprite with the origin bottom-left. SplashFrame scales and
+            // places the whole splash by these; the file itself is never cut. Empty on an install
+            // made before splashes were kept whole - running the installer again fills them.
+            [Tooltip("The operator's whole figure on the splash, 0-1 of the sprite, origin bottom-left.")]
+            public Rect figure;
+
+            [Tooltip("The operator's face on the splash, 0-1 of the sprite, origin bottom-left.")]
+            public Rect face;
 
             [Tooltip("Card art. CharMeta.GetCharImage.")]
             public Sprite card;

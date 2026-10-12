@@ -20,8 +20,13 @@ namespace Arknights.EditorTools {
     /// 装什么 / For each operator in Stands below, from one source root:
     ///   BattleFront set -> the rig on the rhythm stage, with its motion table (CharacterPresenter)
     ///   Building set    -> the rig on the Home screen                       (HomeStandby)
-    ///   one picture     -> portrait and card, cut or trimmed                (CharSelect, Gacha, results)
+    ///   one picture     -> the splash, whole and uncut, with where the      (Roster, operator detail,
+    ///                      figure and the face are on it                     CharSelect, Gacha, dialogue)
     ///                      avatar, a face cut from it                       (CharSelect grid, Gacha tabs)
+    ///
+    /// 立绘不裁 / The splash is never cut: a cut to a tall frame lost the art round the operator and was
+    /// then stretched into frames of other shapes. SplashFrame scales and places the whole picture by the
+    /// figure and face rectangles instead (CharArtOverrides.Entry.figure / face).
     ///
     /// 可以重复运行 / Safe to run again: anything already installed is kept, so a file or a motion table
     /// adjusted by hand is not overwritten. Remove Local Character Art is the explicit reset. An operator
@@ -39,7 +44,6 @@ namespace Arknights.EditorTools {
         private const string DefaultSource = @"D:\rhythm-demo-main\_moved-out-of-StreamingAssets";
 
         private const int AvatarSize = 256;
-        private const int PortraitMargin = 8;
 
         /// <summary>
         /// 一个干员的美术从哪来 / Where one operator's stand-in art comes from, and how its rig acts.
@@ -54,8 +58,8 @@ namespace Arknights.EditorTools {
             public string battle;      // BattleFront set name, as exported
             public string home;        // Building set name, as exported
             public string picture;     // the illustration, in the folder itself
-            public RectInt portrait;   // the tall frame cut from the picture; empty = trim to what is drawn
-            public RectInt face;       // the square the avatar is cut from
+            public RectInt figure;     // the operator, head to feet, on it; empty = whatever is drawn
+            public RectInt face;       // the face: the avatar is cut from it, the Roster card frames on it
             public Action<OperatorMotion, Spine.SkeletonData> motion; // what differs from the defaults
         }
 
@@ -66,7 +70,7 @@ namespace Arknights.EditorTools {
             new Stand {
                 id = "AMIYA", folder = "AMIYA/char_002_amiya",
                 battle = "char_002_amiya", home = "build_char_002_amiya", picture = "char_002_amiya_1.png",
-                // A clean standing figure on an empty canvas: trimmed, not cut.
+                // A clean standing figure on an empty canvas: the figure is whatever is drawn.
                 face = new RectInt(385, 10, 330, 330),
                 motion = (m, rig) => {
                     m.twin = Range("Skill_2", 0f, 0.4f, 1.3f);
@@ -77,15 +81,15 @@ namespace Arknights.EditorTools {
             new Stand {
                 id = "NOVA", folder = "ART/159/char_159_peacok",
                 battle = "char_159_peacok_game#1", home = "build_char_159_peacok_game#1", picture = "char_159_peacok_game#1.png",
-                // Skin splash art with its whole scene: a tall frame round the figure keeps it large.
-                portrait = new RectInt(682, 410, 816, 1390),
+                // Skin splash art with its whole scene round the figure.
+                figure = new RectInt(838, 496, 608, 1248),
                 face = new RectInt(889, 512, 320, 320),
                 motion = (m, rig) => { m.holdLoop = Around(rig, "Attack", 1f); }
             },
             new Stand {
                 id = "ECHO", folder = "ART/420/char_420_flamtl",
                 battle = "char_420_flamtl_game#2", home = "build_char_420_flamtl_game#2", picture = "char_420_flamtl_game#2.png",
-                portrait = new RectInt(796, 415, 708, 1215),
+                figure = new RectInt(976, 506, 464, 1052),
                 face = new RectInt(961, 484, 320, 320),
                 motion = (m, rig) => {
                     m.holdLoop = Range("Skill_2_Loop", 0f, 0f, 1f);
@@ -95,7 +99,7 @@ namespace Arknights.EditorTools {
             new Stand {
                 id = "PULSE", folder = "ART/140/char_140_whitew",
                 battle = "char_140_whitew_boc#1", home = "build_char_140_whitew_boc#1", picture = "char_140_whitew_boc#1.png",
-                portrait = new RectInt(572, 340, 876, 1460),
+                figure = new RectInt(624, 368, 800, 1392),
                 face = new RectInt(863, 361, 320, 320),
                 motion = (m, rig) => { m.holdLoop = Range("Combat", 0f, 0f, 1f); }
             },
@@ -139,7 +143,9 @@ namespace Arknights.EditorTools {
                 int n = 0;
                 n += CopyIfMissing(SourceSet(source, stand, true) + ".png", SetPath(stand, true) + ".png");
                 n += CopyIfMissing(SourceSet(source, stand, false) + ".png", SetPath(stand, false) + ".png");
-                copied[stand] = n + CutSprites(Path.Combine(source, stand.folder, stand.picture), stand);
+                string picture = Path.Combine(source, stand.folder, stand.picture);
+                n += CopyIfMissing(picture, Dir(stand) + "/splash.png");
+                copied[stand] = n + CutAvatar(picture, stand);
             }
 
             AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
@@ -150,7 +156,7 @@ namespace Arknights.EditorTools {
             // "Material is missing texture" about its own work. Given a material that already exists, it
             // only has to assign the texture, and that does stick.
             foreach (Stand stand in ready) {
-                ConfigureSprite(Dir(stand) + "/portrait.png");
+                ConfigureSprite(Dir(stand) + "/splash.png");
                 ConfigureSprite(Dir(stand) + "/avatar.png");
                 foreach (bool battle in new[] { true, false }) {
                     ConfigureSpinePage(SetPath(stand, battle) + ".png");
@@ -193,19 +199,21 @@ namespace Arknights.EditorTools {
                 }
 
                 OperatorMotion motion = MotionFor(stand, battleRig, out bool motionMade);
-                Sprite portrait = AssetDatabase.LoadAssetAtPath<Sprite>(Dir(stand) + "/portrait.png");
+                Sprite splash = AssetDatabase.LoadAssetAtPath<Sprite>(Dir(stand) + "/splash.png");
                 Sprite avatar = AssetDatabase.LoadAssetAtPath<Sprite>(Dir(stand) + "/avatar.png");
-                Register(registry, stand.id, portrait, avatar, battleRig, motion, homeRig);
+                Framing(Path.Combine(source, stand.folder, stand.picture), stand, out Rect figure, out Rect face);
+                string framing = Register(registry, stand, splash, figure, face, avatar, battleRig, motion, homeRig);
 
-                string size = portrait != null ? $"{portrait.rect.width}x{portrait.rect.height}" : "MISSING";
+                string size = splash != null ? $"{splash.rect.width}x{splash.rect.height}" : "MISSING";
                 report.Add($"  {stand.id}: from {stand.folder} - {copied[stand]} file(s) written, motion table " +
-                           $"{(motionMade ? "made" : "kept")}, portrait {size}");
+                           $"{(motionMade ? "made" : "kept")}, splash {size} whole, {framing}");
             }
 
             if (registryCreated) AssetDatabase.CreateAsset(registry, RegistryPath);
             else EditorUtility.SetDirty(registry);
 
             AssetDatabase.SaveAssets();
+            report.AddRange(RemoveOldCuts(registry, ready));
             Debug.Log($"[LocalCharArt] Placeholder operator art under {Root}\n" +
                       $"  source root: {source}\n" + string.Join("\n", report) + "\n" +
                       $"  registry {(registryCreated ? "created" : "updated")}: {RegistryPath}\n" +
@@ -452,55 +460,64 @@ namespace Arknights.EditorTools {
 
         // ----------------------------------------------------------------- sprites
 
-        // Writes whichever of portrait.png and avatar.png the operator does not have yet. Returns how many.
-        private static int CutSprites(string source, Stand stand) {
+        // Writes avatar.png if the operator does not have one yet. Returns how many files it wrote.
+        private static int CutAvatar(string source, Stand stand) {
             Directory.CreateDirectory(Dir(stand));
-            string portraitPath = Dir(stand) + "/portrait.png";
             string avatarPath = Dir(stand) + "/avatar.png";
-            bool portrait = !File.Exists(portraitPath);
-            bool avatar = !File.Exists(avatarPath);
-            if (!portrait && !avatar) return 0;
+            if (File.Exists(avatarPath)) return 0;
 
-            Texture2D picture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+            Texture2D picture = Load(source);
+            if (picture == null) return 0;
+
             try {
-                if (!picture.LoadImage(File.ReadAllBytes(source), false)) {
-                    Debug.LogError($"[LocalCharArt] {source} is not a readable image.");
-                    return 0;
-                }
-
                 int w = picture.width;
                 int h = picture.height;
-                Color32[] pixels = picture.GetPixels32();
-
-                if (portrait) {
-                    RectInt crop;
-                    if (stand.portrait.width > 0 && stand.portrait.height > 0) {
-                        // 立绘带场景就裁一个竖框 / A splash with its scene gets a tall frame round the figure.
-                        crop = FromTop(stand.portrait, w, h);
-                    } else {
-                        // 空白画布就裁到有像素的范围 / A figure on an empty canvas is trimmed to what is drawn:
-                        // it is half the width of the canvas, and keeping the margin shows it half-size.
-                        RectInt box = OpaqueBounds(pixels, w, h);
-                        int x0 = Mathf.Max(0, box.xMin - PortraitMargin);
-                        int y0 = Mathf.Max(0, box.yMin - PortraitMargin);
-                        int x1 = Mathf.Min(w, box.xMax + PortraitMargin);
-                        int y1 = Mathf.Min(h, box.yMax + PortraitMargin);
-                        crop = new RectInt(x0, y0, x1 - x0, y1 - y0);
-                    }
-
-                    WritePng(portraitPath, Crop(pixels, w, crop), crop.width, crop.height);
-                }
-
-                if (avatar) {
-                    RectInt face = FromTop(stand.face, w, h);
-                    Color32[] cut = Crop(pixels, w, face);
-                    WritePng(avatarPath, Resize(cut, face.width, face.height, AvatarSize, AvatarSize), AvatarSize, AvatarSize);
-                }
-
-                return (portrait ? 1 : 0) + (avatar ? 1 : 0);
+                RectInt face = FromTop(stand.face, w, h);
+                Color32[] cut = Crop(picture.GetPixels32(), w, face);
+                WritePng(avatarPath, Resize(cut, face.width, face.height, AvatarSize, AvatarSize), AvatarSize, AvatarSize);
+                return 1;
             } finally {
                 UnityEngine.Object.DestroyImmediate(picture);
             }
+        }
+
+        /// <summary>
+        /// 取景, 不裁 / Where the figure and the face are on the picture, as 0-1 of it with the origin
+        /// bottom-left - the shape CharArtOverrides keeps them in, so they hold at whatever size the
+        /// sprite is imported. A Stand with no figure rectangle gets whatever is drawn.
+        /// </summary>
+        private static void Framing(string source, Stand stand, out Rect figure, out Rect face) {
+            figure = default;
+            face = default;
+
+            Texture2D picture = Load(source);
+            if (picture == null) return;
+
+            try {
+                int w = picture.width;
+                int h = picture.height;
+                RectInt body = stand.figure.width > 0 && stand.figure.height > 0
+                    ? FromTop(stand.figure, w, h)
+                    : OpaqueBounds(picture.GetPixels32(), w, h);
+
+                figure = Normalized(body, w, h);
+                face = Normalized(FromTop(stand.face, w, h), w, h);
+            } finally {
+                UnityEngine.Object.DestroyImmediate(picture);
+            }
+        }
+
+        private static Texture2D Load(string source) {
+            Texture2D picture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+            if (picture.LoadImage(File.ReadAllBytes(source), false)) return picture;
+
+            Debug.LogError($"[LocalCharArt] {source} is not a readable image.");
+            UnityEngine.Object.DestroyImmediate(picture);
+            return null;
+        }
+
+        private static Rect Normalized(RectInt rect, int w, int h) {
+            return new Rect(rect.x / (float)w, rect.y / (float)h, rect.width / (float)w, rect.height / (float)h);
         }
 
         // 图片坐标原点在左下 / Texture rows count from the bottom, the measured rectangles from the top.
@@ -625,21 +642,56 @@ namespace Arknights.EditorTools {
 
         // ---------------------------------------------------------------- registry
 
-        // 只补空的 / Fills what is empty and leaves anything set alone.
-        private static void Register(CharArtOverrides registry, string charId, Sprite portrait, Sprite avatar,
-                                     SkeletonDataAsset battle, OperatorMotion motion, SkeletonDataAsset home) {
-            CharArtOverrides.Entry entry = registry.entries.Find(e => e != null && e.charId == charId);
+        // 只补空的 / Fills what is empty and leaves anything set alone - except the cut portrait an
+        // install from before splashes were kept whole put there, which the whole splash replaces.
+        // Returns what it did with the framing, for the log.
+        private static string Register(CharArtOverrides registry, Stand stand, Sprite splash, Rect figure, Rect face,
+                                       Sprite avatar, SkeletonDataAsset battle, OperatorMotion motion, SkeletonDataAsset home) {
+            CharArtOverrides.Entry entry = registry.entries.Find(e => e != null && e.charId == stand.id);
             if (entry == null) {
-                entry = new CharArtOverrides.Entry { charId = charId };
+                entry = new CharArtOverrides.Entry { charId = stand.id };
                 registry.entries.Add(entry);
             }
 
-            if (entry.portrait == null) entry.portrait = portrait;
-            if (entry.card == null) entry.card = portrait;
+            string oldCut = OldCutPath(stand);
+            if (entry.portrait == null || AssetDatabase.GetAssetPath(entry.portrait) == oldCut) entry.portrait = splash;
+            if (entry.card == null || AssetDatabase.GetAssetPath(entry.card) == oldCut) entry.card = splash;
             if (entry.avatar == null) entry.avatar = avatar;
             if (entry.battleRig == null) entry.battleRig = battle;
             if (entry.battleMotion == null) entry.battleMotion = motion;
             if (entry.homeRig == null) entry.homeRig = home;
+
+            // 取景只配这张立绘 / The rectangles describe this picture only: a portrait set by hand to
+            // something else keeps empty ones, and SplashFrame shows it whole.
+            if (splash == null) return "splash MISSING, framing left alone";
+            if (entry.portrait != splash) return "portrait set by hand, framing left alone";
+            if (entry.figure.width > 0f && entry.face.width > 0f) return "framing kept";
+
+            if (entry.figure.width <= 0f) entry.figure = figure;
+            if (entry.face.width <= 0f) entry.face = face;
+            return $"figure {Describe(entry.figure)}, face {Describe(entry.face)}";
+        }
+
+        private static string Describe(Rect r) => $"({r.x:0.###}, {r.y:0.###}, {r.width:0.###}x{r.height:0.###})";
+
+        private static string OldCutPath(Stand stand) => Dir(stand) + "/portrait.png";
+
+        // 旧的竖框不要了 / The tall cut an older install made, once nothing in the registry points at it.
+        private static List<string> RemoveOldCuts(CharArtOverrides registry, List<Stand> stands) {
+            var removed = new List<string>();
+            foreach (Stand stand in stands) {
+                string path = OldCutPath(stand);
+                if (AssetDatabase.LoadAssetAtPath<Sprite>(path) == null) continue;
+
+                bool used = registry.entries.Exists(e => e != null &&
+                    (AssetDatabase.GetAssetPath(e.portrait) == path || AssetDatabase.GetAssetPath(e.card) == path));
+                if (used) continue;
+
+                AssetDatabase.DeleteAsset(path);
+                removed.Add($"  {stand.id}: removed the old cut portrait, {path}");
+            }
+
+            return removed;
         }
     }
 }

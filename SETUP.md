@@ -226,6 +226,16 @@ installed beside its rig as `<ID>_Motion.asset` and can be tuned in the Inspecto
 installer keeps it. The installer needs the default shader in
 `Assets/Editor/SpineSettings.asset` to be `Spine/Skeleton`, which is what the repository carries.
 
+Each operator's splash is installed **whole** as `splash.png`, never cut, together with where the
+figure and the face are on it. Every screen that shows an operator standing - the Roster card, the
+operator detail, the operator picker, headhunting and dialogue - draws it through a `SplashFrame`,
+which scales the whole picture by the figure instead of squeezing it into the frame: the Roster card
+is filled and framed on the face, the other screens show the whole figure.
+`Arknights/Art/Fit Operator Splash Frames` sets those frames up on the prefabs (it has already been
+run on the ones in the repository); `Reset Operator Splash Frames To Default` puts its values back.
+An install made before splashes were kept whole is upgraded by running the installer again: the
+old cut `portrait.png` is replaced and removed.
+
 When you have art of your own, put it in the operator's `CharMeta` (tracked) and remove the local
 folder. No code changes: `CharMeta` asks the local registry first and falls back to its own fields.
 

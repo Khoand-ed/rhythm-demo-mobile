@@ -94,6 +94,7 @@ public static class CharSelectUISetup
         BuildRosterColumn(rootRect, ui);
         BuildPortrait(rootRect, ui);
         BuildStatPanel(rootRect, ui);
+        OperatorSplashFrames.FitInto(root, CharSelectUI.UIName);
 
         Save(root, CharSelectUI.UIName);
 
