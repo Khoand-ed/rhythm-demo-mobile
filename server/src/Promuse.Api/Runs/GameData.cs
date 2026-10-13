@@ -1,3 +1,5 @@
+using System.Text.Json;
+using Promuse.Contracts.Items;
 using Promuse.Scoring.Rules;
 
 namespace Promuse.Api.Runs;
@@ -7,7 +9,7 @@ public sealed class GameDataOptions
     public const string SectionName = "GameData";
 
     /// <summary>
-    /// Where ruleset.json and charts/ live. Empty means the copy the build places beside the
+    /// Where ruleset.json, items.json and charts/ live. Empty means the copy the build places beside the
     /// binaries - see the Content items in Promuse.Api.csproj.
     /// </summary>
     public string? Root { get; set; }
@@ -24,19 +26,29 @@ public sealed class GameDataOptions
 /// 同一份文件 / The files are the repository's own: server/data/ruleset.json and the beatmap JSON
 /// under Assets/Beatmaps, copied beside the binaries by the build. Nothing here is a second copy
 /// someone has to keep in step.
+///
+/// 物品目录 / items.json rides along: the game's items by id and name, exported from the ItemMetas
+/// (Arknights/Depot/Export Item Catalog) and named on the admin page. ci/check_items.py holds it to
+/// the ItemMetas, ItemCatalogTests holds what the server seeds to it.
 /// </summary>
 public sealed class GameData
 {
     private readonly Dictionary<string, ScoringChart> charts;
 
-    private GameData(Ruleset rules, Dictionary<string, ScoringChart> charts, string root)
+    private static readonly JsonSerializerOptions ItemJson = new(JsonSerializerDefaults.Web);
+
+    private GameData(Ruleset rules, Dictionary<string, ScoringChart> charts, IReadOnlyList<CatalogItem> items, string root)
     {
         Rules = rules;
         this.charts = charts;
+        Items = items;
         Root = root;
     }
 
     public Ruleset Rules { get; }
+
+    /// <summary>Every item the game knows, by id.</summary>
+    public IReadOnlyList<CatalogItem> Items { get; }
 
     public string Root { get; }
 
@@ -75,10 +87,33 @@ public sealed class GameData
             }
         }
 
-        logger.LogInformation(
-            "Game data loaded from {Root}: ruleset v{Version} with {Operators} operator(s), {Charts} chart(s) [{Stages}].",
-            root, rules.version, rules.operators.Count, charts.Count, string.Join(", ", charts.Keys.Order()));
+        IReadOnlyList<CatalogItem> items = LoadItems(Path.Combine(root, "items.json"));
 
-        return new GameData(rules, charts, root);
+        logger.LogInformation(
+            "Game data loaded from {Root}: ruleset v{Version} with {Operators} operator(s), {Charts} chart(s) [{Stages}], {Items} item(s).",
+            root, rules.version, rules.operators.Count, charts.Count, string.Join(", ", charts.Keys.Order()), items.Count);
+
+        return new GameData(rules, charts, items, root);
+    }
+
+    private sealed record ItemFile(List<ItemEntry>? Items);
+
+    private sealed record ItemEntry(int Id, string? Name, int Rarity);
+
+    private static IReadOnlyList<CatalogItem> LoadItems(string path)
+    {
+        ItemFile file = JsonSerializer.Deserialize<ItemFile>(File.ReadAllText(path), ItemJson)
+            ?? throw new InvalidDataException($"{path} is empty.");
+
+        var items = new List<CatalogItem>();
+        var seen = new HashSet<int>();
+        foreach (ItemEntry entry in file.Items ?? [])
+        {
+            if (string.IsNullOrWhiteSpace(entry.Name)) throw new InvalidDataException($"Item {entry.Id} in {path} has no name.");
+            if (!seen.Add(entry.Id)) throw new InvalidDataException($"{path} lists item {entry.Id} twice.");
+            items.Add(new CatalogItem(entry.Id, entry.Name, entry.Rarity));
+        }
+
+        return [.. items.OrderBy(i => i.ItemId)];
     }
 }

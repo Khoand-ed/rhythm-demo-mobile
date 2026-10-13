@@ -19,8 +19,14 @@ public class Notice
 
     public string Title { get; set; } = string.Empty;
 
-    /// <summary>TextMeshPro rich text.</summary>
+    /// <summary>TextMeshPro rich text. For a notice in blocks, its paragraphs joined.</summary>
     public string Body { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The content in blocks - paragraphs and pictures in order, a JSON list of
+    /// NoticeBlockDefinition. Null for a notice that is only <see cref="Body"/>.
+    /// </summary>
+    public string? Blocks { get; set; }
 
     /// <summary>A file in the banner folder; null for none.</summary>
     public string? Banner { get; set; }

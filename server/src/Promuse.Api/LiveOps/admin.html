@@ -53,6 +53,22 @@
   .small { font-size: 12px; }
   .banner-preview { max-width: 100%; max-height: 180px; border: 1px solid var(--edge); border-radius: 6px; display: block; margin-top: 8px; }
   table.grid td.num input { width: 90px; min-width: 0; }
+  table.grid td.item select { min-width: 190px; }
+  /* Notice blocks: one card per paragraph or picture, then a preview drawn like the game draws it. */
+  .block { border: 1px solid var(--edge); border-radius: 6px; padding: 8px; margin-bottom: 8px; background: var(--bg); }
+  .block .top { gap: 8px; margin-bottom: 6px; }
+  .block textarea { width: 100%; min-height: 90px; }
+  .tools { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+  .tools button { padding: 3px 9px; font-size: 13px; }
+  .tools select { padding: 3px 6px; font-size: 13px; }
+  .tools input[type=color] { width: 34px; height: 28px; padding: 0 2px; background: var(--bg); border: 1px solid var(--edge); border-radius: 5px; }
+  .block img { max-width: 100%; max-height: 160px; display: block; margin-top: 6px; border-radius: 4px; }
+  .preview { max-width: 619px; background: #cccccf; color: #1f2023; border-radius: 6px; padding: 0 17px 12px; margin-top: 8px;
+    font-size: 14px; line-height: 1.35; overflow-wrap: anywhere; }
+  .preview .bar { background: #262628; color: #fff; font-size: 20px; height: 36px; line-height: 36px; padding: 0 7px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 11px; }
+  .preview img { width: 100%; display: block; margin-bottom: 11px; }
+  .preview .para { margin-bottom: 11px; }
   @media (max-width: 640px) { label { min-width: 100%; } }
 </style>
 </head>
@@ -154,10 +170,9 @@
       <label>Status</label>
       <label style="min-width:0;color:var(--text)"><input id="eActive" type="checkbox"> Active - off hides the event whatever its dates</label>
     </div>
-    <div class="row"><label for="eCurrency">Currency item id</label><input id="eCurrency" type="text" placeholder="Needed for a shop or stages - 20 is Event Token"></div>
+    <div class="row"><label for="eCurrency">Currency</label><select id="eCurrency"></select>
+      <span class="muted small">Needed for a shop or stages - usually Event Token.</span></div>
     <div class="row"><label for="eBanner">Headhunting banner</label><select id="eBanner"></select></div>
-    <div class="muted small">Items: 0 Originite Prime · 1 Orundum · 2 LMD · 6 Orirock · 7 Sugar Substitute · 8 Purchase Certificate ·
-      10 Headhunting Permit · 11 Basic Battle Record · 12 Recruitment Permit · 13 Skill Summary · 20 Event Token</div>
 
     <div id="modules"></div>
 
@@ -208,7 +223,7 @@
     <div class="module">
       <div class="top"><h3>Attachments</h3><button id="mAdd" class="ghost" type="button">Add item</button></div>
       <div class="muted small">Collected when the player opens the mail. At most 10.</div>
-      <div class="scroll"><table class="grid"><thead><tr><th>Item id</th><th>Amount</th><th></th></tr></thead><tbody id="mItems"></tbody></table></div>
+      <div class="scroll"><table class="grid"><thead><tr><th>Item</th><th>Amount</th><th></th></tr></thead><tbody id="mItems"></tbody></table></div>
     </div>
     <div style="margin-top:14px"><button id="mSend" type="button">Send</button></div>
     <div id="mailStatus" class="status"></div>
@@ -237,11 +252,20 @@
       <select id="nCategory"><option>Event</option><option>System</option><option>News</option></select></div>
     <div class="row"><label for="nListTitle">List title</label><input id="nListTitle" type="text" maxlength="40" placeholder="Short - shown on the list on the left"></div>
     <div class="row"><label for="nTitle">Title</label><input id="nTitle" type="text" maxlength="80"></div>
-    <div class="row"><label for="nBody">Body</label><textarea id="nBody" maxlength="8000" style="min-height:160px"
-      placeholder="Rich text: <b>bold</b>, <size=120%>bigger</size>, <color=#2b8fe5>colour</color>"></textarea></div>
     <div class="row"><label for="nBannerFile">Banner (PNG/JPEG, 2 MB)</label><input id="nBannerFile" type="file" accept="image/png,image/jpeg">
       <button id="nBannerClear" class="ghost" type="button">No banner</button></div>
     <img id="nBannerPreview" class="banner-preview" alt="" hidden>
+    <div class="module">
+      <div class="top"><h3>Content</h3>
+        <div><button id="nAddText" class="ghost" type="button">Add paragraph</button>
+          <button id="nAddImage" class="ghost" type="button">Add picture</button></div></div>
+      <div class="muted small" style="margin-bottom:8px">Paragraphs and pictures, shown in this order under the banner. Select
+        text and use the buttons to make it bold, italic, bigger or coloured. At most 30 blocks and 10 pictures.</div>
+      <div id="nBlocks"></div>
+      <h3 style="margin-top:12px">Preview</h3>
+      <div class="muted small">Drawn the way the game draws the notice, at half size.</div>
+      <div id="nPreview" class="preview"></div>
+    </div>
     <div class="row" style="margin-top:10px"><label for="nStarts">Shows from (your time)</label><input id="nStarts" type="datetime-local" step="1"></div>
     <div class="row"><label for="nEnds">Until (your time)</label><input id="nEnds" type="datetime-local" step="1">
       <button id="nEndsClear" class="ghost" type="button">No end</button></div>
@@ -263,7 +287,7 @@
     <div class="module">
       <div class="row"><label for="sKey">Table</label><input id="sKey" type="text" placeholder="default, or a month as 2026-11">
         <button id="sLoad" class="ghost" type="button">Open</button></div>
-      <div class="scroll"><table class="grid"><thead><tr><th>Day</th><th>Item id</th><th>Amount</th></tr></thead><tbody id="sDays"></tbody></table></div>
+      <div class="scroll"><table class="grid"><thead><tr><th>Day</th><th>Item</th><th>Amount</th></tr></thead><tbody id="sDays"></tbody></table></div>
       <div style="margin-top:12px"><button id="sSave" type="button">Save table</button>
         <button id="sDelete" class="ghost" type="button">Remove month table</button></div>
       <div id="signStatus" class="status"></div>
@@ -348,7 +372,43 @@
     $('login').hidden = true;
     $('signOut').hidden = $('nav').hidden = false;
     $('loginStatus').textContent = '';
+    await loadItems();
     await view('config');
+  }
+
+  // ------------------------------------------------------------------ items
+
+  // 物品目录 / The game's items by id and name (server/data/items.json, exported from the ItemMetas),
+  // so every item field is a picker reading "1 · Orundum". An id the catalog does not know still
+  // shows, as "#99 (unknown)", so opening and saving never loses it.
+  let items = [];
+
+  async function loadItems() {
+    const result = await api('GET', '/v1/admin/items');
+    items = result.ok ? result.data.items : [];
+  }
+
+  function itemName(id) {
+    const item = items.find(i => i.itemId === id);
+    return item ? item.name : 'unknown';
+  }
+
+  function itemPicker(value, allowNone) {
+    if (!items.length) {
+      // 目录读不到 / No catalog (an older server): the plain number field it used to be.
+      const input = document.createElement('input');
+      input.type = 'number'; input.value = value ?? '';
+      return input;
+    }
+    const el = document.createElement('select');
+    const add = (v, text) => { const o = document.createElement('option'); o.value = v; o.textContent = text; el.appendChild(o); };
+    if (allowNone) add('', '(none)');
+    for (const item of items) add(String(item.itemId), item.itemId + ' · ' + item.name);
+    const known = value === null || value === undefined || value === '' || items.some(i => i.itemId === Number(value));
+    if (!known) add(String(value), '#' + value + ' (unknown)');
+    el.value = value === null || value === undefined ? '' : String(value);
+    if (!allowNone && el.value === '' && items.length) el.value = String(items[0].itemId);
+    return el;
   }
 
   async function view(which) {
@@ -509,7 +569,7 @@
   const MODULES = {
     checkIn: {
       title: 'Check-in days', add: 'Add day', hint: 'Day 1, 2, 3... in row order; one claim per server day.',
-      cols: [['itemId', 'Item id', 'number'], ['amount', 'Amount', 'number']],
+      cols: [['itemId', 'Item', 'item'], ['amount', 'Amount', 'number']],
       flat: d => ({ itemId: d.reward.itemId, amount: d.reward.amount }),
       deep: (r, i) => ({ day: i + 1, reward: { itemId: r.itemId, amount: r.amount } }),
     },
@@ -522,13 +582,13 @@
     },
     milestones: {
       title: 'Milestones', add: 'Add milestone', hint: 'Claimable once the player holds this many points.',
-      cols: [['rewardId', 'Id', 'text'], ['requiredPoints', 'Points', 'number'], ['itemId', 'Item id', 'number'], ['amount', 'Amount', 'number']],
+      cols: [['rewardId', 'Id', 'text'], ['requiredPoints', 'Points', 'number'], ['itemId', 'Item', 'item'], ['amount', 'Amount', 'number']],
       flat: r => ({ rewardId: r.rewardId, requiredPoints: r.requiredPoints, itemId: r.reward.itemId, amount: r.reward.amount }),
       deep: r => ({ rewardId: r.rewardId, requiredPoints: r.requiredPoints, reward: { itemId: r.itemId, amount: r.amount } }),
     },
     shop: {
       title: 'Event shop', add: 'Add offer', hint: 'Priced in the event currency. Leave the limit empty for no limit.',
-      cols: [['offerId', 'Id', 'text'], ['itemId', 'Item id', 'number'], ['amount', 'Amount', 'number'], ['price', 'Price', 'number'], ['limit', 'Limit', 'number']],
+      cols: [['offerId', 'Id', 'text'], ['itemId', 'Item', 'item'], ['amount', 'Amount', 'number'], ['price', 'Price', 'number'], ['limit', 'Limit', 'number']],
       flat: o => ({ offerId: o.offerId, itemId: o.sell.itemId, amount: o.sell.amount, price: o.price, limit: o.limit }),
       deep: r => ({ offerId: r.offerId, sell: { itemId: r.itemId, amount: r.amount }, price: r.price, limit: r.limit }),
     },
@@ -547,7 +607,9 @@
 
   function cellInput(kind, value) {
     let el;
-    if (kind === 'goal' || kind === 'stage') {
+    if (kind === 'item') {
+      el = itemPicker(value, false);
+    } else if (kind === 'goal' || kind === 'stage') {
       el = document.createElement('select');
       const options = kind === 'goal' ? GOALS : ['', ...catalog.stageIds];
       for (const o of options) {
@@ -571,6 +633,7 @@
     for (const [key, , kind, width] of spec.cols) {
       const td = document.createElement('td');
       if (width) td.className = width;
+      else if (kind === 'item') td.className = 'item';
       else if (kind === 'goal' || kind === 'stage') td.className = 'sel';
       const input = cellInput(kind, row ? row[key] : null);
       input.dataset.key = key;
@@ -615,7 +678,7 @@
         const raw = input.value.trim();
         // 只有可空的数字能留空 / Only the optional numbers may be left empty; a required one
         // goes as 0 so the server answers with which field is wrong, not with a JSON error.
-        row[input.dataset.key] = input.dataset.kind === 'number'
+        row[input.dataset.key] = input.dataset.kind === 'number' || input.dataset.kind === 'item'
           ? (raw === '' ? (OPTIONAL.has(input.dataset.key) ? null : 0) : Number(raw))
           : (raw === '' ? null : raw);
       }
@@ -642,7 +705,7 @@
     $('eStarts').value = toLocalInput(d.startsAt);
     $('eEnds').value = toLocalInput(d.endsAt);
     $('eActive').checked = d.isActive;
-    $('eCurrency').value = d.currencyItemId ?? '';
+    $('eCurrency').replaceWith(Object.assign(itemPicker(d.currencyItemId, true), { id: 'eCurrency' }));
 
     const banner = $('eBanner');
     banner.replaceChildren();
@@ -890,14 +953,21 @@
   function itemRow(tbody, item, label) {
     const tr = document.createElement('tr');
     if (label !== undefined) { const td = document.createElement('td'); td.textContent = label; td.className = 'muted'; tr.appendChild(td); }
-    for (const [key, value] of [['itemId', item ? item.itemId : ''], ['amount', item ? item.amount : '']]) {
-      const td = document.createElement('td');
-      td.className = 'num';
-      const input = document.createElement('input');
-      input.type = 'number'; input.value = value; input.dataset.key = key;
-      td.appendChild(input);
-      tr.appendChild(td);
-    }
+    // 空格子 / An empty sign-in square is "(none)" and 0: trailing ones are dropped when saved.
+    const empty = !item || (item.itemId === 0 && item.amount === 0 && label !== undefined);
+    const picker = itemPicker(empty ? null : item.itemId, true);
+    picker.dataset.key = 'itemId';
+    const pickCell = document.createElement('td');
+    pickCell.className = 'item';
+    pickCell.appendChild(picker);
+    tr.appendChild(pickCell);
+
+    const td = document.createElement('td');
+    td.className = 'num';
+    const amount = document.createElement('input');
+    amount.type = 'number'; amount.value = empty ? '' : item.amount; amount.dataset.key = 'amount';
+    td.appendChild(amount);
+    tr.appendChild(td);
     if (label === undefined) {
       const td = document.createElement('td');
       const remove = document.createElement('button');
@@ -917,7 +987,7 @@
   }
 
   function itemsText(items) {
-    return items.length ? items.map(i => '#' + i.itemId + ' ×' + i.amount).join(', ') : '-';
+    return items.length ? items.map(i => itemName(i.itemId) + ' ×' + i.amount).join(', ') : '-';
   }
 
   // ------------------------------------------------------------------ mail
@@ -982,24 +1052,164 @@
 
   let noticeEditing = null; // { id, version } or null
   let noticeBanner = null;  // file name
+  let noticeBlocks = [];    // [{ type: 'Text', text } | { type: 'Image', image }] - the content being written
+
+  const MAX_BLOCKS = 30, MAX_IMAGES = 10;
+  const SIZES = ['80%', '120%', '150%', '200%'];
+  const imageUrl = name => '/v1/notices/banners/' + name;
 
   function setBanner(name, url) {
     noticeBanner = name;
     $('nBannerPreview').hidden = !url;
     if (url) $('nBannerPreview').src = url;
+    drawPreview();
+  }
+
+  // 选中的字包上标签 / Wraps the selected text of a paragraph in a rich-text tag, keeping it selected.
+  function wrap(area, open, close) {
+    const start = area.selectionStart, end = area.selectionEnd, v = area.value;
+    area.value = v.slice(0, start) + open + v.slice(start, end) + close + v.slice(end);
+    area.focus();
+    area.setSelectionRange(start + open.length, end + open.length);
+    area.dispatchEvent(new Event('input'));
+  }
+
+  function drawBlocks() {
+    const host = $('nBlocks');
+    host.replaceChildren();
+    noticeBlocks.forEach((block, i) => {
+      const card = document.createElement('div');
+      card.className = 'block';
+      const head = document.createElement('div');
+      head.className = 'top';
+      const title = document.createElement('span');
+      title.className = 'muted small';
+      title.textContent = (i + 1) + '. ' + (block.type === 'Text' ? 'Paragraph' : 'Picture');
+      const order = document.createElement('div');
+      order.append(button('↑', () => moveBlock(i, -1)), button('↓', () => moveBlock(i, 1)),
+        button('×', () => { noticeBlocks.splice(i, 1); drawBlocks(); }));
+      head.append(title, order);
+      card.appendChild(head);
+
+      if (block.type === 'Text') {
+        const area = document.createElement('textarea');
+        area.maxLength = 4000;
+        area.value = block.text || '';
+        area.placeholder = 'Rich text - select some and use the buttons above.';
+        area.oninput = () => { block.text = area.value; drawPreview(); };
+
+        const tools = document.createElement('div');
+        tools.className = 'tools';
+        const tool = (label, open, close, hint) => { const b = button(label, () => wrap(area, open, close)); b.title = hint; return b; };
+        const bold = tool('B', '<b>', '</b>', 'Bold'); bold.style.fontWeight = '700';
+        const italic = tool('I', '<i>', '</i>', 'Italic'); italic.style.fontStyle = 'italic';
+        const under = tool('U', '<u>', '</u>', 'Underline'); under.style.textDecoration = 'underline';
+        const size = document.createElement('select');
+        size.title = 'Size';
+        for (const v of ['', ...SIZES]) { const o = document.createElement('option'); o.value = v; o.textContent = v || 'Size'; size.appendChild(o); }
+        size.onchange = () => { if (size.value) wrap(area, '<size=' + size.value + '>', '</size>'); size.value = ''; };
+        const colour = document.createElement('input');
+        colour.type = 'color'; colour.value = '#2b8fe5'; colour.title = 'Colour to apply';
+        const paint = button('Colour', () => wrap(area, '<color=' + colour.value + '>', '</color>'));
+        tools.append(bold, italic, under, size, colour, paint);
+        card.append(tools, area);
+      } else {
+        const file = document.createElement('input');
+        file.type = 'file'; file.accept = 'image/png,image/jpeg';
+        file.onchange = async () => {
+          const uploaded = await uploadImage(file.files[0]);
+          if (uploaded) { block.image = uploaded.banner; drawBlocks(); }
+        };
+        card.appendChild(file);
+        if (block.image) {
+          const img = document.createElement('img');
+          img.src = imageUrl(block.image); img.alt = '';
+          card.appendChild(img);
+        } else {
+          const none = document.createElement('div');
+          none.className = 'muted small'; none.textContent = 'Choose a PNG or JPEG (2 MB at most).';
+          card.appendChild(none);
+        }
+      }
+      host.appendChild(card);
+    });
+
+    const pictures = noticeBlocks.filter(b => b.type === 'Image').length;
+    $('nAddText').disabled = noticeBlocks.length >= MAX_BLOCKS;
+    $('nAddImage').disabled = noticeBlocks.length >= MAX_BLOCKS || pictures >= MAX_IMAGES;
+    drawPreview();
+  }
+
+  function moveBlock(i, by) {
+    const j = i + by;
+    if (j < 0 || j >= noticeBlocks.length) return;
+    [noticeBlocks[i], noticeBlocks[j]] = [noticeBlocks[j], noticeBlocks[i]];
+    drawBlocks();
+  }
+
+  // 预览 / TextMeshPro rich text as HTML, for the preview only: the tags the toolbar writes (and
+  // <s>), anything else shown as typed. Sizes in % stay %; a bare TMP size is game units, halved.
+  function richText(text) {
+    const esc = t => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+    const tag = /<(\/?)(b|i|u|s|size|color)(?:=([^>]*))?>/gi;
+    let html = '', last = 0, m;
+    while ((m = tag.exec(text))) {
+      html += esc(text.slice(last, m.index));
+      last = tag.lastIndex;
+      const name = m[2].toLowerCase(), arg = (m[3] || '').trim().replace(/^["']|["']$/g, '');
+      if (m[1]) { html += name === 'size' || name === 'color' ? '</span>' : '</' + name + '>'; continue; }
+      if (name === 'size') {
+        const css = /^\d+(\.\d+)?%$/.test(arg) ? arg : /^\d+(\.\d+)?$/.test(arg) ? (Number(arg) / 2) + 'px' : 'inherit';
+        html += '<span style="font-size:' + css + '">';
+      } else if (name === 'color') {
+        html += '<span style="color:' + (/^(#[0-9a-f]{3,8}|[a-z]+)$/i.test(arg) ? arg : 'inherit') + '">';
+      } else {
+        html += '<' + name + '>';
+      }
+    }
+    return html + esc(text.slice(last));
+  }
+
+  function drawPreview() {
+    const host = $('nPreview');
+    if (!host) return;
+    host.replaceChildren();
+    const bar = document.createElement('div');
+    bar.className = 'bar';
+    bar.textContent = $('nTitle').value;
+    host.appendChild(bar);
+    if (noticeBanner) {
+      const img = document.createElement('img'); img.src = imageUrl(noticeBanner); img.alt = '';
+      host.appendChild(img);
+    }
+    for (const block of noticeBlocks) {
+      if (block.type === 'Text') {
+        const p = document.createElement('div');
+        p.className = 'para';
+        p.innerHTML = richText(block.text || '');
+        host.appendChild(p);
+      } else if (block.image) {
+        const img = document.createElement('img'); img.src = imageUrl(block.image); img.alt = '';
+        host.appendChild(img);
+      }
+    }
   }
 
   function openNotice(n) {
     noticeEditing = n ? { id: n.noticeId, version: n.version } : null;
     const d = n ? n.definition : {
-      category: 'Event', listTitle: '', title: '', body: '', banner: null,
+      category: 'Event', listTitle: '', title: '', body: '', banner: null, blocks: null,
       startsAt: new Date().toISOString(), endsAt: null, isActive: true, sortOrder: 0,
     };
     $('nEditorTitle').textContent = n ? 'Edit notice (v' + n.version + ')' : 'New notice';
     $('nCategory').value = d.category;
     $('nListTitle').value = d.listTitle;
     $('nTitle').value = d.title;
-    $('nBody').value = d.body;
+    // 旧公告只有正文 / A notice from before blocks opens as one paragraph holding its body.
+    noticeBlocks = d.blocks && d.blocks.length
+      ? d.blocks.map(b => b.type === 'Text' ? { type: 'Text', text: b.text || '' } : { type: 'Image', image: b.image })
+      : [{ type: 'Text', text: d.body || '' }];
+    drawBlocks();
     $('nStarts').value = toLocalInput(d.startsAt);
     $('nEnds').value = toLocalInput(d.endsAt);
     $('nOrder').value = d.sortOrder;
@@ -1011,8 +1221,9 @@
     $('noticeEditor').scrollIntoView({ behavior: 'smooth' });
   }
 
-  async function uploadBanner(file) {
-    if (!file) return;
+  // 横幅和插图同一处 / Banners and pictures go to the same upload, stored by their content.
+  async function uploadImage(file) {
+    if (!file) return null;
     const form = new FormData();
     form.append('file', file);
     const response = await fetch('/v1/admin/notices/banners', {
@@ -1021,18 +1232,29 @@
     });
     let data = null;
     try { data = await response.json(); } catch { }
-    if (!response.ok) return show($('noticeStatus'), problemText({ data, status: response.status }), false);
-    setBanner(data.banner, data.url);
-    show($('noticeStatus'), 'Banner uploaded - save to use it.', true);
+    if (!response.ok) { show($('noticeStatus'), problemText({ data, status: response.status }), false); return null; }
+    show($('noticeStatus'), 'Uploaded - save to use it.', true);
+    return data;
+  }
+
+  async function uploadBanner(file) {
+    const uploaded = await uploadImage(file);
+    if (uploaded) setBanner(uploaded.banner, uploaded.url);
   }
 
   async function saveNotice() {
     if (!$('nStarts').value) return show($('noticeStatus'), 'Set when it starts showing.', false);
+    if (!noticeBlocks.some(b => b.type === 'Text' && (b.text || '').trim())) return show($('noticeStatus'), 'Write at least one paragraph.', false);
+    if (noticeBlocks.some(b => b.type === 'Image' && !b.image)) return show($('noticeStatus'), 'A picture block has no picture - choose one or remove it.', false);
     const definition = {
       category: $('nCategory').value,
       listTitle: $('nListTitle').value.trim(),
       title: $('nTitle').value.trim(),
-      body: $('nBody').value,
+      // 正文由服务端从段落写出 / The server writes the body from the paragraphs, for older builds.
+      body: '',
+      blocks: noticeBlocks.map(b => b.type === 'Text'
+        ? { type: 'Text', text: b.text, image: null }
+        : { type: 'Image', text: null, image: b.image }),
       banner: noticeBanner,
       startsAt: new Date($('nStarts').value).toISOString(),
       endsAt: $('nEnds').value ? new Date($('nEnds').value).toISOString() : null,
@@ -1159,6 +1381,12 @@
 
   function field(value, onInput, kind, width) {
     let el;
+    if (kind === 'item') {
+      el = itemPicker(value, false);
+      if (width) el.style.width = width;
+      el.onchange = el.oninput = () => onInput(el.value === '' ? null : Number(el.value));
+      return el;
+    }
     if (kind === 'chart' || kind === 'rarity') {
       el = document.createElement('select');
       for (const o of (kind === 'chart' ? charts : RARITIES)) {
@@ -1242,11 +1470,11 @@
         const sub = document.createElement('tr');
         const td = document.createElement('td'); td.colSpan = 8;
         const dt = document.createElement('table'); dt.className = 'grid';
-        dt.innerHTML = '<thead><tr><th>Item id</th><th>Min</th><th>Max</th><th>Chance %</th><th>Shown as</th><th></th></tr></thead>';
+        dt.innerHTML = '<thead><tr><th>Item</th><th>Min</th><th>Max</th><th>Chance %</th><th>Shown as</th><th></th></tr></thead>';
         const db = document.createElement('tbody');
         stage.drops.forEach((drop, di) => {
           const r = document.createElement('tr');
-          cell(r, field(drop.itemId, v => drop.itemId = v ?? 0, 'number', '80px'));
+          cell(r, field(drop.itemId, v => drop.itemId = v ?? 0, 'item', '200px'));
           cell(r, field(drop.min, v => drop.min = v ?? 0, 'number', '80px'));
           cell(r, field(drop.max, v => drop.max = v ?? 0, 'number', '80px'));
           cell(r, field(drop.chance / 100, v => drop.chance = Math.round((v ?? 0) * 100), 'number', '90px'));
@@ -1333,6 +1561,9 @@
   $('nCancel').onclick = () => { $('noticeEditor').hidden = true; };
   $('nBannerFile').onchange = e => uploadBanner(e.target.files[0]);
   $('nBannerClear').onclick = () => { $('nBannerFile').value = ''; setBanner(null, null); };
+  $('nAddText').onclick = () => { noticeBlocks.push({ type: 'Text', text: '' }); drawBlocks(); };
+  $('nAddImage').onclick = () => { noticeBlocks.push({ type: 'Image', image: null }); drawBlocks(); };
+  $('nTitle').oninput = drawPreview;
   $('nEndsClear').onclick = () => { $('nEnds').value = ''; };
   $('sLoad').onclick = () => openTable($('sKey').value);
   $('sSave').onclick = saveTable;

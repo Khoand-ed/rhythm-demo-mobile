@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using Data.HomeContent;
 using DG.Tweening;
 using Promuse.Contracts.Notices;
@@ -13,6 +14,10 @@ namespace UI.Sub {
     /// <summary>
     /// 公告 / The announcement board: Event, System and News tabs across the top, the tab's notices on
     /// the left with their date and an unread dot, the chosen one on the right - title, banner, text.
+    ///
+    /// 分块 / A notice written in blocks shows them in order under the banner: each paragraph a copy of
+    /// the body text, each picture a copy of the banner, sized the same way and loaded through the same
+    /// cache. A notice that is only a body shows as it always did.
     ///
     /// Opens by itself the first time Home shows each day (see HomeDaily), and from Home's alert icon.
     /// Built by Arknights/Home/Build Mail, Notice and Calendar UI. Template child names are the contract.
@@ -46,10 +51,15 @@ namespace UI.Sub {
         private readonly List<RectTransform> items = new List<RectTransform>();
         private readonly List<Notice> shown = new List<Notice>();
 
+        private readonly List<TextMeshProUGUI> blockTexts = new List<TextMeshProUGUI>();
+        private readonly List<Image> blockImages = new List<Image>();
+
         private NoticeCategory category = NoticeCategory.Event;
         private Guid? selected;
         private Action onClosed;
         private int bannerTicket;
+        private int blocksTicket;
+        private string drawnContent;
 
         /// <summary>Shows the board; <paramref name="closed"/> runs when the player closes it.</summary>
         public static void Open(Action closed = null) {
@@ -171,13 +181,68 @@ namespace UI.Sub {
         }
 
         private void DrawContent(Notice notice) {
-            bool changed = titleText.text != notice.Title || bodyText.text != notice.Body;
+            bool inBlocks = notice.Blocks != null && notice.Blocks.Count > 0;
+            string content = inBlocks
+                ? string.Join("\u0001", notice.Blocks.Select(b => b.Type + ":" + b.Text + b.ImageUrl))
+                : notice.Body;
+
+            // 只在内容变了时重画 / Rebuilt only when the content changes: marking it read redraws the
+            // board, and that must not throw away pictures already shown or the scroll position.
+            bool changed = titleText.text != notice.Title || drawnContent != content;
             titleText.text = notice.Title;
-            bodyText.text = notice.Body;
-            if (changed) contentScroll.verticalNormalizedPosition = 1f;
+            if (changed) {
+                drawnContent = content;
+                bodyText.gameObject.SetActive(!inBlocks);
+                bodyText.text = inBlocks ? "" : notice.Body;
+                DrawBlocks(inBlocks ? notice.Blocks : null);
+                contentScroll.verticalNormalizedPosition = 1f;
+            }
 
             NoticeManager.Inst().MarkRead(notice);
             LoadBanner(notice.BannerUrl);
+        }
+
+        private void DrawBlocks(IReadOnlyList<NoticeBlock> blocks) {
+            int mine = ++blocksTicket;
+            int texts = 0, images = 0;
+            int at = bodyText.transform.GetSiblingIndex() + 1;
+
+            if (blocks != null) {
+                foreach (NoticeBlock block in blocks) {
+                    if (block.Type == NoticeBlockType.Text) {
+                        TextMeshProUGUI text = Pooled(blockTexts, texts++, bodyText);
+                        text.text = block.Text ?? "";
+                        text.transform.SetSiblingIndex(at++);
+                    } else if (block.Type == NoticeBlockType.Image) {
+                        Image image = Pooled(blockImages, images++, banner);
+                        image.transform.SetSiblingIndex(at++);
+                        image.gameObject.SetActive(false); // shown once its picture is here
+                        LoadPicture(image, block.ImageUrl, mine);
+                    }
+                }
+            }
+
+            for (int i = texts; i < blockTexts.Count; i++) blockTexts[i].gameObject.SetActive(false);
+            for (int i = images; i < blockImages.Count; i++) blockImages[i].gameObject.SetActive(false);
+        }
+
+        private static T Pooled<T>(List<T> pool, int index, T template) where T : Component {
+            while (pool.Count <= index) {
+                T copy = Instantiate(template, template.transform.parent);
+                copy.name = template.name + "Block";
+                pool.Add(copy);
+            }
+            pool[index].gameObject.SetActive(true);
+            return pool[index];
+        }
+
+        private async void LoadPicture(Image image, string url, int ticket) {
+            if (string.IsNullOrEmpty(url)) return;
+
+            Sprite sprite = await NoticeManager.Inst().BannerAsync(url);
+            if (this == null || ticket != blocksTicket || sprite == null) return;
+
+            Fit(image, sprite);
         }
 
         /// <summary>
@@ -197,9 +262,16 @@ namespace UI.Sub {
             banner.gameObject.SetActive(sprite != null);
             if (sprite == null) return;
 
-            banner.sprite = sprite;
-            float width = ((RectTransform)banner.transform.parent).rect.width;
-            bannerLayout.preferredHeight = width * sprite.rect.height / Mathf.Max(1f, sprite.rect.width);
+            Fit(banner, sprite);
+        }
+
+        /// <summary>A picture at the column's width, as tall as its own proportions make it.</summary>
+        private static void Fit(Image image, Sprite sprite) {
+            image.sprite = sprite;
+            image.gameObject.SetActive(true);
+            float width = ((RectTransform)image.transform.parent).rect.width;
+            LayoutElement layout = image.GetComponent<LayoutElement>();
+            if (layout != null) layout.preferredHeight = width * sprite.rect.height / Mathf.Max(1f, sprite.rect.width);
         }
     }
 }

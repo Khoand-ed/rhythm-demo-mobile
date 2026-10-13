@@ -1181,6 +1181,10 @@ namespace Promuse.Persistence.Migrations
                         .HasColumnType("character varying(64)")
                         .HasColumnName("banner");
 
+                    b.Property<string>("Blocks")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("blocks");
+
                     b.Property<string>("Body")
                         .IsRequired()
                         .HasMaxLength(8000)

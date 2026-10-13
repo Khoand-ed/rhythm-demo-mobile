@@ -51,5 +51,10 @@ jobs:
       - name: Story scripts
         run: python ci/check_stories.py --strict
 
+      # The admin page names items from server/data/items.json; an ItemMeta added or renamed
+      # without re-exporting it would show there as "unknown".
+      - name: Item catalog
+        run: python ci/check_items.py
+
       - name: Repo hygiene
         run: python ci/check_repo_hygiene.py

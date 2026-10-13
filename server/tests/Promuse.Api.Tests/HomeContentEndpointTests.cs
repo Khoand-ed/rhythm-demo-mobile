@@ -6,6 +6,7 @@ using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Promuse.Api.Missions;
+using Promuse.Api.Notices;
 using Promuse.Contracts;
 using Promuse.Contracts.Auth;
 using Promuse.Contracts.Mail;
@@ -307,6 +308,76 @@ public class NoticeEndpointTests(PromuseApiFactory factory) : HomeContentTestBas
         Assert.Equal(HttpStatusCode.UnprocessableEntity, fake.StatusCode);
 
         Assert.Equal(HttpStatusCode.NotFound, (await Client.GetAsync("/v1/notices/banners/..%2F..%2Fappsettings.json")).StatusCode);
+    }
+
+    private static NoticeBlockDefinition Text(string text) => new(NoticeBlockType.Text, text, null);
+
+    private static NoticeBlockDefinition Picture(string image) => new(NoticeBlockType.Image, null, image);
+
+    [Fact]
+    public async Task A_notice_in_blocks_shows_paragraphs_and_pictures_in_order()
+    {
+        (AuthSession admin, _) = await PlayerAsync(admin: true);
+        (AuthSession player, _) = await PlayerAsync();
+        BannerUpload picture = await ReadAsync<BannerUpload>(await UploadAsync(admin, Png, "picture.png"));
+
+        // 正文被忽略 / The body sent alongside blocks is ignored; the paragraphs are written into it.
+        AdminNotice notice = await CreateAsync(admin, Definition() with
+        {
+            Body = "",
+            Blocks = [Text("Rate up <b>now</b>."), Picture(picture.Banner), Text("Until Sunday.")],
+        });
+
+        NoticeBlockDefinition[] written = [Text("Rate up <b>now</b>."), Picture(picture.Banner), Text("Until Sunday.")];
+        Assert.Equal(written, notice.Definition.Blocks!);
+
+        Notice shown = (await ListAsync(player)).Notices.Single(n => n.NoticeId == notice.NoticeId);
+        NoticeBlock[] seen =
+        [
+            new(NoticeBlockType.Text, "Rate up <b>now</b>.", null),
+            new(NoticeBlockType.Image, null, picture.Url),
+            new(NoticeBlockType.Text, "Until Sunday.", null),
+        ];
+        Assert.Equal(seen, shown.Blocks!);
+
+        // 旧版本只看正文 / What a build from before blocks shows: the paragraphs, without the pictures.
+        Assert.Equal("Rate up <b>now</b>.\n\nUntil Sunday.", shown.Body);
+    }
+
+    [Fact]
+    public async Task A_notice_without_blocks_is_its_body_alone()
+    {
+        (AuthSession admin, _) = await PlayerAsync(admin: true);
+        (AuthSession player, _) = await PlayerAsync();
+
+        AdminNotice notice = await CreateAsync(admin, Definition() with { Blocks = [] });
+
+        Assert.Null(notice.Definition.Blocks);
+        Notice shown = (await ListAsync(player)).Notices.Single(n => n.NoticeId == notice.NoticeId);
+        Assert.Null(shown.Blocks);
+        Assert.Equal("<b>OPEN TIME:</b> now", shown.Body);
+    }
+
+    [Fact]
+    public async Task Blocks_are_checked_one_by_one()
+    {
+        (AuthSession admin, _) = await PlayerAsync(admin: true);
+        BannerUpload picture = await ReadAsync<BannerUpload>(await UploadAsync(admin, Png, "picture.png"));
+
+        async Task<IReadOnlyDictionary<string, string[]>> RefusedAsync(params NoticeBlockDefinition[] blocks)
+        {
+            HttpResponseMessage response = await Client.SendAsync(Send(HttpMethod.Post, "/v1/admin/notices", admin,
+                new NoticeUpsertRequest(Definition() with { Blocks = blocks })));
+            Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+            return (await ReadAsync<ApiProblem>(response)).Errors!;
+        }
+
+        var errors = await RefusedAsync(Text("Fine."), Text("   "), Picture("0123456789abcdef0123.png"));
+        Assert.Equal(new[] { "blocks[1].text", "blocks[2].image" }, errors.Keys.Order());
+
+        Assert.Contains("blocks", (await RefusedAsync(Picture(picture.Banner))).Keys);
+        Assert.Contains("blocks", (await RefusedAsync([Text("Many pictures."), .. Enumerable.Repeat(Picture(picture.Banner), NoticeService.MaxImages + 1)])).Keys);
+        Assert.Contains("blocks", (await RefusedAsync(Text(new string('a', 4000)), Text(new string('b', 4000)), Text("c"))).Keys);
     }
 }
 
