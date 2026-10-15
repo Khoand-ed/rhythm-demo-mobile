@@ -186,7 +186,10 @@ end
 
 function updateView()
     playerName.text = data:GetName()
-    playerLevel.text = tostring(data:GetLevel() + 1)
+    --- 等级从1开始 / The level is the server's, which starts at 1. The +1 that used to be here
+    --- came from the original front-end, whose levels counted from 0, and made Home read one
+    --- higher than the profile card and every other screen.
+    playerLevel.text = tostring(data:GetLevel())
     expPercentage.fillAmount = data:GetExp() / data:GetMaxExp()
     reason.text = tostring(data:GetReason())
     maxReason.text = tostring(data:GetMaxReason())
