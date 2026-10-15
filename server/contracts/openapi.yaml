@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Promuse Backend API
-  version: 1.0.0-draft.12
+  version: 1.0.0-draft.13
   summary: Authentication and player state for the Promuse mobile rhythm game.
   description: |
     **Phase 1** authentication, **Phase 2** player state, **Phase 3** the economy -
@@ -447,8 +447,8 @@ paths:
         `PlayerData.GetSquad()` normalises to. The server rejects a character the
         player does not own, and the same character in two slots at once.
 
-        One of only two writes in Phase 2: the squad is a preference, so the client may
-        state it outright. Anything that grants or spends belongs to Phase 3.
+        One of only three writes on the save, with the desktop character and the
+        profile signature: the squad is a preference, so the client may state it outright. Anything that grants or spends belongs to Phase 3.
       parameters:
         - $ref: '#/components/parameters/IfMatch'
       requestBody:
@@ -509,6 +509,109 @@ paths:
           $ref: '#/components/responses/ValidationFailed'
         '428':
           $ref: '#/components/responses/PreconditionRequired'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/players/me/signature:
+    put:
+      tags: [players]
+      operationId: setSignature
+      summary: Write, or clear, the line on the player's profile card.
+      description: |
+        Everyone who opens the card reads it, so the server keeps it fit to show: one
+        line, every kind of white space as a single space, control and format characters
+        (a right-to-left override, a zero-width space) dropped. At most 60 characters as
+        a reader counts them - an accented letter or an emoji is one. Too long is
+        refused, never cut. Null or blank clears it.
+
+        The answer carries what was kept, in `signature`. The game composes the text to
+        NFC before sending; the server does not, as it runs with invariant globalization.
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignatureRequest'
+      responses:
+        '200':
+          description: Saved.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlayerState'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/players/me/profile:
+    get:
+      tags: [players]
+      operationId: getMyProfile
+      summary: The signed-in player's own profile card.
+      description: |
+        The same card `GET /v1/players/{playerId}/profile` answers for anyone, with
+        `isSelf` true - the one the Home screen's profile button opens.
+      responses:
+        '200':
+          description: The card.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlayerProfile'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/players/{playerId}/profile:
+    get:
+      tags: [players]
+      operationId: getProfile
+      summary: Any player's profile card, by the id a leaderboard row carries.
+      description: |
+        Read-only and public to every signed-in player: the name and tag, level, the
+        day the account was made, the operator on the card, how far through the
+        campaign, how many operators, and the rhythm record. Nothing private - no bag,
+        no stamina.
+
+        Counted at read time and sent without an `ETag`: the counts move with every
+        run the owner finishes.
+      parameters:
+        - name: playerId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: The card.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlayerProfile'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: |
+            `PLAYER_NOT_FOUND` - no player has that id, or the account is banned. A
+            banned player's own card still opens for them.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -2299,6 +2402,7 @@ components:
       required:
         - playerId
         - displayName
+        - tag
         - level
         - exp
         - expToNextLevel
@@ -2314,6 +2418,8 @@ components:
           format: uuid
         displayName:
           type: string
+        tag:
+          $ref: '#/components/schemas/PlayerTag'
         level:
           type: integer
           minimum: 1
@@ -2338,6 +2444,9 @@ components:
           $ref: '#/components/schemas/Squad'
         desktopCharacterId:
           type: [string, 'null']
+        signature:
+          type: [string, 'null']
+          description: The line on the player's profile card, as the server kept it.
         inventory:
           type: array
           items:
@@ -2434,6 +2543,100 @@ components:
         characterId:
           type: [string, 'null']
           description: Null clears it. Must be a character the player owns.
+
+    SignatureRequest:
+      type: object
+      required: [signature]
+      properties:
+        signature:
+          type: [string, 'null']
+          description: At most 60 characters. Null or blank clears it.
+          examples: ['Chơi nhạc mỗi ngày']
+
+    PlayerTag:
+      type: integer
+      minimum: 0
+      maximum: 9999
+      description: |
+        The four digits after the name, drawn as `#0420`. Names repeat - every guest is
+        "Doctor" and a number - but a name and its tag never do. Drawn at random when
+        the player is created and never changed.
+
+    PlayerProfile:
+      type: object
+      description: |
+        A profile card, as everyone who opens it sees it - its owner included.
+        Everything here is public.
+      required:
+        - playerId
+        - displayName
+        - tag
+        - level
+        - registeredAt
+        - operators
+        - rhythm
+        - isSelf
+      properties:
+        playerId:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        tag:
+          $ref: '#/components/schemas/PlayerTag'
+        level:
+          type: integer
+          minimum: 1
+        signature:
+          type: [string, 'null']
+          description: The line the player wrote on their card. Null when there is none.
+        assistantId:
+          type: [string, 'null']
+          description: |
+            The operator standing on the card: the desktop character when one is set,
+            otherwise the first of the squad, otherwise the operator raised furthest
+            (elite phase, then level, then trust). Null only for a player who owns nobody.
+        registeredAt:
+          type: string
+          format: date-time
+        campaignProgress:
+          type: [string, 'null']
+          description: |
+            The code of the furthest main-campaign stage cleared, in play order - such
+            as `1-4`. Null before the first clear.
+          examples: ['1-4']
+        operators:
+          type: integer
+          minimum: 0
+          description: How many operators the player owns.
+        rhythm:
+          $ref: '#/components/schemas/RhythmRecord'
+        isSelf:
+          type: boolean
+          description: The card is the caller's own, so its signature may be edited.
+
+    RhythmRecord:
+      type: object
+      description: The rhythm side of a card, counted from results the server accepted.
+      required: [plays, songsCleared, fullCombos]
+      properties:
+        plays:
+          type: integer
+          minimum: 0
+          description: Runs finished, won or lost.
+        songsCleared:
+          type: integer
+          minimum: 0
+          description: Different charts cleared at least once. A rejected result is not a clear.
+        fullCombos:
+          type: integer
+          minimum: 0
+          description: Different charts cleared with a full combo.
+        bestScore:
+          type: [integer, 'null']
+          description: |
+            The highest ranked score on any chart - the same number as the player's best
+            all-time board line. Null before the first.
 
     ShopOffer:
       type: object

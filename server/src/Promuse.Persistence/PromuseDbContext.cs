@@ -210,6 +210,16 @@ public class PromuseDbContext(DbContextOptions<PromuseDbContext> options) : DbCo
             entity.Property(p => p.DisplayName).HasMaxLength(24).IsRequired();
             entity.Property(p => p.DesktopCharacterId).HasMaxLength(32);
 
+            // 上限在服务里按字算 / The real limit is counted in characters as a reader sees them
+            // (PlayerProfiles.SignatureMaxLength). This column bound only stops a stored value from
+            // growing without end; an emoji can take several UTF-16 units of it.
+            entity.Property(p => p.Signature).HasMaxLength(256);
+
+            // 名字加编号才是唯一的 / The name alone repeats; the name and tag together never do.
+            // The index is what makes that true, not the drawing in PlayerTags.
+            entity.HasIndex(p => new { p.DisplayName, p.Tag }).IsUnique();
+            entity.ToTable(t => t.HasCheckConstraint("ck_players_tag_range", "tag >= 0 AND tag <= 9999"));
+
             // Optimistic concurrency, wired to EF rather than left to the
             // service layer. With this, a write built from a stale read throws
             // DbUpdateConcurrencyException instead of overwriting - which is

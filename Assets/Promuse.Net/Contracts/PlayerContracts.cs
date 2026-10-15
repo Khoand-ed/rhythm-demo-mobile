@@ -20,9 +20,15 @@ namespace Promuse.Contracts.Players
     /// as well as the header so a conflict can be explained to the player rather
     /// than only handled by the transport.
     /// </param>
+    /// <param name="Tag">
+    /// The four digits after the name, 0 to 9999, drawn as <c>#0420</c>. Names repeat; a name
+    /// and its tag never do.
+    /// </param>
+    /// <param name="Signature">The line on the player's profile card, or null.</param>
     public sealed record PlayerState(
         Guid PlayerId,
         string DisplayName,
+        int Tag,
         int Level,
         int Exp,
         int ExpToNextLevel,
@@ -30,6 +36,7 @@ namespace Promuse.Contracts.Players
         IReadOnlyList<CharacterState> Characters,
         IReadOnlyList<string?> Squad,
         string? DesktopCharacterId,
+        string? Signature,
         IReadOnlyList<ItemStack> Inventory,
         int StateVersion,
         DateTimeOffset ServerTime);
@@ -73,4 +80,63 @@ namespace Promuse.Contracts.Players
 
     /// <param name="CharacterId">Null clears it. Must be a character the player owns.</param>
     public sealed record DesktopCharacterRequest(string? CharacterId);
+
+    /// <param name="Signature">
+    /// The line on the player's profile card, at most 60 characters. Null or blank clears it;
+    /// the server stores it as one line with no invisible characters, and answers with what it
+    /// kept.
+    /// </param>
+    public sealed record SignatureRequest(string? Signature);
+
+    /// <summary>
+    /// 两边共用的上限 / Bounds both sides know, so the game's input stops where the server would
+    /// refuse instead of finding out after the request.
+    /// </summary>
+    public static class PlayerProfileLimits
+    {
+        /// <summary>
+        /// The signature's length, counted as a reader counts: an accented letter or an emoji is
+        /// one. The game's input field counts UTF-16 units, which is stricter, never looser.
+        /// </summary>
+        public const int SignatureMaxLength = 60;
+    }
+
+    // -------------------------------------------------------------- profile
+
+    /// <summary>
+    /// 名片 / A player's profile card, as everyone who opens it sees it - its owner included.
+    /// Everything in it is public: a field a stranger should not read does not belong here.
+    /// </summary>
+    /// <param name="AssistantId">
+    /// The operator standing on the card: the desktop character when one is set, otherwise the
+    /// first of the squad, otherwise the operator raised furthest. Null only for a player who
+    /// owns nobody.
+    /// </param>
+    /// <param name="CampaignProgress">
+    /// The code of the furthest main-campaign stage cleared, such as "1-4"; null before the first.
+    /// </param>
+    /// <param name="Operators">How many operators the player owns.</param>
+    /// <param name="IsSelf">The card is the caller's own, so its signature may be edited.</param>
+    public sealed record PlayerProfile(
+        Guid PlayerId,
+        string DisplayName,
+        int Tag,
+        int Level,
+        string? Signature,
+        string? AssistantId,
+        DateTimeOffset RegisteredAt,
+        string? CampaignProgress,
+        int Operators,
+        RhythmRecord Rhythm,
+        bool IsSelf);
+
+    /// <summary>The rhythm side of a profile, counted from results the server accepted.</summary>
+    /// <param name="Plays">Runs finished, won or lost.</param>
+    /// <param name="SongsCleared">Different charts cleared at least once.</param>
+    /// <param name="FullCombos">Different charts cleared with a full combo.</param>
+    /// <param name="BestScore">
+    /// The highest ranked score on any chart - the player's best line on an all-time board - or
+    /// null before the first.
+    /// </param>
+    public sealed record RhythmRecord(int Plays, int SongsCleared, int FullCombos, int? BestScore);
 }

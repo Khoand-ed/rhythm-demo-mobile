@@ -82,6 +82,7 @@ builder.Services.AddSingleton<PasswordHasher>();
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<PlayerService>();
+builder.Services.AddScoped<ProfileService>();
 builder.Services.AddScoped<EconomyService>();
 builder.Services.AddScoped<RunService>();
 builder.Services.AddScoped<Inventory>();
