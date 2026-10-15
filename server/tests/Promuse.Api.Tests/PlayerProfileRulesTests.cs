@@ -26,6 +26,63 @@ public class PlayerProfileRulesTests
         Assert.Throws<ArgumentOutOfRangeException>(() => PlayerTags.FreeAt(used, 1));
     }
 
+    // ----------------------------------------------------------- the signature
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   \n\t ")]
+    [InlineData("​‮")]
+    public void A_blank_signature_clears_it(string? raw)
+    {
+        Assert.Equal((null, null), PlayerProfiles.NormalizeSignature(raw));
+    }
+
+    [Fact]
+    public void A_signature_is_kept_as_one_line_with_single_spaces()
+    {
+        Assert.Equal("Hello there Doctor",
+            PlayerProfiles.NormalizeSignature("  Hello\r\n there\t  Doctor  ").Value);
+    }
+
+    [Fact]
+    public void Invisible_characters_are_dropped_and_a_reversed_line_cannot_be_planted()
+    {
+        // U+202E would make the rest of the line read right to left on every card that shows it.
+        Assert.Equal("abcdef", PlayerProfiles.NormalizeSignature("abc‮def").Value);
+        Assert.Equal("ab", PlayerProfiles.NormalizeSignature("a​b\u0007").Value);
+
+        // Private use, and an unpaired surrogate.
+        Assert.Equal("ab", PlayerProfiles.NormalizeSignature("ab\uD800").Value);
+    }
+
+    [Fact]
+    public void A_letter_typed_with_combining_marks_is_kept_whole_and_counted_once()
+    {
+        // "ệ" as some keyboards send it: e, a dot below, a circumflex - three code points, one letter.
+        const string letter = "ệ";
+        Assert.Equal("Vi" + letter + "t", PlayerProfiles.NormalizeSignature("Vi" + letter + "t").Value);
+
+        string sixty = string.Concat(Enumerable.Repeat(letter, PlayerProfiles.SignatureMaxLength));
+        Assert.Equal(sixty, PlayerProfiles.NormalizeSignature(sixty).Value);
+        Assert.NotNull(PlayerProfiles.NormalizeSignature(sixty + letter).Error);
+    }
+
+    [Fact]
+    public void Length_is_counted_in_characters_as_read_and_too_long_is_refused_not_cut()
+    {
+        string sixty = new('ệ', PlayerProfiles.SignatureMaxLength);
+        Assert.Equal(sixty, PlayerProfiles.NormalizeSignature(sixty).Value);
+
+        // Sixty emoji are sixty characters, though each is two UTF-16 units.
+        string emoji = string.Concat(Enumerable.Repeat("\U0001F3B5", PlayerProfiles.SignatureMaxLength));
+        Assert.Equal(emoji, PlayerProfiles.NormalizeSignature(emoji).Value);
+
+        (string? value, string? error) = PlayerProfiles.NormalizeSignature(sixty + "!");
+        Assert.Null(value);
+        Assert.NotNull(error);
+    }
+
     // ----------------------------------------------------------- the assistant
 
     private static readonly PlayerProfiles.Owned[] Roster =

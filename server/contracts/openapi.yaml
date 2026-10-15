@@ -447,8 +447,8 @@ paths:
         `PlayerData.GetSquad()` normalises to. The server rejects a character the
         player does not own, and the same character in two slots at once.
 
-        One of only two writes in Phase 2: the squad is a preference, so the client may
-        state it outright. Anything that grants or spends belongs to Phase 3.
+        One of only three writes on the save, with the desktop character and the
+        profile signature: the squad is a preference, so the client may state it outright. Anything that grants or spends belongs to Phase 3.
       parameters:
         - $ref: '#/components/parameters/IfMatch'
       requestBody:
@@ -491,6 +491,49 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/DesktopCharacterRequest'
+      responses:
+        '200':
+          description: Saved.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlayerState'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/players/me/signature:
+    put:
+      tags: [players]
+      operationId: setSignature
+      summary: Write, or clear, the line on the player's profile card.
+      description: |
+        Everyone who opens the card reads it, so the server keeps it fit to show: one
+        line, every kind of white space as a single space, control and format characters
+        (a right-to-left override, a zero-width space) dropped. At most 60 characters as
+        a reader counts them - an accented letter or an emoji is one. Too long is
+        refused, never cut. Null or blank clears it.
+
+        The answer carries what was kept, in `signature`. The game composes the text to
+        NFC before sending; the server does not, as it runs with invariant globalization.
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignatureRequest'
       responses:
         '200':
           description: Saved.
@@ -2401,6 +2444,9 @@ components:
           $ref: '#/components/schemas/Squad'
         desktopCharacterId:
           type: [string, 'null']
+        signature:
+          type: [string, 'null']
+          description: The line on the player's profile card, as the server kept it.
         inventory:
           type: array
           items:
@@ -2497,6 +2543,15 @@ components:
         characterId:
           type: [string, 'null']
           description: Null clears it. Must be a character the player owns.
+
+    SignatureRequest:
+      type: object
+      required: [signature]
+      properties:
+        signature:
+          type: [string, 'null']
+          description: At most 60 characters. Null or blank clears it.
+          examples: ['Chơi nhạc mỗi ngày']
 
     PlayerTag:
       type: integer

@@ -24,6 +24,7 @@ namespace Promuse.Contracts.Players
     /// The four digits after the name, 0 to 9999, drawn as <c>#0420</c>. Names repeat; a name
     /// and its tag never do.
     /// </param>
+    /// <param name="Signature">The line on the player's profile card, or null.</param>
     public sealed record PlayerState(
         Guid PlayerId,
         string DisplayName,
@@ -35,6 +36,7 @@ namespace Promuse.Contracts.Players
         IReadOnlyList<CharacterState> Characters,
         IReadOnlyList<string?> Squad,
         string? DesktopCharacterId,
+        string? Signature,
         IReadOnlyList<ItemStack> Inventory,
         int StateVersion,
         DateTimeOffset ServerTime);
@@ -78,6 +80,13 @@ namespace Promuse.Contracts.Players
 
     /// <param name="CharacterId">Null clears it. Must be a character the player owns.</param>
     public sealed record DesktopCharacterRequest(string? CharacterId);
+
+    /// <param name="Signature">
+    /// The line on the player's profile card, at most 60 characters. Null or blank clears it;
+    /// the server stores it as one line with no invisible characters, and answers with what it
+    /// kept.
+    /// </param>
+    public sealed record SignatureRequest(string? Signature);
 
     // -------------------------------------------------------------- profile
 

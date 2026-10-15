@@ -16,6 +16,7 @@ public static class PlayerEndpoints
         group.MapGet("/me", GetMeAsync);
         group.MapPut("/me/squad", SetSquadAsync);
         group.MapPut("/me/desktop-character", SetDesktopCharacterAsync);
+        group.MapPut("/me/signature", SetSignatureAsync);
 
         group.MapGet("/me/profile", GetMyProfileAsync);
         group.MapGet("/{playerId:guid}/profile", GetProfileAsync);
@@ -83,8 +84,14 @@ public static class PlayerEndpoints
         WriteAsync(http, user, ct, (accountId, ifMatch) =>
             players.SetDesktopCharacterAsync(accountId, request.CharacterId, ifMatch, ct));
 
+    private static Task<IResult> SetSignatureAsync(
+        SignatureRequest request, HttpContext http, ClaimsPrincipal user,
+        PlayerService players, CancellationToken ct) =>
+        WriteAsync(http, user, ct, (accountId, ifMatch) =>
+            players.SetSignatureAsync(accountId, request.Signature, ifMatch, ct));
+
     /// <summary>
-    /// The half both writes share: identify the caller, carry If-Match through,
+    /// The half every write shares: identify the caller, carry If-Match through,
     /// and answer with the whole state plus its new ETag.
     ///
     /// 写完回整个状态 / Returning the full document rather than 204 is a choice:

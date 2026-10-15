@@ -188,6 +188,54 @@ public class ProfileEndpointTests(PromuseApiFactory factory)
         Assert.Equal(3, card.Operators);
     }
 
+    // --------------------------------------------------------- the signature
+
+    [Fact]
+    public async Task The_owner_writes_a_signature_that_everyone_reads_back_as_the_server_kept_it()
+    {
+        AuthSession owner = await SignInAsync();
+        AuthSession stranger = await SignInAsync();
+        (_, string etag) = await StateAsync(owner);
+
+        HttpResponseMessage saved = await _client.SendAsync(Send(HttpMethod.Put, "/v1/players/me/signature", owner,
+            new SignatureRequest("  Chơi nhạc\n mỗi ngày  "), etag));
+
+        Assert.Equal(HttpStatusCode.OK, saved.StatusCode);
+        PlayerState state = (await saved.Content.ReadFromJsonAsync<PlayerState>())!;
+        Assert.Equal("Chơi nhạc mỗi ngày", state.Signature);
+        Assert.NotEqual(etag, saved.Headers.ETag!.ToString());
+
+        Assert.Equal("Chơi nhạc mỗi ngày", (await ProfileAsync(stranger, owner.PlayerId)).Signature);
+
+        // Blank clears it.
+        HttpResponseMessage cleared = await _client.SendAsync(Send(HttpMethod.Put, "/v1/players/me/signature", owner,
+            new SignatureRequest(" "), saved.Headers.ETag!.ToString()));
+        Assert.Equal(HttpStatusCode.OK, cleared.StatusCode);
+        Assert.Null((await ProfileAsync(owner)).Signature);
+    }
+
+    [Fact]
+    public async Task A_signature_write_needs_the_version_and_a_line_that_fits()
+    {
+        AuthSession session = await SignInAsync();
+        (_, string etag) = await StateAsync(session);
+
+        HttpResponseMessage unversioned = await _client.SendAsync(Send(HttpMethod.Put, "/v1/players/me/signature",
+            session, new SignatureRequest("hello")));
+        Assert.Equal((HttpStatusCode)428, unversioned.StatusCode);
+
+        HttpResponseMessage tooLong = await _client.SendAsync(Send(HttpMethod.Put, "/v1/players/me/signature",
+            session, new SignatureRequest(new string('a', 61)), etag));
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, tooLong.StatusCode);
+        Assert.Contains("signature", (await tooLong.Content.ReadFromJsonAsync<ApiProblem>())!.Errors!.Keys);
+
+        // Nothing was written by either.
+        Assert.Null((await ProfileAsync(session)).Signature);
+        Assert.Equal(etag, (await StateAsync(session)).ETag);
+    }
+
+    // ---------------------------------------------------------------- counts
+
     [Fact]
     public async Task Runs_and_campaign_clears_show_on_the_card()
     {
