@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using Promuse.Contracts.Players;
 
 namespace Promuse.Api.Players;
 
@@ -11,9 +12,10 @@ public static class PlayerProfiles
 {
     /// <summary>
     /// 按看到的字数算 / Counted as a reader counts: one per character on screen, so an accented
-    /// Vietnamese letter or an emoji is one, however many UTF-16 units it takes.
+    /// Vietnamese letter or an emoji is one, however many UTF-16 units it takes. Shared with the
+    /// game, whose input field stops there.
     /// </summary>
-    public const int SignatureMaxLength = 60;
+    public const int SignatureMaxLength = PlayerProfileLimits.SignatureMaxLength;
 
     /// <summary>The column's own bound (PromuseDbContext), in UTF-16 units.</summary>
     public const int SignatureMaxStored = 256;

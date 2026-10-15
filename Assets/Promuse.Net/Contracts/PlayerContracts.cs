@@ -88,6 +88,19 @@ namespace Promuse.Contracts.Players
     /// </param>
     public sealed record SignatureRequest(string? Signature);
 
+    /// <summary>
+    /// 两边共用的上限 / Bounds both sides know, so the game's input stops where the server would
+    /// refuse instead of finding out after the request.
+    /// </summary>
+    public static class PlayerProfileLimits
+    {
+        /// <summary>
+        /// The signature's length, counted as a reader counts: an accented letter or an emoji is
+        /// one. The game's input field counts UTF-16 units, which is stricter, never looser.
+        /// </summary>
+        public const int SignatureMaxLength = 60;
+    }
+
     // -------------------------------------------------------------- profile
 
     /// <summary>

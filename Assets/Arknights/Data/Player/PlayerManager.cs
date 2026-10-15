@@ -138,6 +138,51 @@ namespace Data.Player {
             return LoadStateAsync();
         }
 
+        // -------------------------------------------------------------- profile
+
+        /// <summary>
+        /// 名片上的一句话 / Writes the line on the player's profile card; blank clears it.
+        ///
+        /// 先合成再发 / Composed to NFC before it goes. The server keeps text as it arrives - it runs
+        /// without ICU, where composing is not available - and a Vietnamese letter typed as a base and
+        /// two marks would otherwise be stored, and drawn by TMP, as three separate pieces.
+        ///
+        /// 版本冲突就重读一次 / The write carries the save's version. When another write has moved it
+        /// since - a result sent in the background, another device - the state is read again and the
+        /// line sent once more. It is a whole value the player has just typed, so sending it over the
+        /// newer state loses nothing.
+        /// </summary>
+        public async Task<ApiResult<PlayerData>> SetSignatureAsync(string signature) {
+            string text = Compose(signature);
+            ApiResult<PlayerState> result = await api.SetSignatureAsync(text);
+
+            if (result.Is(ErrorCodes.StateConflict) || result.Is(ErrorCodes.PreconditionRequired)) {
+                ApiResult<PlayerData> reread = await LoadStateAsync();
+                if (!reread.IsSuccess) return reread;
+
+                result = await api.SetSignatureAsync(text);
+            }
+
+            if (!result.IsSuccess) return ApiResult<PlayerData>.Fail(result.Problem);
+
+            if (playerData == null) playerData = ScriptableObject.CreateInstance<PlayerData>();
+            playerData.ApplyServerState(result.Value);
+
+            return ApiResult<PlayerData>.Ok(playerData);
+        }
+
+        private static string Compose(string text) {
+            if (string.IsNullOrEmpty(text)) return text;
+
+            try {
+                return text.Normalize(System.Text.NormalizationForm.FormC);
+            } catch (System.Exception) {
+                // 剥离过的构建 / A build stripped of the normalisation tables still sends the line:
+                // the server counts characters as a reader sees them either way.
+                return text;
+            }
+        }
+
         // -------------------------------------------------------------- sign-out
 
         /// <summary>
