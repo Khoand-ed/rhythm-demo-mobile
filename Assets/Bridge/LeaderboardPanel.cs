@@ -24,6 +24,9 @@ using UnityEngine.UI;
 ///
 /// 节点名字是绑定的一部分 / The node paths looked up below are built by SongSelectUISetup and are
 /// load-bearing: renaming one there breaks the binding here.
+///
+/// 点一行看名片 / Pressing a row opens that player's profile card - the player's own pinned line
+/// opens their own.
 /// </summary>
 public sealed class LeaderboardPanel
 {
@@ -232,6 +235,9 @@ public sealed class LeaderboardPanel
         private readonly TextMeshProUGUI name;
         private readonly TextMeshProUGUI score;
         private readonly TextMeshProUGUI character;
+        private readonly Button button;
+
+        private System.Guid? player;
 
         internal Row(Transform row)
         {
@@ -241,7 +247,22 @@ public sealed class LeaderboardPanel
             name = row.GetComponent<TextMeshProUGUI>("Name");
             score = row.GetComponent<TextMeshProUGUI>("Score");
             character = row.GetComponent<TextMeshProUGUI>("Operator");
+
+            // 运行时才变成按钮 / Made pressable here rather than in the prefab, which builds the row as
+            // a picture. No colour transition: Draw tints the background to say whose row it is, and a
+            // tint on press would fight it.
+            background.raycastTarget = true;
+            button = root.GetComponent<Button>();
+            if (button == null) button = root.AddComponent<Button>();
+            button.transition = Selectable.Transition.None;
+            button.onClick.AddListener(Open);
+
             root.SetActive(true);
+        }
+
+        private void Open()
+        {
+            if (player.HasValue) UI.Sub.ProfileUI.Open(player.Value);
         }
 
         internal void SetActive(bool value) => root.SetActive(value);
@@ -249,6 +270,8 @@ public sealed class LeaderboardPanel
         internal void Draw(string rankText, LeaderboardEntry entry, Color tint)
         {
             background.color = tint;
+            player = entry.PlayerId;
+            button.interactable = true;
             rank.text = rankText;
             name.text = entry.DisplayName;
             name.color = Color.white;
@@ -259,6 +282,8 @@ public sealed class LeaderboardPanel
         internal void DrawEmpty(string rankText, string message)
         {
             background.color = RowIdle;
+            player = null;
+            button.interactable = false;
             rank.text = rankText;
             name.text = message;
             name.color = Dim;
