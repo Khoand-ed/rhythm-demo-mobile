@@ -203,6 +203,7 @@ public sealed class PlayerService(
         return new PlayerState(
             PlayerId: player.AccountId,
             DisplayName: player.DisplayName,
+            Tag: player.Tag,
             Level: player.Level,
             Exp: player.Exp,
             ExpToNextLevel: PlayerProgression.MaxExp(player.Level),

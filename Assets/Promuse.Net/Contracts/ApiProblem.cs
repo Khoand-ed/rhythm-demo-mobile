@@ -150,6 +150,9 @@ namespace Promuse.Contracts
         /// <summary>No such notice, or it is not showing.</summary>
         public const string NoticeNotFound = "NOTICE_NOT_FOUND";
 
+        /// <summary>No player has that id, or the account behind it is banned.</summary>
+        public const string PlayerNotFound = "PLAYER_NOT_FOUND";
+
         /// <summary>
         /// The game is down for maintenance. Temporary by definition: a result that could not be
         /// sent is kept and sent afterwards, and the detail says what the operator wrote.

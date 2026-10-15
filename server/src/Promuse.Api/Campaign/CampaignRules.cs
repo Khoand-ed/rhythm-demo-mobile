@@ -47,6 +47,22 @@ public static class CampaignRules
         index == 0 || (index > 0 && index < order.Count && cleared.Contains(order[index - 1].Stage.StageId));
 
     /// <summary>
+    /// 走到哪了 / The latest stage in play order the player has cleared - what a profile shows as
+    /// their progress - or null before the first. Taken from the order, not from when each clear
+    /// happened, so replaying 1-1 after 2-3 still reads as 2-3.
+    /// </summary>
+    public static CampaignStage? Furthest(IReadOnlyList<(CampaignChapter Chapter, CampaignStage Stage)> order,
+                                          IReadOnlySet<string> cleared)
+    {
+        for (int i = order.Count - 1; i >= 0; i--)
+        {
+            if (cleared.Contains(order[i].Stage.StageId)) return order[i].Stage;
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// 每样单独掷 / Each drop is rolled on its own: it drops when the dice land under its chance, in an
     /// amount between Min and Max. The dice are the server's - a client never chooses what it got.
     /// </summary>

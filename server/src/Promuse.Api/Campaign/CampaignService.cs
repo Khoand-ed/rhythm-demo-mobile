@@ -101,6 +101,15 @@ public sealed class CampaignService(PromuseDbContext db, TimeProvider clock, Inv
         return (orundum, drops);
     }
 
+    /// <summary>The code of the furthest stage <paramref name="accountId"/> has cleared, for a profile.</summary>
+    public async Task<string?> FurthestClearedAsync(Guid accountId, CancellationToken ct)
+    {
+        HashSet<string> cleared = await ClearedAsync(accountId, ct);
+        if (cleared.Count == 0) return null;
+
+        return CampaignRules.Furthest(CampaignRules.Flatten(await DefinitionAsync(ct)), cleared)?.Code;
+    }
+
     private async Task<HashSet<string>> ClearedAsync(Guid accountId, CancellationToken ct) =>
         [.. await db.CampaignClears.AsNoTracking()
             .Where(c => c.AccountId == accountId).Select(c => c.StageId).ToListAsync(ct)];
