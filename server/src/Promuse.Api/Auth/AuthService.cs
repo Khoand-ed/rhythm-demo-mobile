@@ -52,8 +52,10 @@ public sealed class AuthService(
         account = NewAccount(now);
         account.DeviceId = deviceId;
 
+        string name = $"Doctor{now.ToUnixTimeMilliseconds() % 100000}";
+
         db.Accounts.Add(account);
-        db.Players.Add(NewPlayer(account, $"Doctor{now.ToUnixTimeMilliseconds() % 100000}", now));
+        db.Players.Add(NewPlayer(account, name, await TagForAsync(name, ct), now));
 
         try
         {
@@ -92,7 +94,7 @@ public sealed class AuthService(
         account.DeviceId = string.IsNullOrWhiteSpace(request.DeviceId) ? null : request.DeviceId;
 
         db.Accounts.Add(account);
-        db.Players.Add(NewPlayer(account, request.Username, now));
+        db.Players.Add(NewPlayer(account, request.Username, await TagForAsync(request.Username, ct), now));
 
         try
         {
@@ -335,12 +337,22 @@ public sealed class AuthService(
 
     private static readonly (int Id, int Amount)[] StartingItems = [(0, 5), (1, 500), (2, 1000)];
 
-    private static Player NewPlayer(Account account, string displayName, DateTimeOffset now)
+    /// <summary>
+    /// 一个名字用完一万个编号 / Only fails once a single name has all ten thousand tags, which no
+    /// name here can reach: a username is unique among accounts, and a guest name is one of a
+    /// hundred thousand.
+    /// </summary>
+    private async Task<int> TagForAsync(string displayName, CancellationToken ct) =>
+        await PlayerTags.DrawAsync(db, displayName, ct)
+        ?? throw new InvalidOperationException($"Every tag of the name '{displayName}' is taken.");
+
+    private static Player NewPlayer(Account account, string displayName, int tag, DateTimeOffset now)
     {
         var player = new Player
         {
             AccountId = account.Id,
             DisplayName = displayName,
+            Tag = tag,
             Level = 1,
             Exp = 0,
 

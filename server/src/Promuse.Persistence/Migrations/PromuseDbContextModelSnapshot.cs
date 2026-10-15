@@ -1306,6 +1306,11 @@ namespace Promuse.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("level");
 
+                    b.Property<string>("Signature")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("signature");
+
                     b.Property<int>("Stamina")
                         .HasColumnType("integer")
                         .HasColumnName("stamina");
@@ -1319,6 +1324,10 @@ namespace Promuse.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("state_version");
 
+                    b.Property<int>("Tag")
+                        .HasColumnType("integer")
+                        .HasColumnName("tag");
+
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
@@ -1326,7 +1335,14 @@ namespace Promuse.Persistence.Migrations
                     b.HasKey("AccountId")
                         .HasName("pk_players");
 
-                    b.ToTable("players", (string)null);
+                    b.HasIndex("DisplayName", "Tag")
+                        .IsUnique()
+                        .HasDatabaseName("ix_players_display_name_tag");
+
+                    b.ToTable("players", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_players_tag_range", "tag >= 0 AND tag <= 9999");
+                        });
                 });
 
             modelBuilder.Entity("Promuse.Persistence.Entities.PlayerCharacter", b =>
