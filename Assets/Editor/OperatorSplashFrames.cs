@@ -18,10 +18,12 @@ using UnityEngine.UI;
 ///   Headhunting          Figure - the featured operator and the lineup cards, each clipped to its card;
 ///                        Cover  - the result cards
 ///   Dialogue             Figure - unclipped, over the scene's background
+///   Profile card         Figure - the assistant, clipped to the card's left half
 ///
 /// 找到就不动 / Find-or-create: a frame or shade that exists keeps whatever was tuned on it by hand.
 /// Reset Operator Splash Frames To Default puts the values below back. The builders for the picker,
-/// headhunting and dialogue screens call <see cref="FitInto"/> too, so a rebuilt screen keeps its frames.
+/// headhunting, dialogue and profile screens call <see cref="FitInto"/> too, so a rebuilt screen
+/// keeps its frames.
 /// </summary>
 public static class OperatorSplashFrames
 {
@@ -99,6 +101,13 @@ public static class OperatorSplashFrames
         new Slot { Prefab = "GachaUI", Path = "CardPager/CardB/Card/Art/LineupFull/Template", Mode = SplashFrame.Mode.Figure, Clip = "" },
         new Slot { Prefab = "GachaUI", Path = "ResultOverlay/Grid/CardTemplate/Face/Portrait", Mode = SplashFrame.Mode.Cover, Clip = "" },
         new Slot { Prefab = "StoryUI", Path = "Portrait", Mode = SplashFrame.Mode.Figure, Clip = null },
+        // 名片 / The registration day, progress and operator count sit over the art's left edge.
+        new Slot
+        {
+            Prefab = "ProfileUI", Path = "Card/Assistant/Art",
+            Mode = SplashFrame.Mode.Figure, Clip = "Card/Assistant",
+            Shades = new[] { new Shade("Card/Assistant", "ShadeLeft", SplashShade.Edge.Left, 420f, 0.7f, 0.35f) },
+        },
     };
 
     // ------------------------------------------------------------------- menu
