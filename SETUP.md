@@ -202,6 +202,25 @@ The first time Home shows each server day, the calendar opens (and signs today's
 waiting, then the notice board if anything is showing. The screens are built by
 `Arknights/Home/Build Mail, Notice and Calendar UI`, which also wires the three icons and their red dots.
 
+### Profile cards
+
+The **PROFILE** button beside Home's news panel opens the player's own card, after the reference's
+"My Info": the operator standing on it, the day the account was made, the furthest campaign stage
+cleared, how many operators they own, the level and `name#tag`, a line they write themselves, and a
+rhythm record - runs finished, charts cleared, full combos and best ranked score. Pressing a row on
+a song's leaderboard opens that player's card, read-only.
+
+- **The tag** is four digits after the name, unique per name, drawn when the player is created.
+  Names repeat - every guest is `Doctor` and a number - a name and its tag never do.
+- **The operator on the card** is the desktop character once a screen sets it. Until then it is the
+  squad leader, and failing that the operator raised furthest.
+- **The line** is edited on the card itself, 60 characters at most. The server keeps it as one line
+  with nothing invisible in it, and the field shows what was kept.
+
+Built by `Arknights/Home/Build Profile UI`, which also places the button inside Home's `LeftPanel`
+so it leans with the news panel. `Reset Profile UI To Default` rebuilds the screen and puts the
+button back where it started.
+
 ### Four red errors on boot are expected
 
 ```
@@ -260,7 +279,7 @@ above and for device builds.
 
 | Menu | What lives there |
 |---|---|
-| **`Arknights/`** | Content pipeline — AssetBundles, placeholder art, audio import, local character art, the Home / Depot / event / campaign / mail, notice and calendar screen builders, and the story tools |
+| **`Arknights/`** | Content pipeline — AssetBundles, placeholder art, audio import, local character art, the Home / Depot / event / campaign / mail, notice and calendar / profile screen builders, and the story tools |
 | **`Beatmap/`** | Charting — `Beatmap Studio...` and `Timeline Editor...` author charts; `Import All Beatmaps` turns the JSON under `Assets/Beatmaps/` into `SongChart` assets |
 | **`Tools/Rhythm/`** | Gameplay scene setup — note system, HUD, hit feedback, character stage, skip button, song-select wiring, loading screen |
 
