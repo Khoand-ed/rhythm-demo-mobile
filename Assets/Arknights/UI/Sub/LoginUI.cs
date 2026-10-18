@@ -37,6 +37,12 @@ namespace UI.Sub {
 
         public RectTransform loading_bar1;
         public RectTransform loading_bar2;
+
+        // 起名 / The name screen, between signing up and Home. Built by NameEntrySetup.
+        public CanvasGroup namePanel;
+        public InputField name_input;
+        public Text name_hint;
+        public Button name_confirm;
         
         private Color black = new Color(0, 0, 0, 0);
         private Color red = new Color(0.74f, 0.36f, 0.36f, 0);
