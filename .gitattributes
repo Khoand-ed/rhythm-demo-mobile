@@ -171,3 +171,6 @@ Packages/packages-lock.json linguist-generated
 
 # Exceptions for .asset files such as lightning pre-baking
 LightingData.asset     binary
+
+# Recorded input traces the replay tests read (server/tests/golden) - bytes, never text
+*.trace                binary
