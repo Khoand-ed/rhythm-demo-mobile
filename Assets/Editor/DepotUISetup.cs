@@ -91,6 +91,26 @@ public static class DepotUISetup
             "Mission Rewards, Stage Drops",
             new Color(0.85f, 0.32f, 0.30f)),
 
+        // 作战记录 / The battle records past the Basic one (11), each worth the EXP that
+        // Promuse.Contracts.Characters.OperatorLevels.Records gives it. Dropped by the campaign.
+        new SeedItem(14, "Frontline Battle Record", 3, ItemType.JI_CHU,
+            "Grants 400 operator EXP when used to level an operator up.",
+            "A record of frontline engagements. Reading it closely is worth a few hours in the field.",
+            "Stage Drops",
+            new Color(0.42f, 0.78f, 0.45f)),
+
+        new SeedItem(15, "Tactical Battle Record", 4, ItemType.JI_CHU,
+            "Grants 1000 operator EXP when used to level an operator up.",
+            "Tactical analysis drawn from many operations. Dense, and worth every page.",
+            "Stage Drops",
+            new Color(0.30f, 0.58f, 0.92f)),
+
+        new SeedItem(16, "Strategic Battle Record", 5, ItemType.JI_CHU,
+            "Grants 2000 operator EXP when used to level an operator up.",
+            "A strategic record kept by Rhodes Island's command. Rarely seen outside it.",
+            "Stage Drops",
+            new Color(0.95f, 0.78f, 0.22f)),
+
         // 活动代币 / The seeded event's currency (SeedEvents.EventTokenItemId on the server).
         new SeedItem(20, "Event Token", 4, ItemType.JI_CHU,
             "Spent in the event shop while the event runs.",

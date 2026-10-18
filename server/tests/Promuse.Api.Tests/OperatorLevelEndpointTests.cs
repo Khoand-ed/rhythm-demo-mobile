@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Promuse.Contracts;
 using Promuse.Contracts.Auth;
+using Promuse.Contracts.Campaign;
 using Promuse.Contracts.Characters;
 using Promuse.Contracts.Players;
 using Promuse.Contracts.Runs;
@@ -225,6 +226,20 @@ public class OperatorLevelEndpointTests(PromuseApiFactory factory)
         Assert.Equal(HttpStatusCode.OK, again.StatusCode);
         Assert.Equal(await first.Content.ReadAsStringAsync(), await again.Content.ReadAsStringAsync());
         Assert.Equal(1, Amount(await StateAsync(session), 11));
+    }
+
+    [Fact]
+    public async Task The_seeded_campaign_drops_every_battle_record()
+    {
+        AuthSession session = await SignInAsync();
+
+        HttpResponseMessage response = await _client.SendAsync(Send(HttpMethod.Get, "/v1/campaign", session));
+        response.EnsureSuccessStatusCode();
+        CampaignView view = (await response.Content.ReadFromJsonAsync<CampaignView>(Json))!;
+
+        // The migration updated the campaign the database was seeded with.
+        HashSet<int> dropped = [.. view.Chapters.SelectMany(c => c.Stages).SelectMany(s => s.Stage.Drops).Select(d => d.ItemId)];
+        Assert.All(OperatorLevels.Records, r => Assert.Contains(r.ItemId, dropped));
     }
 
     // ------------------------------------------------------------- the run

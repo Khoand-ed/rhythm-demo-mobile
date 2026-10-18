@@ -11,6 +11,9 @@
     { "id": 11, "name": "Basic Battle Record", "rarity": 3 },
     { "id": 12, "name": "Recruitment Permit", "rarity": 4 },
     { "id": 13, "name": "Skill Summary Vol.1", "rarity": 3 },
+    { "id": 14, "name": "Frontline Battle Record", "rarity": 3 },
+    { "id": 15, "name": "Tactical Battle Record", "rarity": 4 },
+    { "id": 16, "name": "Strategic Battle Record", "rarity": 5 },
     { "id": 20, "name": "Event Token", "rarity": 4 }
   ]
 }
