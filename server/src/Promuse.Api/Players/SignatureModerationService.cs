@@ -204,6 +204,11 @@ public sealed class SignatureModerationService(PromuseDbContext db, TimeProvider
             CreatedAt = now,
         });
 
+        // 举报一并结案 / Whatever was reported about this line is answered by its removal: the
+        // open reports close, and each reporter is thanked.
+        await SignatureReportService.CloseOpenAsync(db, playerId, SignatureReportResolution.Removed, reason,
+                                                    moderatorId, now, ct);
+
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
 

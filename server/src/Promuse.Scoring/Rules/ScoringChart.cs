@@ -31,9 +31,10 @@ public sealed class ScoringChart
         AllowTrailingCommas = true,
     };
 
-    private ScoringChart(string stageId, List<NoteData> notes, int skipped)
+    private ScoringChart(string stageId, string? name, List<NoteData> notes, int skipped)
     {
         StageId = stageId;
+        Name = string.IsNullOrWhiteSpace(name) ? null : name.Trim();
         Notes = notes;
         SkippedNotes = skipped;
 
@@ -54,6 +55,9 @@ public sealed class ScoringChart
     }
 
     public string StageId { get; }
+
+    /// <summary>The song's name as the beatmap gives it, for what a player is told; null when it gives none.</summary>
+    public string? Name { get; }
 
     /// <summary>Sorted by hitTime. A stable sort, so notes on the same instant keep file order.</summary>
     public IReadOnlyList<NoteData> Notes { get; }
@@ -104,7 +108,7 @@ public sealed class ScoringChart
         // file always produce the same sequence.
         List<NoteData> sorted = notes.OrderBy(n => n.hitTime).ToList();
 
-        return new ScoringChart(file.stageId.Trim(), sorted, skipped);
+        return new ScoringChart(file.stageId.Trim(), file.name, sorted, skipped);
     }
 
     public static ScoringChart Load(string path) => Parse(File.ReadAllText(path));
@@ -162,6 +166,7 @@ public sealed class ScoringChart
     private sealed class BeatmapFile
     {
         public string? stageId { get; set; }
+        public string? name { get; set; }
         public List<BeatmapNote>? notes { get; set; }
     }
 
