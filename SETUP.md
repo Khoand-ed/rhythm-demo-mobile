@@ -79,7 +79,8 @@ XLua, Spine and DOTween under `Assets/Plugins/`.
 
 4. Open `Assets/Arknights/Scenes/StartMenu.unity` and press Play.
 5. **Register an account** on the login screen. Username 3-24 characters, letters,
-   digits and underscore; password 8-128.
+   digits and underscore; password 8-128. The username only signs in - no one else
+   ever sees it.
 
    The seeded `Saukiya` / `Test` assets under
    `Assets/Arknights/Resources/Data/User/` are no longer used for anything -
@@ -89,6 +90,12 @@ XLua, Spine and DOTween under `Assets/Plugins/`.
    `127.0.0.1` is the development machine. A build running on a phone needs the
    machine's LAN address instead - see `PromuseConfig` in
    `Assets/Promuse.Net/PromuseApi.cs`.
+6. **Choose your name** on the screen that follows ("Do you remember your name?"):
+   2-8 English letters and digits, no spaces or symbols. It is asked once more, then
+   kept for good; the server adds a tag, and the game shows the whole name - `Edd#7364` -
+   before Home opens. An account that signed up and left before this step is sent
+   back to it at the next sign-in. The screen is built into `LoginUI.prefab` by
+   `Arknights/Login/Build Name Entry`.
 
 ### Remote config and the admin page
 
@@ -210,9 +217,13 @@ cleared, how many operators they own, the level and `name#tag`, a line they writ
 rhythm record - runs finished, charts cleared, full combos and best ranked score. Pressing a row on
 a song's leaderboard opens that player's card, read-only.
 
-- **The tag** is four digits after the name, unique per name, drawn when the player is created.
-  Names repeat - every guest is `Doctor` and a number - a name and its tag never do. Leaderboard
-  rows show it too, dimmed, the way the card does.
+- **The name** is chosen once, on the name screen after signing up (`PUT /v1/players/me/name`), and
+  never changed. Until then the player has no card, cannot start a run and cannot write or report a
+  line: the server refuses with `NAME_REQUIRED`. Accounts made before the name screen keep the name
+  they had - their username.
+- **The tag** is four digits after the name, unique per name, drawn with the name. Names repeat -
+  every guest is `Doctor` and a number - a name and its tag never do. Leaderboard rows show it too,
+  dimmed, the way the card does.
 - **The operator on the card** is the player's assistant - the same one standing on Home (below).
 - **The line** is edited on the card itself, 60 characters at most. The server keeps it as one line
   with nothing invisible in it, and the field shows what was kept.
