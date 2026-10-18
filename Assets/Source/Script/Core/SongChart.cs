@@ -45,10 +45,10 @@ public class SongChart : ScriptableObject
     public List<NoteData> notes = new List<NoteData>();
 
     // 1-5 is the easy band, 6-10 the hard band; the select screen shows the
-    // number next to this label.
+    // number next to this label. English, as is every word the game shows.
     public string DifficultyLabel
     {
-        get { return difficulty <= 5 ? "Dễ" : "Khó"; }
+        get { return difficulty <= 5 ? "EASY" : "HARD"; }
     }
 
     public void SortNotes()

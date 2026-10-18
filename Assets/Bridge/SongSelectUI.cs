@@ -337,12 +337,12 @@ public class SongSelectUI : UIBase
             startButton.interactable = true;
             if (practiceButton != null) practiceButton.interactable = true;
 
-            // 每个难度一张榜 / Each difficulty is its own chart and so its own board. The caption
-            // gives the level rather than DifficultyLabel, whose "Dễ" the default font cannot draw.
+            // 每个难度一张榜 / Each difficulty is its own chart and so its own board, captioned the
+            // way its row reads.
             if (leaderboard != null)
             {
                 string title = !string.IsNullOrEmpty(chart.songName) ? chart.songName : chart.songId;
-                leaderboard.Show(chart.stageId, $"{title}   LV.{chart.difficulty}");
+                leaderboard.Show(chart.stageId, $"{title}   {chart.DifficultyLabel} LV.{chart.difficulty}");
             }
 
             for (int i = 0; i < rows.Count; i++)

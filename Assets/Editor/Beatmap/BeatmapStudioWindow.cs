@@ -72,7 +72,7 @@ public class BeatmapStudioWindow : EditorWindow
         EditorGUILayout.Space();
         EditorGUILayout.LabelField("Chart", EditorStyles.boldLabel);
         settings.difficulty = EditorGUILayout.IntSlider("Difficulty", settings.difficulty, 1, 10);
-        EditorGUILayout.LabelField(" ", $"{(settings.difficulty <= 5 ? "Dễ" : "Khó")}  ({DescribeDifficulty()})");
+        EditorGUILayout.LabelField(" ", $"{(settings.difficulty <= 5 ? "EASY" : "HARD")}  ({DescribeDifficulty()})");
 
         settings.sensitivity = EditorGUILayout.Slider("Onset sensitivity", settings.sensitivity, 1f, 3f);
         settings.bpmOverride = EditorGUILayout.FloatField("BPM override (0 = auto)", settings.bpmOverride);
