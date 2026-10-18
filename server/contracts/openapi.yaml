@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Promuse Backend API
-  version: 1.0.0-draft.13
+  version: 1.0.0-draft.14
   summary: Authentication and player state for the Promuse mobile rhythm game.
   description: |
     **Phase 1** authentication, **Phase 2** player state, **Phase 3** the economy -
@@ -2725,7 +2725,7 @@ components:
 
     RunTicket:
       type: object
-      required: [runId, stageId, seed, staminaSpent, player, serverTime]
+      required: [runId, stageId, seed, staminaSpent, player, serverTime, characterLevel]
       properties:
         runId:
           type: string
@@ -2752,6 +2752,13 @@ components:
           $ref: '#/components/schemas/PlayerState'
         serverTime:
           $ref: '#/components/schemas/ServerTime'
+        characterLevel:
+          type: integer
+          minimum: 1
+          description: |
+            The operator's level as the server recorded it when the run opened. An
+            operator's stats grow with its level, so the run is played at this level and
+            reviewed at it - a level-up landing while the song plays changes nothing.
 
     MissionTab:
       type: string

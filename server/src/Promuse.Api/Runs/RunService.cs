@@ -62,11 +62,14 @@ public sealed class RunService(
 
         // 只能用自己有的 / Only an operator the player owns. Their modifiers are part of what the
         // result is checked against, so this is the check that makes the operator on the run
-        // mean anything: otherwise anyone could open every run with the strongest one.
-        bool owned = await db.PlayerCharacters
-            .AnyAsync(c => c.AccountId == accountId && c.CharacterId == characterId, ct);
+        // mean anything: otherwise anyone could open every run with the strongest one. Its level is
+        // read in the same query and kept on the run: the stats grow with it.
+        int? level = await db.PlayerCharacters
+            .Where(c => c.AccountId == accountId && c.CharacterId == characterId)
+            .Select(c => (int?)c.Level)
+            .FirstOrDefaultAsync(ct);
 
-        if (!owned) return Outcome<RunTicket>.Fail(ApiProblems.CharacterNotOwned(characterId));
+        if (level is null) return Outcome<RunTicket>.Fail(ApiProblems.CharacterNotOwned(characterId));
 
         if (eventId is not null &&
             await events.CanStartAsync(accountId, eventId, stage.StageId, clock.GetUtcNow(), ct) is { } refused)
@@ -121,6 +124,7 @@ public sealed class RunService(
             AccountId = accountId,
             StageId = stage.StageId,
             CharacterId = characterId,
+            CharacterLevel = level.Value,
             EventId = eventId,
             CampaignStageId = campaignStageId,
             StaminaSpent = stage.StaminaCost,
@@ -148,7 +152,7 @@ public sealed class RunService(
         if (!state.IsSuccess) return Outcome<RunTicket>.Fail(state.Problem!);
 
         return Outcome<RunTicket>.Ok(new RunTicket(
-            run.Id, run.StageId, run.Seed, run.StaminaSpent, state.Value!, now));
+            run.Id, run.StageId, run.Seed, run.StaminaSpent, state.Value!, now, run.CharacterLevel));
     }
 
     /// <summary>
@@ -355,7 +359,8 @@ public sealed class RunService(
         {
             Chart = chart,
             Rules = gameData.Rules,
-            Operator = gameData.Rules.FindOperator(run.CharacterId),
+            // 按开局等级 / At the level the run opened with, not the operator's level now.
+            Operator = gameData.Rules.FindOperator(run.CharacterId)?.AtLevel(run.CharacterLevel),
             Won = won,
             Score = result.Score,
             MaxCombo = result.MaxCombo,

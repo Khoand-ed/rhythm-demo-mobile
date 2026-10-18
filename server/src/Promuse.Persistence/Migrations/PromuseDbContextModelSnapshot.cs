@@ -1578,6 +1578,10 @@ namespace Promuse.Persistence.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("character_id");
 
+                    b.Property<int>("CharacterLevel")
+                        .HasColumnType("integer")
+                        .HasColumnName("character_level");
+
                     b.Property<DateTimeOffset?>("CompletedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("completed_at");
