@@ -1,8 +1,11 @@
 using System;
 using Data.Char;
+using Data.Player;
+using Promuse.Contracts.Players;
 using Spine.Unity;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.UI;
 
 namespace UI {
     /// <summary>
@@ -18,11 +21,18 @@ namespace UI {
     /// the operator, on this object. The rig is a child with raycasting off, so the tap area is exactly
     /// this rect and nothing else on Home loses a click to it.
     ///
+    /// 站的是助理 / Who stands here is the player's assistant - the desktop character they chose, or
+    /// AMIYA until they choose (PlayerAssistant) - read from the save, and checked again twice a
+    /// second, so choosing someone else on the assistant screen changes Home underneath it.
+    ///
+    /// 没有骨骼就站立绘 / An operator with no Home rig - every one, on a clone without the local art -
+    /// stands as its splash instead, framed whole like everywhere else, so the assistant is always seen.
+    ///
     /// Placed by Arknights/Home/Place Standby Operator.
     /// </summary>
     public class HomeStandby : MonoBehaviour, IPointerClickHandler {
-        [Tooltip("Whose Home rig to show. A player-chosen assistant will set this later.")]
-        public string operatorId = "AMIYA";
+        [Tooltip("Who stands here with no save to ask - in the Editor before sign-in, or a tool's preview.")]
+        public string operatorId = PlayerAssistant.Default;
 
         [Tooltip("The shared SkeletonGraphic material from the Spine runtime. Nothing local-only.")]
         public Material graphicMaterial;
@@ -37,25 +47,44 @@ namespace UI {
         public string[] tapNames = { "Interact" };
 
         private SkeletonGraphic graphic;
+        private GameObject splash;
+        private string shown;
+        private float nextCheck;
 
         private void OnEnable() {
             Show();
         }
 
+        private void Update() {
+            if (Time.unscaledTime < nextCheck) return;
+            nextCheck = Time.unscaledTime + 0.5f;
+            Show();
+        }
+
         /// <summary>
-        /// 请干员站出来 / Stands the operator up, if there is one to stand. Called when this object
-        /// switches on; public so a tool or a test can do it without entering Play Mode. Does nothing a
-        /// second time.
+        /// 请干员站出来 / Stands the assistant up - or, if the assistant has changed since, stands the new
+        /// one in place of the old. Called when this object switches on and twice a second after; public
+        /// so a tool or a test can do it without entering Play Mode. Does nothing while the one standing
+        /// is still the one wanted.
         /// </summary>
         public void Show() {
-            if (graphic != null) return;
+            string wanted = Wanted();
+            if (wanted == shown) return;
 
-            CharMeta meta = SafeMeta(operatorId);
-            SkeletonDataAsset rig = meta != null ? meta.GetHomeRig() : null;
-            if (rig == null) return;
+            Clear();
+            shown = wanted;
+
+            CharMeta meta = SafeMeta(wanted);
+            if (meta == null) return;
+
+            SkeletonDataAsset rig = meta.GetHomeRig();
+            if (rig == null) {
+                ShowSplash(meta);
+                return;
+            }
 
             graphic = SkeletonGraphic.NewSkeletonGraphicGameObject(rig, transform, graphicMaterial);
-            graphic.name = "Operator (" + operatorId + ")";
+            graphic.name = "Operator (" + wanted + ")";
             graphic.raycastTarget = false;
 
             // 脚在这个物体的底边中间 / The rig's origin is its feet, so the feet go on the bottom middle of
@@ -71,6 +100,55 @@ namespace UI {
 
             Spine.Animation idle = Find(idleNames);
             if (idle != null) graphic.AnimationState.SetAnimation(0, idle, true);
+        }
+
+        /// <summary>The player's assistant, or the serialized one when there is no save to ask.</summary>
+        private string Wanted() {
+            PlayerData player = Application.isPlaying ? PlayerManager.Inst().Get() : null;
+            return player != null ? PlayerAssistant.Of(player.GetDesktopChar()) : operatorId;
+        }
+
+        private void Clear() {
+            if (graphic != null) Discard(graphic.gameObject);
+            if (splash != null) Discard(splash);
+            graphic = null;
+            splash = null;
+        }
+
+        private static void Discard(UnityEngine.Object target) {
+            if (Application.isPlaying) UnityEngine.Object.Destroy(target);
+            else UnityEngine.Object.DestroyImmediate(target);
+        }
+
+        /// <summary>
+        /// 立绘代替骨骼 / The splash in this rect, the figure as tall as it and standing on its bottom edge
+        /// the way the rig would. Built here rather than in the prefab: it only exists when there is no rig.
+        /// </summary>
+        private void ShowSplash(CharMeta meta) {
+            splash = new GameObject("Splash (" + meta.name + ")", typeof(RectTransform), typeof(CanvasRenderer),
+                                    typeof(Image), typeof(SplashFrame));
+            splash.layer = gameObject.layer;
+
+            RectTransform rect = (RectTransform)splash.transform;
+            rect.SetParent(transform, false);
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.offsetMin = Vector2.zero;
+            rect.offsetMax = Vector2.zero;
+
+            Image frameImage = splash.GetComponent<Image>();
+            frameImage.raycastTarget = false;
+
+            GameObject child = new GameObject("Splash", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            child.layer = gameObject.layer;
+            child.transform.SetParent(rect, false);
+            Image art = child.GetComponent<Image>();
+            art.raycastTarget = false;
+
+            SplashFrame frame = splash.GetComponent<SplashFrame>();
+            frame.mode = SplashFrame.Mode.Figure;
+            frame.splash = art;
+            SplashFrame.Show(frameImage, meta);
         }
 
         public void OnPointerClick(PointerEventData eventData) {
