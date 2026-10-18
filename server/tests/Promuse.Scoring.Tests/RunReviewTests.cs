@@ -8,6 +8,10 @@ namespace Promuse.Scoring.Tests;
 /// One honest run, then one way of lying about it per test. Every rejection must come from the
 /// lie and never from the honest parts, so each test starts from an input that is accepted and
 /// changes exactly one thing.
+///
+/// 诚实就是重放的结果 / Honest means: the numbers the server's replay of the trace comes to, which
+/// is what a device sends. A test that swaps the trace claims what the new trace scores (Claim),
+/// so the only thing it changes is the input.
 /// </summary>
 public class RunReviewTests
 {
@@ -19,27 +23,47 @@ public class RunReviewTests
         Ruleset rules = Fixtures.Ruleset();
         ScoringChart chart = Fixtures.Chart(Stage);
         OperatorRules op = Fixtures.Operator(rules, OperatorId);
-        PlayedRun played = Fixtures.Play(chart, rules, op);
 
-        var input = new ReviewInput
+        var input = Claim(new ReviewInput
         {
             Chart = chart,
             Rules = rules,
             Operator = op,
             Won = true,
-            Score = played.Score,
-            MaxCombo = played.MaxCombo,
-            Perfect = played.Perfect,
+            Score = 0,
+            MaxCombo = 0,
+            Perfect = 0,
             Great = 0,
             Hit = 0,
             Miss = 0,
-            FullCombo = true,
+            FullCombo = false,
             Fingerprint = RulesetFingerprint.Compute(rules, op),
             Trace = Fixtures.Trace(chart),
+            Seed = Fixtures.Seed,
             Elapsed = TimeSpan.FromSeconds(chart.PlayableSpan + 10),
-        };
+        });
 
         return change is null ? input : change(input);
+    }
+
+    /// <summary>The input with <paramref name="trace"/> (its own when null), claiming what that trace scores.</summary>
+    private static ReviewInput Claim(ReviewInput input, byte[]? trace = null)
+    {
+        trace ??= input.Trace!;
+        ReplayResult replay = Fixtures.Replay(input.Chart, input.Rules, input.Operator!, trace, input.Seed);
+
+        return input with
+        {
+            Trace = trace,
+            Won = !replay.Failed,
+            Score = replay.Score,
+            MaxCombo = replay.MaxCombo,
+            Perfect = replay.Perfect,
+            Great = replay.Great,
+            Hit = replay.Hit,
+            Miss = replay.Miss,
+            FullCombo = replay.FullCombo,
+        };
     }
 
     private static ReviewResult Review(Func<ReviewInput, ReviewInput>? change = null) =>
@@ -59,6 +83,65 @@ public class RunReviewTests
         Assert.Equal(179, result.Timing!.Samples);
         Assert.InRange(result.Timing.StdDevMs, 15, 35);
         Assert.InRange(result.Timing.FrameIntervalMs, 16, 17.5);
+
+        // The replay ran and agrees; a person's spread is not all Perfects.
+        Assert.NotNull(result.Replay);
+        Assert.True(result.Replay!.Great + result.Replay.Hit > 0);
+        Assert.Equal(0, result.Replay.Miss);
+    }
+
+    [Fact]
+    public void A_score_the_input_did_not_make_is_flagged_by_the_replay_not_rejected()
+    {
+        // Self-consistent and under the ceiling - nothing above can see it.
+        ReviewResult result = Review(i => i with { Score = i.Score + 500 });
+
+        Assert.Equal(ScoreVerdict.Flagged, result.Verdict);
+        Assert.Empty(result.Reasons);
+        Assert.Equal(new[] { ReviewFlags.ReplayMismatch }, result.Flags);
+        Assert.NotEqual(result.Replay!.Score, Honest().Score + 500);
+    }
+
+    [Fact]
+    public void Greats_passed_off_as_perfects_are_flagged_by_the_replay()
+    {
+        ReviewResult result = Review(i => i with { Perfect = i.Perfect + i.Great, Great = 0 });
+
+        Assert.Empty(result.Reasons);
+        Assert.Contains(ReviewFlags.ReplayMismatch, result.Flags);
+    }
+
+    [Fact]
+    public void A_win_the_input_lost_is_flagged_by_the_replay()
+    {
+        // The second half never pressed: HP runs out part-way, though the result says it was won.
+        ScoringChart chart = Fixtures.Chart(Stage);
+        byte[] gaveUp = Silence(Fixtures.Trace(chart), chart.FirstNoteTime + chart.PlayableSpan / 2);
+
+        ReplayResult lost = Fixtures.Replay(chart, Fixtures.Ruleset(), Fixtures.Operator(Fixtures.Ruleset(), OperatorId), gaveUp);
+        Assert.True(lost.Failed);
+
+        ReviewResult result = Review(i => i with { Trace = gaveUp });
+        Assert.Contains(ReviewFlags.ReplayMismatch, result.Flags);
+    }
+
+    [Fact]
+    public void The_replay_rolls_the_passive_from_the_seed_the_server_issued()
+    {
+        // A different seed is a different sequence of rolls: the same input, other promotions.
+        Ruleset rules = Fixtures.Ruleset();
+        OperatorRules? roller = rules.operators.FirstOrDefault(o => o.passive.type == nameof(JudgeUpgradePassive));
+        Assert.NotNull(roller);
+
+        ScoringChart chart = Fixtures.Chart(Stage);
+        byte[] trace = Fixtures.Trace(chart, jitterMs: 45);
+
+        ReplayResult one = Fixtures.Replay(chart, rules, roller!, trace, seed: 1);
+        ReplayResult again = Fixtures.Replay(chart, rules, roller!, trace, seed: 1);
+        Assert.Equal(one, again);
+
+        // Two seeds can promote as many Greats by chance; across eight, some must differ.
+        Assert.Contains(Enumerable.Range(2, 8), seed => Fixtures.Replay(chart, rules, roller!, trace, seed) != one);
     }
 
     [Fact]
@@ -93,9 +176,10 @@ public class RunReviewTests
     [Fact]
     public void A_combo_longer_than_the_hits_is_rejected()
     {
+        // Five hits become misses, but the combo still claims every hit there was.
         ReviewResult result = Review(i => i with
         {
-            Perfect = i.Perfect - 5, Miss = 5, FullCombo = false, MaxCombo = i.Perfect,
+            Perfect = i.Perfect - 5, Miss = 5, FullCombo = false, MaxCombo = i.Perfect + i.Great + i.Hit,
         });
 
         Assert.Equal(new[] { ScoreReviewCodes.ComboInconsistent }, result.Reasons);
@@ -180,7 +264,7 @@ public class RunReviewTests
     public void Presses_that_never_leave_their_frame_are_flagged_not_rejected()
     {
         // jitter 0: every press on the frame nearest its note, which is what a script does.
-        ReviewResult result = Review(i => i with { Trace = Fixtures.Trace(i.Chart, jitterMs: 0) });
+        ReviewResult result = Review(i => Claim(i, Fixtures.Trace(i.Chart, jitterMs: 0)));
 
         Assert.Equal(ScoreVerdict.Flagged, result.Verdict);
         Assert.Equal(new[] { ReviewFlags.TimingFrameLocked }, result.Flags);
@@ -194,7 +278,7 @@ public class RunReviewTests
     public void A_person_is_not_mistaken_for_a_script_at_any_frame_rate(float fps)
     {
         // A sharp player: 12 ms of spread, tighter than most people manage on glass.
-        ReviewResult result = Review(i => i with { Trace = Fixtures.Trace(i.Chart, fps: fps, jitterMs: 12) });
+        ReviewResult result = Review(i => Claim(i, Fixtures.Trace(i.Chart, fps: fps, jitterMs: 12)));
 
         Assert.DoesNotContain(ReviewFlags.TimingFrameLocked, result.Flags);
     }
@@ -202,9 +286,9 @@ public class RunReviewTests
     [Fact]
     public void Mashing_is_flagged()
     {
-        ReviewResult result = Review(i => i with { Trace = Fixtures.Trace(i.Chart, extraPressesPerNote: 4) });
+        ReviewResult result = Review(i => Claim(i, Fixtures.Trace(i.Chart, extraPressesPerNote: 4)));
 
-        Assert.Contains(ReviewFlags.InputSpam, result.Flags);
+        Assert.Equal(new[] { ReviewFlags.InputSpam }, result.Flags);
         Assert.Equal(ScoreVerdict.Flagged, result.Verdict);
     }
 
@@ -220,4 +304,20 @@ public class RunReviewTests
 
     private static ScoringChart Chart(bool empty) =>
         empty ? ScoringChart.Parse("""{ "stageId": "x", "notes": [] }""") : Fixtures.Chart(Stage);
+
+    /// <summary>The same recording with nothing pressed or held from <paramref name="from"/> on.</summary>
+    private static byte[] Silence(byte[] trace, float from)
+    {
+        Assert.True(InputTrace.TryRead(trace, InputTraceWriter.MaxFrames, out InputTrace? parsed, out _));
+
+        var writer = new InputTraceWriter();
+        writer.Begin(parsed!.LaneCount);
+        for (int i = 0; i < parsed.FrameCount; i++)
+        {
+            bool quiet = parsed.Times[i] >= from;
+            writer.Record(parsed.Times[i], quiet ? 0 : parsed.Pressed[i], quiet ? 0 : parsed.Held[i]);
+        }
+
+        return writer.ToArray();
+    }
 }

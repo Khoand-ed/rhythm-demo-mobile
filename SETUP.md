@@ -211,10 +211,16 @@ rhythm record - runs finished, charts cleared, full combos and best ranked score
 a song's leaderboard opens that player's card, read-only.
 
 - **The tag** is four digits after the name, unique per name, drawn when the player is created.
-  Names repeat - every guest is `Doctor` and a number - a name and its tag never do.
+  Names repeat - every guest is `Doctor` and a number - a name and its tag never do. Leaderboard
+  rows show it too, dimmed, the way the card does.
 - **The operator on the card** is the player's assistant - the same one standing on Home (below).
 - **The line** is edited on the card itself, 60 characters at most. The server keeps it as one line
   with nothing invisible in it, and the field shows what was kept.
+- **Moderation** is the admin page's **Signatures** tab: the lines written most recently, newest
+  first, and a search by name or `Name#0420`. A moderator removes a line with a reason, can lock
+  the player out of writing another for 1-30 days or until lifted, and can mail the player why.
+  While locked, the card says until when and the server refuses the line (`SIGNATURE_LOCKED`).
+  Every removal and unlock is kept in the tab's history, with the line that was taken down.
 
 Built by `Arknights/Home/Build Profile UI`, which also places the button inside Home's `LeftPanel`
 so it leans with the news panel. `Reset Profile UI To Default` rebuilds the screen and puts the
@@ -261,6 +267,21 @@ Substitute drops from 1-2, 2-1 and 2-3). Promotion keeps the level and only rais
 55 for a 3-star, 45 to 60 to 70 for a 4-star, 50 to 70 to 80 for a 5-star - so nothing about how
 the operator plays changes until it is levelled again, on the new phase's EXP curve and LMD rate.
 Built by `Arknights/Character/Build Promotion UI`; `Reset Promotion UI To Default` rebuilds it.
+
+### How a ranked result is checked
+
+A ranked run sends its numbers with an input trace: every gameplay frame's song time, the lanes
+pressed and the lanes held. The server first checks what could never be true - counts that do not
+add up, a combo the hits could not make, a score above what the chart allows, a win faster than the
+chart plays - and rejects those. Then it **replays the trace** through `RunJudge`, the judging the
+game itself plays with (`Assets/Source/Script/Core/RunJudge.cs`, linked into the server like the rest
+of Rhythm.Core), with the run's rules, operator level and seed. A result the replay does not come to
+is a clear, but is held off the leaderboard as `REPLAY_MISMATCH` (shown to the player as under
+review); what the replay scored is kept in `run_scores.replay` to compare.
+
+`server/tests/golden/replay_stage_AIW_hard.trace` is replayed by both the server tests and the Unity
+EditMode tests and pinned to the same numbers, so the two runtimes cannot drift apart unnoticed.
+`make_replay_trace.py` beside it rewrites it - re-pin both tests if you do.
 
 ### Four red errors on boot are expected
 

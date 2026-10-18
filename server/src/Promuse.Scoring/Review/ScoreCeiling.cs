@@ -71,8 +71,9 @@ public static class ScoreCeiling
                 judgements.Add(note.hitTime);
                 judgements.Add(end);
 
-                // One more than the body holds, because NoteView counts ticks by accumulating
-                // float intervals and can land one past an exact division.
+                // One more than the body holds: RunJudge counts whole intervals from where the
+                // hold began, which is never more than this, and the spare tick keeps the bound
+                // safe against a division that lands a hair past an exact multiple.
                 int count = (int)Math.Floor(note.duration / score.holdTickInterval) + 1;
                 for (int k = 1; k <= count; k++)
                 {

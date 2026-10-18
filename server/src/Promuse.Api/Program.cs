@@ -84,6 +84,7 @@ builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<PlayerService>();
 builder.Services.AddScoped<ProfileService>();
+builder.Services.AddScoped<SignatureModerationService>();
 builder.Services.AddScoped<CharacterService>();
 builder.Services.AddScoped<EconomyService>();
 builder.Services.AddScoped<RunService>();
@@ -259,6 +260,7 @@ app.MapGet("/", () => Results.Ok(new
 
 app.MapAuthEndpoints();
 app.MapPlayerEndpoints();
+app.MapSignatureModerationEndpoints();
 app.MapCharacterEndpoints();
 app.MapEconomyEndpoints();
 app.MapRunEndpoints();

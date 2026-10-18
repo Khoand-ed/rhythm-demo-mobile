@@ -87,6 +87,8 @@ public class PromuseDbContext(DbContextOptions<PromuseDbContext> options) : DbCo
 
     public DbSet<CampaignClear> CampaignClears => Set<CampaignClear>();
 
+    public DbSet<SignatureModeration> SignatureModerations => Set<SignatureModeration>();
+
     /// <summary>Hands every story correction its revision - see <see cref="StoryLinePatch"/>.</summary>
     public const string StoryPatchRevisions = "story_patch_revisions";
 
@@ -220,12 +222,41 @@ public class PromuseDbContext(DbContextOptions<PromuseDbContext> options) : DbCo
             entity.HasIndex(p => new { p.DisplayName, p.Tag }).IsUnique();
             entity.ToTable(t => t.HasCheckConstraint("ck_players_tag_range", "tag >= 0 AND tag <= 9999"));
 
+            // 审核看最近写的 / The moderators' list is the lines written most recently. Only rows
+            // that have a line are on it, so only they are in the index.
+            entity.HasIndex(p => p.SignatureUpdatedAt).HasFilter("signature IS NOT NULL");
+
             // Optimistic concurrency, wired to EF rather than left to the
             // service layer. With this, a write built from a stale read throws
             // DbUpdateConcurrencyException instead of overwriting - which is
             // what the contract's 412 is made of. Doing it by hand in each
             // handler would mean one forgotten check is one silent data loss.
             entity.Property(p => p.StateVersion).IsConcurrencyToken();
+        });
+
+        modelBuilder.Entity<SignatureModeration>(entity =>
+        {
+            entity.ToTable("signature_moderations");
+            entity.HasKey(m => m.Id);
+            entity.Property(m => m.Id).UseIdentityAlwaysColumn();
+
+            // 存名字不存序号 / Stored by name, like the mission tabs: reordering the enum must not
+            // rewrite the history.
+            entity.Property(m => m.Action).HasConversion<string>().HasMaxLength(16);
+            entity.Property(m => m.RemovedSignature).HasMaxLength(256);
+            entity.Property(m => m.Reason).HasMaxLength(200);
+
+            // The history goes with the player; the moderator and the mail may go without taking it.
+            entity.HasOne<Player>().WithMany()
+                  .HasForeignKey(m => m.AccountId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<Account>().WithMany()
+                  .HasForeignKey(m => m.CreatedBy).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne<MailMessage>().WithMany()
+                  .HasForeignKey(m => m.MailId).OnDelete(DeleteBehavior.SetNull);
+
+            // Newest first, for everyone and for one player.
+            entity.HasIndex(m => m.CreatedAt);
+            entity.HasIndex(m => new { m.AccountId, m.CreatedAt });
         });
 
         // 三张表都用组合主键 / All three use a composite key rather than a surrogate
@@ -806,6 +837,7 @@ public class PromuseDbContext(DbContextOptions<PromuseDbContext> options) : DbCo
             // 存名字 / Stored by name, like every other enum here: a verdict read in psql
             // should say what it is.
             entity.Property(s => s.Verdict).HasConversion<string>().HasMaxLength(16);
+            entity.Property(s => s.Replay).HasColumnType("jsonb");
 
             entity.HasIndex(s => new { s.AccountId, s.SubmittedAt });
 

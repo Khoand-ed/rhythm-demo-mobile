@@ -159,7 +159,7 @@ public class EventEndpointTests(PromuseApiFactory factory)
     /// A ranked win on stage_001, closed as the score tests close one - played as a stage of
     /// <paramref name="eventId"/> when one is given, from the song list otherwise.
     /// </summary>
-    private async Task<RunCompletion> WinAsync(AuthSession player, int score = 1000, string? eventId = null)
+    private async Task<RunCompletion> WinAsync(AuthSession player, string? eventId = null)
     {
         HttpResponseMessage start = await StartAsync(player, Played.Stage, eventId);
         Assert.Equal(HttpStatusCode.Created, start.StatusCode);
@@ -167,7 +167,7 @@ public class EventEndpointTests(PromuseApiFactory factory)
         await Played.AgeAsync(factory, ticket.RunId, TimeSpan.FromMinutes(5));
 
         HttpResponseMessage done = await _client.SendAsync(Send(HttpMethod.Post, $"/v1/runs/{ticket.RunId}/complete", player,
-            new CompleteRunRequest(true, Played.Win(factory, score))));
+            new CompleteRunRequest(true, Played.Win(factory))));
         Assert.Equal(HttpStatusCode.OK, done.StatusCode);
         return (await done.Content.ReadFromJsonAsync<RunCompletion>(Json))!;
     }
@@ -263,7 +263,7 @@ public class EventEndpointTests(PromuseApiFactory factory)
         {
             AuthSession player = await GuestAsync();
 
-            RunCompletion done = await WinAsync(player, score: 1000, eventId: id);
+            RunCompletion done = await WinAsync(player, eventId: id);
             Assert.Equal(25, done.Player.Inventory.Single(i => i.ItemId == Token).Amount);
 
             EventView view = await ViewAsync(player, id);

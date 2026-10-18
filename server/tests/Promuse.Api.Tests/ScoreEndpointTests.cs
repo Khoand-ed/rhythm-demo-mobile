@@ -9,6 +9,7 @@ using Promuse.Contracts;
 using Promuse.Contracts.Auth;
 using Promuse.Contracts.Leaderboards;
 using Promuse.Contracts.Missions;
+using Promuse.Contracts.Players;
 using Promuse.Contracts.Runs;
 using Promuse.Persistence;
 using Promuse.Persistence.Entities;
@@ -23,6 +24,11 @@ namespace Promuse.Api.Tests;
 /// 每个测试自己的关卡视角 / The boards are shared by every test in the collection, so tests that
 /// care about rank use their own fresh players and assert relative positions, never "first
 /// place" on a board another test may also be writing to.
+///
+/// 分数是真的 / Every score here is what its trace really scores - the server replays it, and a
+/// claim the trace does not back is flagged. A run's score is chosen by how many of the first
+/// notes it leaves unplayed (Played.Win misses), and each test that ranks picks miss counts no
+/// other test uses, so nothing else on the board lands between its runs.
 /// </summary>
 [Collection(ApiCollection.Name)]
 public class ScoreEndpointTests(PromuseApiFactory factory)
@@ -78,9 +84,9 @@ public class ScoreEndpointTests(PromuseApiFactory factory)
             $"/v1/runs/{ticket.RunId}/complete", session, request, key));
     }
 
-    private async Task<RunCompletion> PlayWinAsync(AuthSession session, int score)
+    private async Task<RunCompletion> PlayWinAsync(AuthSession session, int misses = 0)
     {
-        HttpResponseMessage response = await PlayAsync(session, new CompleteRunRequest(true, Played.Win(factory, score)));
+        HttpResponseMessage response = await PlayAsync(session, new CompleteRunRequest(true, Played.Win(factory, misses)));
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         return (await response.Content.ReadFromJsonAsync<RunCompletion>(Json))!;
     }
@@ -143,12 +149,14 @@ public class ScoreEndpointTests(PromuseApiFactory factory)
     {
         AuthSession session = await SignInAsync();
 
-        RunCompletion done = await PlayWinAsync(session, score: 12_345);
+        RunResult played = Played.Win(factory);
+        RunCompletion done = (await (await PlayAsync(session, new CompleteRunRequest(true, played)))
+            .Content.ReadFromJsonAsync<RunCompletion>(Json))!;
 
         Assert.True(done.Won);
         Assert.Equal(ScoreVerdict.Accepted, done.Review!.Verdict);
         Assert.Empty(done.Review.Reasons);
-        Assert.Equal(12_345, done.Review.Score);
+        Assert.Equal(played.Score, done.Review.Score);
         Assert.True(done.Review.IsPersonalBest);
         Assert.NotNull(done.Review.AllTimeRank);
         Assert.NotNull(done.Review.WeeklyRank);
@@ -158,7 +166,7 @@ public class ScoreEndpointTests(PromuseApiFactory factory)
         LeaderboardPage board = await BoardAsync(session);
         Assert.Equal("all", board.PeriodKey);
         Assert.Null(board.ResetsAt);
-        Assert.Equal(12_345, board.Me!.Score);
+        Assert.Equal(played.Score, board.Me!.Score);
         Assert.Equal(Played.Operator, board.Me.CharacterId);
         Assert.Equal(done.Review.AllTimeRank, board.Me.Rank);
 
@@ -170,19 +178,24 @@ public class ScoreEndpointTests(PromuseApiFactory factory)
         Assert.True(stored.TraceFrames > 2000);
         Assert.Equal(179, stored.TimingSamples);
         Assert.NotNull(stored.Ceiling);
+
+        // The server judged the trace itself, and came to what was sent.
+        using JsonDocument replay = JsonDocument.Parse(stored.Replay!);
+        Assert.Equal(played.Score, replay.RootElement.GetProperty("score").GetInt32());
+        Assert.Equal(played.Perfect, replay.RootElement.GetProperty("perfect").GetInt32());
     }
 
     [Fact]
     public async Task The_weekly_board_is_keyed_by_week_and_says_when_it_resets()
     {
         AuthSession session = await SignInAsync();
-        await PlayWinAsync(session, score: 5_000);
+        RunCompletion done = await PlayWinAsync(session);
 
         LeaderboardPage weekly = await BoardAsync(session, LeaderboardPeriod.Weekly);
 
         Assert.Matches(@"^\d{4}-W\d{2}$", weekly.PeriodKey);
         Assert.True(weekly.ResetsAt > weekly.ServerTime);
-        Assert.Equal(5_000, weekly.Me!.Score);
+        Assert.Equal(done.Review!.Score, weekly.Me!.Score);
     }
 
     [Fact]
@@ -190,25 +203,31 @@ public class ScoreEndpointTests(PromuseApiFactory factory)
     {
         AuthSession session = await SignInAsync();
 
-        Assert.True((await PlayWinAsync(session, 5_000)).Review!.IsPersonalBest);
-        Assert.False((await PlayWinAsync(session, 3_000)).Review!.IsPersonalBest);
-        Assert.Equal(5_000, (await BoardAsync(session)).Me!.Score);
+        // Fewer notes left unplayed is a higher score.
+        RunCompletion middle = await PlayWinAsync(session, misses: 10);
+        Assert.True(middle.Review!.IsPersonalBest);
 
-        Assert.True((await PlayWinAsync(session, 7_000)).Review!.IsPersonalBest);
-        Assert.Equal(7_000, (await BoardAsync(session)).Me!.Score);
+        RunCompletion worse = await PlayWinAsync(session, misses: 20);
+        Assert.False(worse.Review!.IsPersonalBest);
+        Assert.True(worse.Review.Score < middle.Review.Score);
+        Assert.Equal(middle.Review.Score, (await BoardAsync(session)).Me!.Score);
+
+        RunCompletion best = await PlayWinAsync(session, misses: 0);
+        Assert.True(best.Review!.IsPersonalBest);
+        Assert.Equal(best.Review.Score, (await BoardAsync(session)).Me!.Score);
     }
 
     [Fact]
     public async Task Higher_scores_rank_above_and_a_tie_goes_to_whoever_set_it_first()
     {
-        // 分数够高 / Scores no other test writes between, so nothing can land inside the trio.
+        // 只有这里用 7 和 8 / Miss counts no other test plays, so nothing can land inside the trio.
         AuthSession first = await SignInAsync();
         AuthSession second = await SignInAsync();
         AuthSession third = await SignInAsync();
 
-        await PlayWinAsync(first, 150_000);
-        await PlayWinAsync(second, 150_000);
-        await PlayWinAsync(third, 155_000);
+        await PlayWinAsync(first, misses: 8);
+        await PlayWinAsync(second, misses: 8);
+        await PlayWinAsync(third, misses: 7);
 
         // Relative order only: other tests write to this board too.
         var mine = new[] { first.PlayerId, second.PlayerId, third.PlayerId };
@@ -227,8 +246,8 @@ public class ScoreEndpointTests(PromuseApiFactory factory)
         AuthSession top = await SignInAsync();
         AuthSession me = await SignInAsync();
 
-        await PlayWinAsync(top, 158_000);
-        await PlayWinAsync(me, 100);
+        await PlayWinAsync(top, misses: 0);
+        await PlayWinAsync(me, misses: 25);
 
         LeaderboardPage board = await BoardAsync(me, limit: 1);
 
@@ -236,6 +255,26 @@ public class ScoreEndpointTests(PromuseApiFactory factory)
         Assert.NotEqual(me.PlayerId, board.Entries[0].PlayerId);
         Assert.Equal(me.PlayerId, board.Me!.PlayerId);
         Assert.True(board.Me.Rank > 1);
+    }
+
+    [Fact]
+    public async Task Every_line_carries_the_tag_that_tells_two_players_of_one_name_apart()
+    {
+        AuthSession session = await SignInAsync();
+        await PlayWinAsync(session, misses: 2);
+
+        PlayerState state = (await (await _client.SendAsync(Send(HttpMethod.Get, "/v1/players/me", session)))
+            .Content.ReadFromJsonAsync<PlayerState>(Json))!;
+
+        // The caller's own line, which is built by a separate query from the page.
+        LeaderboardPage board = await BoardAsync(session);
+        Assert.Equal((state.DisplayName, state.Tag), (board.Me!.DisplayName, board.Me.Tag));
+
+        // And a line on the page carries the tag its player's card shows.
+        LeaderboardEntry top = board.Entries[0];
+        PlayerProfile card = (await (await _client.SendAsync(Send(HttpMethod.Get, $"/v1/players/{top.PlayerId}/profile", session)))
+            .Content.ReadFromJsonAsync<PlayerProfile>(Json))!;
+        Assert.Equal((card.DisplayName, card.Tag), (top.DisplayName, top.Tag));
     }
 
     // ----------------------------------------------------------------- rejected
@@ -246,7 +285,7 @@ public class ScoreEndpointTests(PromuseApiFactory factory)
         AuthSession session = await SignInAsync();
 
         HttpResponseMessage response = await PlayAsync(session,
-            new CompleteRunRequest(true, Played.Win(factory, score: 9_999_999)));
+            new CompleteRunRequest(true, Played.Win(factory) with { Score = 9_999_999 }));
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var done = (await response.Content.ReadFromJsonAsync<RunCompletion>(Json))!;
@@ -314,7 +353,7 @@ public class ScoreEndpointTests(PromuseApiFactory factory)
 
         // 零抖动 / No spread at all: every press on the frame nearest its note.
         HttpResponseMessage response = await PlayAsync(session,
-            new CompleteRunRequest(true, Played.Win(factory, score: 2_000, jitterMs: 0)));
+            new CompleteRunRequest(true, Played.Win(factory, jitterMs: 0)));
 
         var done = (await response.Content.ReadFromJsonAsync<RunCompletion>(Json))!;
 
@@ -329,6 +368,33 @@ public class ScoreEndpointTests(PromuseApiFactory factory)
         // 哪个信号只在服务端 / Which signal fired is on the server and nowhere else.
         RunScore stored = await StoredScoreAsync(session.PlayerId);
         Assert.Equal(new[] { ReviewFlags.TimingFrameLocked }, stored.Flags);
+    }
+
+    [Fact]
+    public async Task A_score_its_trace_does_not_make_is_a_clear_held_off_the_board_for_review()
+    {
+        AuthSession session = await SignInAsync();
+        RunResult honest = Played.Win(factory);
+
+        // Self-consistent and under the ceiling: only the replay can tell.
+        HttpResponseMessage response = await PlayAsync(session,
+            new CompleteRunRequest(true, honest with { Score = honest.Score + 777 }));
+
+        var done = (await response.Content.ReadFromJsonAsync<RunCompletion>(Json))!;
+
+        // 按主人的选择: 标记, 不拒绝 / Flagged, not rejected, as the owner chose: the clear stands.
+        Assert.True(done.Won);
+        Assert.Equal(ScoreVerdict.Flagged, done.Review!.Verdict);
+        Assert.Equal(new[] { ScoreReviewCodes.UnderReview }, done.Review.Reasons);
+        Assert.Equal(1, await PlaySongProgressAsync(session));
+        Assert.Null((await BoardAsync(session)).Me);
+
+        RunScore stored = await StoredScoreAsync(session.PlayerId);
+        Assert.Equal(new[] { ReviewFlags.ReplayMismatch }, stored.Flags);
+        Assert.Equal(honest.Score + 777, stored.Score);
+
+        using JsonDocument replay = JsonDocument.Parse(stored.Replay!);
+        Assert.Equal(honest.Score, replay.RootElement.GetProperty("score").GetInt32());
     }
 
     // ----------------------------------------------------------- malformed
@@ -380,7 +446,7 @@ public class ScoreEndpointTests(PromuseApiFactory factory)
         var ticket = (await (await StartAsync(session)).Content.ReadFromJsonAsync<RunTicket>(Json))!;
         await Played.AgeAsync(factory, ticket.RunId, TimeSpan.FromMinutes(5));
 
-        var request = new CompleteRunRequest(true, Played.Win(factory, score: 4_321));
+        var request = new CompleteRunRequest(true, Played.Win(factory, misses: 4));
         string key = ticket.RunId.ToString();
 
         HttpResponseMessage first = await _client.SendAsync(Send(HttpMethod.Post,

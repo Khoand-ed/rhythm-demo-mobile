@@ -8,7 +8,10 @@ using TMPro;
 using Promuse.Contracts.Runs;
 using Promuse.Net;
 
-public class GameManager : MonoBehaviour
+// 判定在 RunJudge / The judging itself lives in RunJudge (Rhythm.Core), which the server runs again
+// over the input trace to check a result. What stays here is reading the input, recording it, and
+// drawing what the judge decided - the IRunJudgeListener half.
+public class GameManager : MonoBehaviour, IRunJudgeListener
 {
 
     public AudioSource theMusic;
@@ -157,9 +160,16 @@ public class GameManager : MonoBehaviour
     // in the sense that BeginTrace empties it: the trace sent is the attempt that was reported.
     private readonly InputTraceWriter inputTrace = new InputTraceWriter();
 
-    private float feverEndsAtSongTime;
+    // 判定 / The judge for the chart being played, built once the chart is known. Null on the legacy
+    // path and when the scene is missing its spawner, chart or tuning.
+    private RunJudge runJudge;
 
-    private float lastPassiveSongTime;
+    // The song time of the frame being judged, for the views the listener moves.
+    private float stepTime;
+
+    // What the score and combo labels show, so they are rebuilt only when a number changes.
+    private int shownScore = -1;
+    private int shownCombo = -1;
 
     private readonly Dictionary<KeyCode, List<NoteObject>> activeNotesByKey = new Dictionary<KeyCode, List<NoteObject>>();
     private readonly Dictionary<KeyCode, float> hitZoneXByKey = new Dictionary<KeyCode, float>();
@@ -281,9 +291,12 @@ public class GameManager : MonoBehaviour
                                "or tick useLegacyNoteHolders to stay on the old system.");
             }
 
-            state.totalNotes = noteSpawner != null ? CountJudgements(noteSpawner.chart) : 0;
+            state.totalNotes = noteSpawner != null && noteSpawner.chart != null
+                ? RunJudge.CountJudgements(noteSpawner.chart.notes)
+                : 0;
 
             ApplyChartToConductor();
+            BuildJudge();
         }
 
 }
@@ -299,9 +312,8 @@ void Update()
             }
         }else
         {
+            // Fever and the passive's clock are judged with the notes, inside RunJudge.Step.
             HandleNoteInput();
-            UpdateFever();
-            UpdatePassive();
 
             if(SongFinished() && !resultsScreen.activeInHierarchy)
             {
@@ -340,22 +352,24 @@ void Update()
         }
     }
 
-    // Accuracy is hits over judgements, not over chart entries: a Twin is two
-    // halves judged separately, and a Hold is judged at its head and its tail.
-    private static int CountJudgements(SongChart chart)
+    // The judge for this chart, over the RunState the tuning was just synced into. Accuracy is
+    // hits over its judgements, not over chart entries: a Twin is two halves judged separately,
+    // and a Hold is judged at its head and its tail (RunJudge.CountJudgements).
+    private void BuildJudge()
     {
-        if (chart == null) return 0;
+        runJudge = null;
 
-        int count = 0;
+        if (noteSpawner == null || noteSpawner.chart == null || noteSpawner.lanes == null || judge == null) return;
 
-        for (int i = 0; i < chart.notes.Count; i++)
-        {
-            NoteData note = chart.notes[i];
-            bool isHold = note.type == NoteType.Hold && note.duration > 0f;
-            count += note.type == NoteType.Twin || isHold ? 2 : 1;
-        }
+        runJudge = new RunJudge(noteSpawner.chart.notes, noteSpawner.lanes.Length, judge, ScoreRulesNow(), state);
+        runJudge.Reset();
+        PushHud();
+    }
 
-        return count;
+    /// <summary>Whether the judge has already decided that note - the spawner skips drawing it.</summary>
+    public bool IsNoteResolved(int lane, int index)
+    {
+        return runJudge != null && runJudge.IsResolved(lane, index);
     }
 
     // The chart owns its own audio and sync offset, so a different song is a
@@ -444,47 +458,47 @@ void Update()
         }
     }
 
-    // The same one-note-per-key-per-frame rule, except the candidate comes from
-    // the spawner's active list and "in range" is a song time window rather
-    // than a collider overlap.
+    /// <summary>
+    /// 一帧 / One frame: read the clock once, read the lanes once, record exactly that, and judge
+    /// exactly that. The server replays the recording through the same RunJudge, so nothing the
+    /// judge consumes may come from anywhere but these three values.
+    /// </summary>
     private void HandleSpawnedNoteInput()
     {
-        // Start() has already logged what is missing if either is absent.
-        if (noteSpawner == null || noteSpawner.lanes == null || Conductor.instance == null) return;
+        // Start() has already logged what is missing if any is absent.
+        if (noteSpawner == null || noteSpawner.lanes == null || Conductor.instance == null || runJudge == null) return;
 
         // Song time is frozen while paused, so a press would be judged against
         // a stale clock, and letting go of a hold would drop it.
         if (Conductor.instance.IsPaused) return;
 
+        // 结束了就不再记 / Once the run has failed or its results are up, nothing more is judged
+        // or recorded: the trace sent ends where the run ended.
+        if (runJudge.Failed || resultsScreen.activeInHierarchy) return;
+
         float songTime = Conductor.instance.SongTime;
+        ReadLanes(out int pressed, out int held);
 
-        // The same song time and the same input the judging below consumes.
-        RecordFrame(songTime);
+        inputTrace.Record(songTime, pressed, held);
 
-        // Holds first, so a hold whose tail completes this frame frees its
-        // lane before a new press in that lane is looked at.
-        UpdateHolds(songTime);
-
-        for (int laneIndex = 0; laneIndex < noteSpawner.lanes.Length; laneIndex++)
+        // Every press answers, note or not - a button that reacts only
+        // when something is there to hit feels laggy.
+        for (int laneIndex = 0; laneIndex < noteSpawner.lanes.Length && laneIndex < 8; laneIndex++)
         {
-            KeyCode key = noteSpawner.lanes[laneIndex].key;
-
-            if (!Input.GetKeyDown(key) && !simulatedKeyDownsThisFrame.Contains(key))
-            {
-                continue;
-            }
-
-            // Every press answers, note or not - a button that reacts only
-            // when something is there to hit feels laggy.
-            PunchButton(key);
-
-            NoteView note = noteSpawner.PeekJudgeable(laneIndex, songTime);
-
-            // A press with nothing in range does nothing, as before.
-            if (note == null) continue;
-
-            JudgeNote(note, laneIndex, songTime);
+            if ((pressed & (1 << laneIndex)) != 0) PunchButton(noteSpawner.lanes[laneIndex].key);
         }
+
+        stepTime = songTime;
+        runJudge.Step(songTime, pressed, held, this);
+
+        // 手动开狂热 / Fever by hand, only when the rules do not open it themselves. Not in the
+        // trace: the server refuses such a ruleset, so a ranked run never takes this path.
+        if (!fever.autoActivate && state.feverGauge >= fever.maxFever && Input.GetKeyDown(fever.manualActivateKey))
+        {
+            runJudge.ActivateFever(songTime, this);
+        }
+
+        PushHud();
     }
 
     private void PunchButton(KeyCode key)
@@ -500,49 +514,111 @@ void Update()
         return lane.IsValid ? lane.HitPos : Vector3.zero;
     }
 
-    // Grading now runs through JudgeSettings, so Tap/Twin and Hold can have
-    // different windows and a press outside the widest one resolves nothing.
-    private void JudgeNote(NoteView note, int laneIndex, float songTime)
+    // ------------------------------------------------------------- what the judge decided
+
+    // 只画 / Drawing only. These are told after RunJudge has moved the state, and must never move it
+    // themselves: the server judges the same frames with no listener at all.
+
+    public void OnHit(int lane, int index, NoteType type, Judgement judgement, float signedDelta, bool holdBegins)
     {
-        Vector3 hitAt = note.transform.position;
+        NoteView view = noteSpawner.ViewOf(lane, index);
+        Vector3 hitAt = view != null ? view.transform.position : LaneButtonPos(lane);
 
-        // Negative is early. The sign only matters for the FAST/SLOW tag.
-        float signedDelta = songTime - note.Data.hitTime;
-        Judgement judgement = judge.Grade(note.Data.type, Mathf.Abs(signedDelta));
-
-        // PeekJudgeable already filtered by MaxWindow, so a Miss here means the
-        // press was out of range and should simply not consume the note.
-        if (judgement == Judgement.Miss) return;
-
-        // 被动可以升级判定 / The operator's passive gets to rewrite what landed - deliberately
-        // after the line above, so no passive can turn a press that was out of range into a
-        // hit. Everything downstream (score, fever gain, the popup) reads the rewritten value,
-        // which is the point: a promoted Great must look and pay exactly like a Perfect.
-        if (state.passive != null) judgement = state.passive.Regrade(judgement, state);
-
-        if (note.IsHold) note.BeginHold(songTime);
-        else note.MarkHit();
-
-        switch (judgement)
+        if (view != null)
         {
-            case Judgement.Perfect: PerfectHit(); break;
-            case Judgement.Great: GoodHit(); break;
-            default: NormalHit(); break;
+            if (holdBegins) view.BeginHold();
+            else view.MarkHit();
         }
 
         if (feedback != null)
         {
-            feedback.OnHit(laneIndex, LaneButtonPos(laneIndex), judgement, signedDelta, note.Data.type);
+            feedback.OnCombo(state.combo);
+            feedback.OnHit(lane, LaneButtonPos(lane), judgement, signedDelta, type);
         }
         else
         {
             SpawnLegacyEffect(judgement, hitAt);
         }
 
-        // 先动作后狂热 / Before AddFever, so a hit that opens fever lets the fever pose win.
-        if (character != null) character.OnHit(laneIndex, judgement, note.Data.type, note.IsHold);
+        if (character != null) character.OnHit(lane, judgement, type, holdBegins);
+    }
 
-        AddFever(fever.GainFor(judgement));
+    public void OnHoldTick(int lane)
+    {
+        if (feedback != null) feedback.OnHoldTick(LaneButtonPos(lane));
+    }
+
+    public void OnHoldEnd(int lane, int index, Judgement judgement)
+    {
+        NoteView view = noteSpawner.ViewOf(lane, index);
+        Vector3 at = view != null ? view.transform.position : LaneButtonPos(lane);
+        if (view != null) view.MarkHit();
+
+        if (feedback != null)
+        {
+            feedback.OnCombo(state.combo);
+            feedback.OnHoldEnd(lane, LaneButtonPos(lane), judgement);
+        }
+        else
+        {
+            SpawnLegacyEffect(judgement, at);
+        }
+
+        if (character != null) character.OnHoldEnd(lane);
+    }
+
+    public void OnHoldDropped(int lane, int index)
+    {
+        NoteView view = noteSpawner.ViewOf(lane, index);
+        if (view != null) view.MarkDropped(stepTime);
+
+        if (character != null) character.OnHoldDropped(lane);
+        if (feedback != null) feedback.OnMiss(lane, LaneButtonPos(lane));
+    }
+
+    public void OnMiss(int lane, int index, NoteType type)
+    {
+        NoteView view = noteSpawner.ViewOf(lane, index);
+        if (view != null) view.MarkMissed();
+
+        // 先反应后结算 / Told before the miss is counted, which can end the run: the fall must be
+        // the last thing said.
+        if (character != null) character.OnMiss(lane);
+        if (feedback != null) feedback.OnMiss(lane, LaneButtonPos(lane));
+    }
+
+    public void OnFeverStart()
+    {
+        if (character != null) character.OnFeverStart();
+    }
+
+    public void OnFeverEnd()
+    {
+        if (character != null) character.OnFeverEnd();
+    }
+
+    public void OnFail()
+    {
+        PushHud();
+        FailRun();
+    }
+
+    /// <summary>The score and combo labels and the gauges, from the state as the judge left it.</summary>
+    private void PushHud()
+    {
+        if (state.score != shownScore)
+        {
+            shownScore = state.score;
+            scoreText.text = "Score: " + state.score;
+        }
+
+        if (state.combo != shownCombo)
+        {
+            shownCombo = state.combo;
+            multiText.text = state.combo.ToString();
+        }
+
+        PushGauges();
     }
 
     private void SpawnLegacyEffect(Judgement judgement, Vector3 at)
@@ -552,76 +628,6 @@ void Update()
                           : hitEffect;
 
         if (effect != null) Instantiate(effect, at, effect.transform.rotation);
-    }
-
-    // Scores the body of every hold being held, and resolves its tail: held to
-    // the end is a Perfect, let go within the Great window of the end still
-    // counts, and anything earlier drops the rest of the note.
-    private void UpdateHolds(float songTime)
-    {
-        for (int laneIndex = 0; laneIndex < noteSpawner.lanes.Length; laneIndex++)
-        {
-            NoteView hold = noteSpawner.ActiveHold(laneIndex);
-            if (hold == null) continue;
-
-            int ticks = hold.ConsumeHoldTicks(songTime, holdTickInterval);
-            for (int i = 0; i < ticks; i++)
-            {
-                HoldTick();
-                if (feedback != null) feedback.OnHoldTick(LaneButtonPos(laneIndex));
-            }
-
-            if (songTime >= hold.EndTime)
-            {
-                CompleteHold(hold, laneIndex, Judgement.Perfect);
-                continue;
-            }
-
-            if (IsLaneHeld(noteSpawner.lanes[laneIndex].key)) continue;
-
-            float early = hold.EndTime - songTime;
-
-            if (early <= judge.holdPerfect) CompleteHold(hold, laneIndex, Judgement.Perfect);
-            else if (early <= judge.holdGreat) CompleteHold(hold, laneIndex, Judgement.Great);
-            else
-            {
-                hold.MarkDropped(songTime);
-                HoldDropped();
-                if (character != null) character.OnHoldDropped(laneIndex);
-                if (feedback != null) feedback.OnMiss(laneIndex, LaneButtonPos(laneIndex));
-            }
-        }
-    }
-
-    private void CompleteHold(NoteView hold, int laneIndex, Judgement judgement)
-    {
-        Vector3 at = hold.transform.position;
-        hold.MarkHit();
-
-        if (judgement == Judgement.Perfect) PerfectHit();
-        else GoodHit();
-
-        if (feedback != null) feedback.OnHoldEnd(laneIndex, LaneButtonPos(laneIndex), judgement);
-        else SpawnLegacyEffect(judgement, at);
-
-        if (character != null) character.OnHoldEnd(laneIndex);
-
-        AddFever(fever.GainFor(judgement));
-    }
-
-    // Called by NoteSpawner when a note runs out of window unplayed, so the
-    // miss can be shown in the lane it happened in.
-    public void NoteMissedInLane(NoteType type, int laneIndex)
-    {
-        // 先反应后结算 / Before NoteMissed, which can end the run: the fall must be the last thing said.
-        if (character != null) character.OnMiss(laneIndex);
-
-        NoteMissed(type);
-
-        if (feedback != null && noteSpawner != null && laneIndex >= 0 && laneIndex < noteSpawner.lanes.Length)
-        {
-            feedback.OnMiss(laneIndex, LaneButtonPos(laneIndex));
-        }
     }
 
     public void RegisterNote(KeyCode key, NoteObject note)
@@ -643,34 +649,13 @@ void Update()
         }
     }
 
+    // 旧路径用 / The legacy NoteObject path only: the spawner path pays through RunJudge.
     private void NoteHit(int baseScore)
     {
-        Debug.Log("Hit On Time");
-
         state.NoteHit(baseScore);
-
-        multiText.text = state.combo.ToString();
-        scoreText.text = "Score: " + state.score;
+        PushHud();
 
         if (feedback != null) feedback.OnCombo(state.combo);
-    }
-
-    // Awarded per 100ms of a held note's body. Deliberately does not touch
-    // combo or the multiplier - the spec says only the head and tail do.
-    public void HoldTick()
-    {
-        state.HoldTick(scorePerHoldTick);
-        scoreText.text = "Score: " + state.score;
-    }
-
-    // Releasing a hold early kills the rest of the note: the spec drops the
-    // combo and the Full Combo, but charges no HP for it. The unplayed tail
-    // still counts as a miss on the results screen, or accuracy would ignore it.
-    public void HoldDropped()
-    {
-        state.HoldDropped();
-
-        multiText.text = state.combo.ToString();
     }
 
     public void NormalHit()
@@ -777,7 +762,16 @@ void Update()
         startPlaying = false;
 
         SyncTuning();
-        state.Reset();
+        if (runJudge != null)
+        {
+            // Awards retuned in the Inspector since the last attempt reach this one.
+            runJudge.SetScore(ScoreRulesNow());
+            runJudge.Reset();
+        }
+        else
+        {
+            state.Reset();
+        }
         BeginTrace();
 
         if (character != null) character.OnReset();
@@ -785,8 +779,7 @@ void Update()
         if (failedText != null) failedText.SetActive(false);
         PushGauges();
 
-        scoreText.text = "Score: 0";
-        multiText.text = "0";
+        PushHud();
         if (rankingText != null) rankingText.text = "";
         if (rewardsText != null) rewardsText.text = "";
         resultsScreen.SetActive(false);
@@ -799,31 +792,14 @@ void Update()
         BeginSong();
     }
 
+    // 旧路径用 / The legacy NoteObject path only.
     public void NoteMissed(NoteType type)
     {
         bool justFailed = state.NoteMissed(type);
 
-        multiText.text = state.combo.ToString();
-        PushGauges();
+        PushHud();
 
         if (justFailed) FailRun();
-    }
-
-    public void Damage(int amount)
-    {
-        if (character != null) character.OnDamage();
-
-        bool justFailed = state.Damage(amount);
-
-        PushGauges();
-
-        if (justFailed) FailRun();
-    }
-
-    public void Heal(int amount)
-    {
-        state.Heal(amount);
-        PushGauges();
     }
 
     // Out of HP: stop the song and let Update's normal end-of-song branch raise
@@ -841,75 +817,6 @@ void Update()
         {
             theMusic.Stop();
         }
-    }
-
-    private void AddFever(float amount)
-    {
-        if (state.AddFever(amount)) BeginFeverWindow();
-
-        PushGauges();
-    }
-
-    public void ActivateFever()
-    {
-        if (state.ActivateFever()) BeginFeverWindow();
-    }
-
-    // The deadline is the half RunState cannot own: it needs a clock, and this one
-    // has to be song time.
-    private void BeginFeverWindow()
-    {
-        // 开窗时结算一次加成 / The bonus is decided once, as the window opens, rather than
-        // re-read while fever burns. The deadline below is a fixed point in song time; letting
-        // a passive move it mid-fever would make the gauge drain against a target that keeps
-        // shifting.
-        float extra = state.passive != null ? state.passive.ExtraFeverSeconds(state) : 0f;
-
-        feverEndsAtSongTime = SongTimeNow() + fever.feverDuration + extra;
-
-        if (character != null) character.OnFeverStart();
-    }
-
-    // 用歌曲时间的增量 / Song-time delta, not Time.deltaTime. A passive on a timer has to
-    // count the same clock the chart does, or it drifts - and it must not tick at all while
-    // the song is paused or still in the READY/GO run-in, which song time gives for free.
-    private void UpdatePassive()
-    {
-        float now = SongTimeNow();
-        float delta = now - lastPassiveSongTime;
-        lastPassiveSongTime = now;
-
-        // 负数说明刚 seek 过 / A negative delta means the song was just sought backwards, as a
-        // retry does. Skip that frame rather than paying out or rewinding a timer.
-        if (delta > 0f) state.TickPassive(delta);
-    }
-
-    // Fever runs on song time rather than Time.time, so pausing and restarting
-    // cannot desync it - the same reason the note path avoids WaitForSeconds.
-    private void UpdateFever()
-    {
-        if (!state.feverActive)
-        {
-            if (!fever.autoActivate && state.feverGauge >= fever.maxFever
-                && Input.GetKeyDown(fever.manualActivateKey))
-            {
-                ActivateFever();
-            }
-
-            return;
-        }
-
-        state.TickFever(feverEndsAtSongTime - SongTimeNow());
-
-        // RunState decides when fever ends, so the stage learns it by looking.
-        if (!state.feverActive && character != null) character.OnFeverEnd();
-
-        PushGauges();
-    }
-
-    private float SongTimeNow()
-    {
-        return Conductor.instance != null ? Conductor.instance.SongTime : 0f;
     }
 
     // The tuning stays serialized on this component and the state object only
@@ -952,10 +859,20 @@ void Update()
 
         // Reset rewinds the rolls to this, so a retry draws exactly what the first attempt drew.
         state.seed = runSeed;
+    }
 
-        // 重置增量锚点 / Re-anchored here because SyncTuning runs on every reset, and a retry
-        // would otherwise hand the passive the whole of the previous run as one delta.
-        lastPassiveSongTime = 0f;
+    /// <summary>The awards as GameManager's fields hold them now - what RunJudge pays and the result describes.</summary>
+    private ScoreRules ScoreRulesNow()
+    {
+        return new ScoreRules
+        {
+            perfect = scorePerPerfectNote,
+            great = scorePerGoodNote,
+            hit = scorePerNote,
+            holdTick = scorePerHoldTick,
+            holdTickInterval = holdTickInterval,
+            multiplierThresholds = multiplierThresholds ?? new int[0],
+        };
     }
 
     // ------------------------------------------------------------------- retry
@@ -1126,17 +1043,14 @@ void Update()
     }
 
     /// <summary>
-    /// 每帧记一笔 / Records what this frame's judging is about to consume: the song time it judges
-    /// at, the lanes that went down, and the lanes being held.
-    ///
-    /// 只读 / Pure reads of the same input the judging reads a few lines later, so recording can
-    /// never change what the player gets. Called after the pause check, so a paused frame - whose
-    /// song time is frozen - is not recorded at all.
+    /// 每帧读一次 / This frame's input as the trace records it and the judge consumes it: the lanes
+    /// that went down, and the lanes being held - keyboard or touch. Read once, so what is recorded
+    /// and what is judged cannot differ.
     /// </summary>
-    private void RecordFrame(float songTime)
+    private void ReadLanes(out int pressed, out int held)
     {
-        int pressed = 0;
-        int held = 0;
+        pressed = 0;
+        held = 0;
 
         for (int lane = 0; lane < noteSpawner.lanes.Length && lane < 8; lane++)
         {
@@ -1145,8 +1059,6 @@ void Update()
             if (Input.GetKeyDown(key) || simulatedKeyDownsThisFrame.Contains(key)) pressed |= 1 << lane;
             if (IsLaneHeld(key)) held |= 1 << lane;
         }
-
-        inputTrace.Record(songTime, pressed, held);
     }
 
     /// <summary>A fresh trace, at the top of every attempt - a retry included.</summary>
@@ -1270,15 +1182,7 @@ void Update()
         Ruleset rules = new Ruleset
         {
             version = Ruleset.CurrentVersion,
-            score = new ScoreRules
-            {
-                perfect = scorePerPerfectNote,
-                great = scorePerGoodNote,
-                hit = scorePerNote,
-                holdTick = scorePerHoldTick,
-                holdTickInterval = holdTickInterval,
-                multiplierThresholds = multiplierThresholds ?? new int[0],
-            },
+            score = ScoreRulesNow(),
             judge = JudgeRules.From(judge),
             health = HealthRules.From(health),
             fever = FeverRules.From(fever),

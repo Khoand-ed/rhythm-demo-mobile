@@ -30,6 +30,19 @@ public class Player
     /// </summary>
     public string? Signature { get; set; }
 
+    /// <summary>
+    /// When the player last changed <see cref="Signature"/>. Orders the moderators' list of recent
+    /// lines; null for a player who never wrote one.
+    /// </summary>
+    public DateTimeOffset? SignatureUpdatedAt { get; set; }
+
+    /// <summary>
+    /// 管理员锁 / Set by a moderator: until then the player cannot write a signature. Null, or a
+    /// moment already past, is no lock; <c>SignatureLock.Permanent</c> is one that never lifts.
+    /// What was done and why is in <see cref="SignatureModeration"/>.
+    /// </summary>
+    public DateTimeOffset? SignatureLockedUntil { get; set; }
+
     public int Level { get; set; } = 1;
 
     public int Exp { get; set; }
