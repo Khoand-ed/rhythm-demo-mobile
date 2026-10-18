@@ -11,7 +11,8 @@ using Promuse.Persistence.Entities;
 namespace Promuse.Api.Characters;
 
 /// <summary>
-/// 干员升级 / Levelling an operator with battle records and LMD.
+/// 干员升级和精英化 / Levelling an operator with battle records and LMD, and promoting it to the
+/// next elite phase, which raises its level cap.
 ///
 /// 客户端只说用什么 / The device names the records it spends, never the level it wants: the server
 /// adds up their EXP and works the level out with the same OperatorLevels the level-up screen
@@ -113,6 +114,87 @@ public sealed class CharacterService(
 
         return Outcome<LevelUpResult>.Ok(
             new LevelUpResult(characterId, from, gain.Level, gain.Applied, lmd, state.Value!));
+    }
+
+    /// <summary>
+    /// 精英化 / Promotes an operator one elite phase, at its current level cap, for the LMD, Orirock
+    /// and Sugar Substitute OperatorLevels.PromotionCost names. The level stays where it is - only
+    /// the cap rises - so nothing about how the operator plays changes until it is levelled again.
+    /// </summary>
+    public async Task<Outcome<PromoteResult>> PromoteAsync(
+        Guid accountId, string characterId, PromoteRequest? request, CancellationToken ct)
+    {
+        if (request is null || request.ToElite < 1)
+        {
+            return Outcome<PromoteResult>.Fail(ApiProblems.ValidationFailed(new Dictionary<string, string[]>
+            {
+                ["toElite"] = ["The elite phase to promote to, 1 or more."],
+            }));
+        }
+
+        DateTimeOffset now = clock.GetUtcNow();
+
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+
+        // 同一把锁 / The same row lock as a level-up: a promotion and a level-up of one operator
+        // queue behind each other rather than each starting from the phase and level before.
+        PlayerCharacter? character = await db.PlayerCharacters
+            .FromSqlInterpolated($"""
+                SELECT * FROM player_characters
+                WHERE account_id = {accountId} AND character_id = {characterId}
+                FOR UPDATE
+                """)
+            .FirstOrDefaultAsync(ct);
+
+        if (character is null)
+        {
+            return Outcome<PromoteResult>.Fail(ApiProblems.CharacterNotOwned(characterId, "it cannot be promoted"));
+        }
+
+        OperatorRules rules = data.Rules.FindOperator(characterId)
+            ?? throw new InvalidOperationException(
+                $"'{characterId}' is on a roster but not in ruleset.json, so its elite phases are unknown.");
+
+        int maxElite = OperatorLevels.MaxElite(rules.rarity);
+        if (character.Elite >= maxElite) return Outcome<PromoteResult>.Fail(ApiProblems.EliteCapped(maxElite));
+
+        // 说好的那一级 / Only the next phase. A request naming any other was built from a screen that
+        // had not seen the operator's current phase - most likely a promotion already sent.
+        if (request.ToElite != character.Elite + 1)
+        {
+            return Outcome<PromoteResult>.Fail(ApiProblems.ValidationFailed(new Dictionary<string, string[]>
+            {
+                ["toElite"] = [$"The operator is at elite {character.Elite}; it can only be promoted to {character.Elite + 1}."],
+            }));
+        }
+
+        int cap = OperatorLevels.MaxLevel(rules.rarity, character.Elite);
+        if (character.Level < cap) return Outcome<PromoteResult>.Fail(ApiProblems.BelowLevelCap(character.Level, cap));
+
+        IReadOnlyList<ItemStack> cost = OperatorLevels.PromotionCost(rules.rarity, request.ToElite)!;
+
+        foreach (ItemStack item in cost)
+        {
+            if (!await inventory.TryDebitAsync(accountId, item.ItemId, item.Amount, ct))
+            {
+                return Outcome<PromoteResult>.Fail(ApiProblems.InsufficientFunds());
+            }
+        }
+
+        int from = character.Elite;
+        character.Elite = request.ToElite;
+        character.Exp = 0;
+
+        await db.SaveChangesAsync(ct);
+        await inventory.BumpStateVersionAsync(accountId, now, ct);
+        await transaction.CommitAsync(ct);
+
+        Outcome<PlayerState> state = await players.GetStateAsync(accountId, ct);
+        if (!state.IsSuccess) return Outcome<PromoteResult>.Fail(state.Problem!);
+
+        return Outcome<PromoteResult>.Ok(new PromoteResult(
+            characterId, from, character.Elite, character.Level,
+            OperatorLevels.MaxLevel(rules.rarity, character.Elite), cost, state.Value!));
     }
 
     private static Dictionary<string, string[]> Validate(LevelUpRequest? request)

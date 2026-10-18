@@ -44,6 +44,31 @@ public class OperatorLevelRulesTests
     }
 
     [Fact]
+    public void Every_phase_a_rarity_reaches_has_a_cost_and_a_higher_cap()
+    {
+        for (int rarity = 1; rarity <= 6; rarity++)
+        {
+            int maxElite = OperatorLevels.MaxElite(rarity);
+
+            for (int elite = 1; elite <= maxElite; elite++)
+            {
+                var cost = OperatorLevels.PromotionCost(rarity, elite);
+                Assert.NotNull(cost);
+                Assert.Equal([OperatorLevels.LmdItemId, OperatorLevels.OrirockItemId, OperatorLevels.SugarSubstituteItemId],
+                             cost!.Select(c => c.ItemId));
+                Assert.All(cost, c => Assert.True(c.Amount > 0));
+                Assert.True(OperatorLevels.MaxLevel(rarity, elite) > OperatorLevels.MaxLevel(rarity, elite - 1));
+            }
+
+            Assert.Null(OperatorLevels.PromotionCost(rarity, maxElite + 1));
+            Assert.Null(OperatorLevels.PromotionCost(rarity, 0));
+        }
+
+        // The reference's 6-star to Elite 2.
+        Assert.Equal(180000, OperatorLevels.PromotionCost(6, 2)![0].Amount);
+    }
+
+    [Fact]
     public void Every_shipped_operator_has_a_level_cap()
     {
         var rules = Promuse.Scoring.Rules.RulesetLoader.Load(

@@ -80,6 +80,20 @@ public class OperatorLevelEndpointTests(PromuseApiFactory factory)
     private static CharacterState Character(PlayerState state, string id = Played.Operator) =>
         state.Characters.Single(c => c.CharacterId == id);
 
+    private Task<HttpResponseMessage> PromoteAsync(AuthSession session, int toElite, string characterId = Played.Operator,
+                                                   string? key = null) =>
+        _client.SendAsync(Send(HttpMethod.Post, $"/v1/characters/{characterId}/promote", session,
+            new PromoteRequest(toElite), key));
+
+    /// <summary>Everything PULSE's promotion to Elite 1 costs, and a little to spare.</summary>
+    private async Task GivePromotionAsync(AuthSession session, int spare = 0)
+    {
+        foreach (ItemStack item in OperatorLevels.PromotionCost(3, 1)!)
+        {
+            await GiveAsync(session, item.ItemId, item.Amount + spare);
+        }
+    }
+
     private static async Task<string> CodeOf(HttpResponseMessage response) =>
         (await response.Content.ReadFromJsonAsync<ApiProblem>(Json))!.Code;
 
@@ -226,6 +240,106 @@ public class OperatorLevelEndpointTests(PromuseApiFactory factory)
         Assert.Equal(HttpStatusCode.OK, again.StatusCode);
         Assert.Equal(await first.Content.ReadAsStringAsync(), await again.Content.ReadAsStringAsync());
         Assert.Equal(1, Amount(await StateAsync(session), 11));
+    }
+
+    // ------------------------------------------------------------- promote
+
+    [Fact]
+    public async Task Promotion_at_the_cap_raises_it_keeps_the_level_and_costs_exactly_the_table()
+    {
+        AuthSession session = await SignInAsync();
+        await SetLevelAsync(session, 40);
+        await GivePromotionAsync(session, spare: 1);
+
+        HttpResponseMessage response = await PromoteAsync(session, 1);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        PromoteResult result = (await response.Content.ReadFromJsonAsync<PromoteResult>(Json))!;
+
+        Assert.Equal((0, 1, 40, 55), (result.FromElite, result.ToElite, result.Level, result.MaxLevel));
+        Assert.Equal((1, 40), (Character(result.Player).Elite, Character(result.Player).Level));
+
+        // One of each left over: exactly the table was taken.
+        Assert.All(OperatorLevels.PromotionCost(3, 1)!, item => Assert.Equal(1, Amount(result.Player, item.ItemId)));
+    }
+
+    [Fact]
+    public async Task After_promotion_levelling_goes_past_the_old_cap_on_the_new_phases_curve()
+    {
+        AuthSession session = await SignInAsync();
+        await SetLevelAsync(session, 40);
+        await GivePromotionAsync(session);
+        Assert.Equal(HttpStatusCode.OK, (await PromoteAsync(session, 1)).StatusCode);
+
+        await GiveAsync(session, 16, 1);
+        await GiveAsync(session, OperatorLevels.LmdItemId, 5000);
+
+        HttpResponseMessage response = await LevelUpAsync(session, Played.Operator, null, (16, 1));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        LevelUpResult result = (await response.Content.ReadFromJsonAsync<LevelUpResult>(Json))!;
+
+        LevelGain expected = OperatorLevels.Gain(1, 40, 0, 55, 2000);
+        Assert.Equal(expected.Level, result.ToLevel);
+        Assert.Equal(OperatorLevels.LmdFor(1, 2000), result.LmdSpent);
+    }
+
+    [Fact]
+    public async Task Promotion_below_the_cap_or_past_the_last_phase_is_refused_and_nothing_is_spent()
+    {
+        AuthSession session = await SignInAsync();
+        await GivePromotionAsync(session);
+        await SetLevelAsync(session, 39);
+
+        HttpResponseMessage low = await PromoteAsync(session, 1);
+        Assert.Equal(HttpStatusCode.Conflict, low.StatusCode);
+        Assert.Equal(ErrorCodes.BelowLevelCap, await CodeOf(low));
+
+        // PULSE is a 3-star: Elite 1 is as far as it goes.
+        await SqlAsync($"UPDATE player_characters SET elite = 1, level = 55 WHERE account_id = {session.PlayerId}");
+        HttpResponseMessage top = await PromoteAsync(session, 2);
+        Assert.Equal(HttpStatusCode.Conflict, top.StatusCode);
+        Assert.Equal(ErrorCodes.EliteCapped, await CodeOf(top));
+
+        PlayerState state = await StateAsync(session);
+        Assert.All(OperatorLevels.PromotionCost(3, 1)!, item => Assert.Equal(item.Amount, Amount(state, item.ItemId)));
+    }
+
+    [Fact]
+    public async Task Short_of_materials_or_naming_the_wrong_phase_nothing_happens()
+    {
+        AuthSession session = await SignInAsync();
+        await SetLevelAsync(session, 40);
+        await GiveAsync(session, OperatorLevels.LmdItemId, 100000);
+        await GiveAsync(session, OperatorLevels.OrirockItemId, 100);
+
+        HttpResponseMessage poor = await PromoteAsync(session, 1);
+        Assert.Equal(HttpStatusCode.Conflict, poor.StatusCode);
+        Assert.Equal(ErrorCodes.InsufficientFunds, await CodeOf(poor));
+
+        await GiveAsync(session, OperatorLevels.SugarSubstituteItemId, 100);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await PromoteAsync(session, 2)).StatusCode);
+
+        PlayerState state = await StateAsync(session);
+        Assert.Equal(0, Character(state).Elite);
+        Assert.Equal(100000, Amount(state, OperatorLevels.LmdItemId));
+        Assert.Equal(100, Amount(state, OperatorLevels.OrirockItemId));
+    }
+
+    [Fact]
+    public async Task A_retried_promotion_replays_the_first_answer_instead_of_paying_twice()
+    {
+        AuthSession session = await SignInAsync();
+        await SetLevelAsync(session, 40);
+        await GivePromotionAsync(session, spare: 100000);
+        string key = Unique;
+
+        HttpResponseMessage first = await PromoteAsync(session, 1, key: key);
+        HttpResponseMessage again = await PromoteAsync(session, 1, key: key);
+
+        Assert.Equal(HttpStatusCode.OK, again.StatusCode);
+        Assert.Equal(await first.Content.ReadAsStringAsync(), await again.Content.ReadAsStringAsync());
+
+        // Paid once: the spare is what is left.
+        Assert.Equal(100000, Amount(await StateAsync(session), OperatorLevels.LmdItemId));
     }
 
     [Fact]

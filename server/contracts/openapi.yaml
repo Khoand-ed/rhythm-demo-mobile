@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Promuse Backend API
-  version: 1.0.0-draft.14
+  version: 1.0.0-draft.15
   summary: Authentication and player state for the Promuse mobile rhythm game.
   description: |
     **Phase 1** authentication, **Phase 2** player state, **Phase 3** the economy -
@@ -65,8 +65,9 @@ tags:
     description: Player state - the save that `PlayerData` never had. Phase 2.
   - name: characters
     description: |
-      Operators: levelling with battle records and LMD. An operator's rhythm stats grow
-      with its level, so the level is a number only the server sets.
+      Operators: levelling with battle records and LMD, and promotion to the next elite
+      phase. An operator's rhythm stats grow with its level, so the level is a number
+      only the server sets.
   - name: shop
     description: |
       The economy, with the server holding the prices. Phase 3.
@@ -664,6 +665,57 @@ paths:
           description: |
             `CHARACTER_NOT_OWNED`, `LEVEL_CAPPED` (already at the cap for its elite
             phase), or `INSUFFICIENT_FUNDS` (not enough LMD or records). Nothing is spent.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/characters/{characterId}/promote:
+    post:
+      tags: [characters]
+      operationId: promoteCharacter
+      summary: Promote an operator to its next elite phase, raising its level cap.
+      description: |
+        Only at the current level cap, and only to the next phase the rarity reaches
+        (3-star: Elite 1; 4-star and up: Elite 2). The level stays where it is - only
+        the cap rises - so the operator plays exactly as before until it is levelled
+        again, now on the new phase's EXP curve.
+
+        Costs LMD, Orirock and Sugar Substitute by rarity and phase
+        (`OperatorLevels.PromotionCost`), all taken together or none.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - name: characterId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PromoteRequest'
+      responses:
+        '200':
+          description: Promoted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromoteResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: |
+            `CHARACTER_NOT_OWNED`, `ELITE_CAPPED` (already at the last phase its rarity
+            reaches), `BELOW_LEVEL_CAP` (level it to the cap first), or
+            `INSUFFICIENT_FUNDS`. Nothing is spent.
           content:
             application/problem+json:
               schema:
@@ -2639,6 +2691,40 @@ components:
           description: The EXP that went into the operator; overflow past the cap is not counted.
         lmdSpent:
           type: integer
+        player:
+          $ref: '#/components/schemas/PlayerState'
+
+    PromoteRequest:
+      type: object
+      required: [toElite]
+      properties:
+        toElite:
+          type: integer
+          minimum: 1
+          description: |
+            Always one past the operator's own phase. Naming any other is refused, so a
+            second promotion sent from a screen that had not seen the first is not taken.
+
+    PromoteResult:
+      type: object
+      required: [characterId, fromElite, toElite, level, maxLevel, spent, player]
+      properties:
+        characterId:
+          type: string
+        fromElite:
+          type: integer
+        toElite:
+          type: integer
+        level:
+          type: integer
+          description: Unchanged by promotion.
+        maxLevel:
+          type: integer
+          description: The new cap.
+        spent:
+          type: array
+          items:
+            $ref: '#/components/schemas/ItemStack'
         player:
           $ref: '#/components/schemas/PlayerState'
 
