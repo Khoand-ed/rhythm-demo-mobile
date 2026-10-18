@@ -69,6 +69,13 @@
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 11px; }
   .preview img { width: 100%; display: block; margin-bottom: 11px; }
   .preview .para { margin-bottom: 11px; }
+  /* Flagged runs and reports: one card each, the claim beside the replay. */
+  .card { border: 1px solid var(--edge); border-radius: 6px; padding: 10px 12px; margin-top: 10px; background: var(--bg); }
+  .card .top { gap: 8px; flex-wrap: wrap; }
+  .card table td, .card table th { padding: 4px 6px; }
+  .differs { color: var(--warn); font-weight: 600; }
+  .badge.warn { background: #4d3a12; color: var(--warn); }
+  .line { overflow-wrap: anywhere; }
   @media (max-width: 640px) { label { min-width: 100%; } }
 </style>
 </head>
@@ -91,6 +98,7 @@
     <button id="tabSignIn" type="button">Sign-in</button>
     <button id="tabCampaign" type="button">Campaign</button>
     <button id="tabSignatures" type="button">Signatures</button>
+    <button id="tabRuns" type="button">Runs</button>
   </nav>
 
   <!-- Sign in with an administrator account. The page holds the access token for this tab only. -->
@@ -310,7 +318,13 @@
 
   <!-- 签名审核 / The lines players write on their profile cards: newest first, or found by name. -->
   <section id="signatures" class="panel" hidden>
-    <h2>Signatures</h2>
+    <div class="top"><h2>Reports <span id="repCount" class="badge"></span></h2><button id="repReload" class="ghost" type="button">Reload</button></div>
+    <div class="muted small">Lines players reported, the most reported first. Remove takes the line down (with the form below);
+      Dismiss leaves it up. Either way every reporter is thanked by mail.</div>
+    <div id="repList"></div>
+    <div id="repStatus" class="status"></div>
+
+    <h2 style="margin-top:22px">Signatures</h2>
     <div class="muted small">The lines players write on their profile cards, the newest first. Search part of a name, or Name#0420 for one player.</div>
     <div class="row" style="margin-top:10px">
       <input id="sigQuery" type="text" placeholder="Name or Name#0420 - empty for the newest lines">
@@ -347,12 +361,26 @@
     </div>
 
     <div class="module">
-      <div class="top"><h3>History</h3><button id="sigHistoryReload" class="ghost" type="button">Reload</button></div>
+      <div class="top"><h3>Moderation history</h3><button id="sigHistoryReload" class="ghost" type="button">Reload</button></div>
       <div class="scroll"><table>
         <thead><tr><th>When</th><th>Player</th><th>Action</th><th>Line removed</th><th>Reason</th><th>Lock</th><th>Mail</th><th>By</th></tr></thead>
         <tbody id="sigHistory"></tbody>
       </table></div>
     </div>
+  </section>
+
+  <!-- 被标记的成绩 / Clears the review held off the boards, waiting for a decision. -->
+  <section id="runs" class="panel" hidden>
+    <div class="top">
+      <h2>Flagged runs</h2>
+      <div><button id="runWaiting" type="button">Waiting</button> <button id="runDecided" class="ghost" type="button">Decided</button></div>
+    </div>
+    <div class="muted small">Clears the review held off the boards. Approve ranks the run at the score the server's replay of
+      its input came to; Reject keeps it off for good and mails the player your reason. The clear and its rewards stand either way.
+      REPLAY_MISMATCH: the input does not score what was sent. TIMING_FRAME_LOCKED: every press within half a frame of its note.
+      INPUT_SPAM: far more presses than notes.</div>
+    <div id="runList"></div>
+    <div id="runStatus" class="status"></div>
   </section>
 </main>
 
@@ -412,7 +440,7 @@
   function signOut(message) {
     sessionStorage.removeItem(TOKEN);
     $('login').hidden = false;
-    for (const id of ['editor', 'history', 'signOut', 'nav', 'events', 'eventEditor', 'stories', 'mail', 'notices', 'noticeEditor', 'signin', 'campaign', 'signatures']) $(id).hidden = true;
+    for (const id of ['editor', 'history', 'signOut', 'nav', 'events', 'eventEditor', 'stories', 'mail', 'notices', 'noticeEditor', 'signin', 'campaign', 'signatures', 'runs']) $(id).hidden = true;
     if (message) show($('loginStatus'), message, false);
   }
 
@@ -468,8 +496,10 @@
     $('tabSignIn').className = which === 'signin' ? 'on' : '';
     $('tabCampaign').className = which === 'campaign' ? 'on' : '';
     $('tabSignatures').className = which === 'signatures' ? 'on' : '';
+    $('tabRuns').className = which === 'runs' ? 'on' : '';
     $('campaign').hidden = which !== 'campaign';
     $('signatures').hidden = which !== 'signatures';
+    $('runs').hidden = which !== 'runs';
     $('editor').hidden = $('history').hidden = which !== 'config';
     $('events').hidden = which !== 'events';
     $('stories').hidden = which !== 'stories';
@@ -483,7 +513,8 @@
     else if (which === 'mail') await loadMail();
     else if (which === 'notices') await loadNotices();
     else if (which === 'campaign') await loadCampaign();
-    else if (which === 'signatures') { await loadSignatures(); await loadModerationHistory(); }
+    else if (which === 'signatures') { await loadReports(); await loadSignatures(); await loadModerationHistory(); }
+    else if (which === 'runs') await loadRuns();
     else await loadSignIn();
   }
 
@@ -1672,6 +1703,7 @@
 
     $('sigRemove').hidden = true;
     sigTarget = null;
+    await loadReports();
     await loadSignatures();
     await loadModerationHistory();
     show($('sigStatus'), 'Done for ' + who + ' (' + (result.data.lockedUntil ? lockText(result.data.lockedUntil) : 'no lock') + ')' +
@@ -1711,6 +1743,186 @@
     }
   }
 
+  // ------------------------------------------------------------------ reports
+
+  const REASONS = { Spam: 'Spam / advertising', Offensive: 'Offensive', Other: 'Other' };
+
+  function div(className, text) {
+    const el = document.createElement('div');
+    if (className) el.className = className;
+    if (text !== undefined) el.textContent = text;
+    return el;
+  }
+
+  async function loadReports() {
+    const result = await api('GET', '/v1/admin/signatures/reports');
+    if (!result.ok) return show($('repStatus'), problemText(result), false);
+
+    const players = result.data.players;
+    $('repCount').textContent = players.length ? String(players.length) : '';
+    $('repCount').className = players.length ? 'badge warn' : 'badge';
+
+    const list = $('repList');
+    list.replaceChildren();
+    if (!players.length) list.appendChild(div('muted', 'No open reports.'));
+
+    for (const p of players) {
+      const card = div('card');
+      const top = div('top');
+      const who = div('', p.displayName + tagText(p.tag));
+      who.style.fontWeight = '600';
+      top.appendChild(who);
+      top.appendChild(div('muted small', p.reports.length + (p.reports.length === 1 ? ' report' : ' reports') +
+        (p.removals ? ' · removed ' + p.removals + ' time(s) before' : '') + (p.lockedUntil ? ' · locked ' + lockText(p.lockedUntil) : '')));
+      const actions = div('');
+      actions.appendChild(button('Remove...', () => openRemove(p)));
+      actions.appendChild(document.createTextNode(' '));
+      actions.appendChild(button('Dismiss', () => dismissReports(p)));
+      top.appendChild(actions);
+      card.appendChild(top);
+
+      card.appendChild(div('line', p.signature === null ? '(the line is already gone)' : '"' + p.signature + '"'));
+
+      const table = document.createElement('table');
+      const head = document.createElement('tr');
+      for (const h of ['When', 'Reporter', 'Reason', 'Note', 'Line they saw']) {
+        const th = document.createElement('th'); th.textContent = h; head.appendChild(th);
+      }
+      table.appendChild(head);
+      for (const r of p.reports) {
+        const tr = document.createElement('tr');
+        textCell(tr, new Date(r.at).toLocaleString(), 'small');
+        textCell(tr, r.reporterName + tagText(r.reporterTag));
+        textCell(tr, REASONS[r.reason] || r.reason);
+        textCell(tr, r.note ?? '-', r.note ? 'line' : 'muted');
+        textCell(tr, r.signature === p.signature ? '(same as now)' : '"' + r.signature + '"', r.signature === p.signature ? 'muted small' : 'line');
+        table.appendChild(tr);
+      }
+      const scroll = div('scroll');
+      scroll.appendChild(table);
+      card.appendChild(scroll);
+      list.appendChild(card);
+    }
+  }
+
+  async function dismissReports(p) {
+    const who = p.displayName + tagText(p.tag);
+    const note = prompt('Leave ' + who + "'s line up and close its reports? A note for the record (optional):", '');
+    if (note === null) return;
+
+    const result = await api('POST', '/v1/admin/signatures/' + p.playerId + '/dismiss-reports', { note: note.trim() || null });
+    if (!result.ok) return show($('repStatus'), problemText(result), false);
+
+    await loadReports();
+    show($('repStatus'), 'Dismissed the reports on ' + who + '; the reporters were thanked.', true);
+  }
+
+  // ------------------------------------------------------------------ flagged runs
+
+  let runsDecided = false;
+
+  const NUMBERS = [['score', 'Score'], ['maxCombo', 'Max combo'], ['perfect', 'Perfect'], ['great', 'Great'],
+                   ['hit', 'Hit'], ['miss', 'Miss'], ['fullCombo', 'Full combo'], ['won', 'Won']];
+
+  function numberText(v) { return typeof v === 'boolean' ? (v ? 'yes' : 'no') : String(v); }
+
+  async function loadRuns(decided) {
+    if (decided !== undefined) runsDecided = decided;
+    $('runWaiting').className = runsDecided ? 'ghost' : '';
+    $('runDecided').className = runsDecided ? '' : 'ghost';
+
+    const result = await api('GET', '/v1/admin/runs/flagged?limit=100&decided=' + runsDecided);
+    if (!result.ok) return show($('runStatus'), problemText(result), false);
+
+    const list = $('runList');
+    list.replaceChildren();
+    if (!result.data.runs.length) list.appendChild(div('muted', runsDecided ? 'Nothing decided yet.' : 'Nothing waiting.'));
+
+    for (const r of result.data.runs) {
+      const card = div('card');
+      const top = div('top');
+      const title = div('', r.displayName + tagText(r.tag) + ' · ' + (r.songName || r.stageId) + ' (' + r.stageId + ')');
+      title.style.fontWeight = '600';
+      top.appendChild(title);
+      const badges = div('');
+      for (const f of r.flags) {
+        const b = document.createElement('span'); b.className = 'badge warn'; b.textContent = f;
+        badges.appendChild(b); badges.appendChild(document.createTextNode(' '));
+      }
+      top.appendChild(badges);
+      card.appendChild(top);
+
+      card.appendChild(div('muted small', 'Played ' + new Date(r.submittedAt).toLocaleString() + ' · ' + (r.characterId || 'no operator') +
+        ' Lv ' + r.characterLevel + ' · ' + r.presses + ' presses over ' + r.traceFrames + ' frames' +
+        (r.ceiling !== null ? ' · ceiling ' + r.ceiling : '')));
+
+      const table = document.createElement('table');
+      const head = document.createElement('tr');
+      for (const h of ['', 'Claimed', 'Replay']) { const th = document.createElement('th'); th.textContent = h; head.appendChild(th); }
+      table.appendChild(head);
+      for (const [key, label] of NUMBERS) {
+        const tr = document.createElement('tr');
+        textCell(tr, label, 'muted');
+        const differs = r.replay && r.replay[key] !== r.claimed[key];
+        textCell(tr, numberText(r.claimed[key]), differs ? 'differs' : '');
+        textCell(tr, r.replay ? numberText(r.replay[key]) : '-', differs ? 'differs' : (r.replay ? '' : 'muted'));
+        table.appendChild(tr);
+      }
+      const scroll = div('scroll');
+      scroll.style.maxWidth = '420px';
+      scroll.appendChild(table);
+      card.appendChild(scroll);
+
+      if (r.timingSamples !== null) {
+        card.appendChild(div('muted small', 'Timing over ' + r.timingSamples + ' notes: mean ' + r.timingMeanMs.toFixed(1) + ' ms, spread ' +
+          r.timingStdDevMs.toFixed(1) + ' ms, frame ' + r.frameIntervalMs.toFixed(1) + ' ms'));
+      }
+
+      if (r.decision) {
+        const line = r.decision + (r.rankedScore !== null ? ' at ' + r.rankedScore : '') + ' by ' + (r.decidedBy ?? '(account gone)') +
+          ', ' + new Date(r.decidedAt).toLocaleString() + (r.decisionNote ? ' - ' + r.decisionNote : '');
+        const d = div('line', line);
+        d.style.marginTop = '6px';
+        d.style.color = r.decision === 'Approved' ? 'var(--ok)' : 'var(--danger)';
+        card.appendChild(d);
+      } else {
+        const row = div('row');
+        row.style.marginTop = '8px';
+        const note = document.createElement('input');
+        note.type = 'text'; note.maxLength = 200;
+        note.placeholder = 'Reason - required to reject (the player is mailed it), optional to approve';
+        row.appendChild(note);
+        const approve = button('Approve', () => decideRun(r, 'approve', note.value, approve, reject), false);
+        approve.style.background = 'var(--ok)';
+        const reject = button('Reject', () => decideRun(r, 'reject', note.value, approve, reject), false);
+        reject.style.background = 'var(--danger)';
+        row.appendChild(approve);
+        row.appendChild(reject);
+        card.appendChild(row);
+      }
+
+      list.appendChild(card);
+    }
+  }
+
+  async function decideRun(r, decision, note, ...buttons) {
+    const who = r.displayName + tagText(r.tag);
+    const text = note.trim();
+    if (decision === 'reject' && !text) return show($('runStatus'), 'Write the reason first: the player is mailed it.', false);
+    if (decision === 'approve' && r.replay && r.replay.score !== r.claimed.score &&
+        !confirm('Rank ' + who + "'s run at the replay's " + r.replay.score + ' (claimed ' + r.claimed.score + ')?')) return;
+
+    buttons.forEach(b => b.disabled = true);
+    const result = await api('POST', '/v1/admin/runs/' + r.runId + '/' + decision, { note: text || null });
+    buttons.forEach(b => b.disabled = false);
+    if (!result.ok) return show($('runStatus'), problemText(result), false);
+
+    await loadRuns();
+    show($('runStatus'), decision === 'approve'
+      ? 'Approved ' + who + "'s run; ranked at " + result.data.rankedScore + '.'
+      : 'Rejected ' + who + "'s run; the player was mailed your reason.", true);
+  }
+
   $('signIn').onclick = signIn;
   $('pass').addEventListener('keydown', e => { if (e.key === 'Enter') signIn(); });
   $('signOut').onclick = () => signOut();
@@ -1725,6 +1937,10 @@
   $('tabSignIn').onclick = () => view('signin');
   $('tabCampaign').onclick = () => view('campaign');
   $('tabSignatures').onclick = () => view('signatures');
+  $('tabRuns').onclick = () => view('runs');
+  $('runWaiting').onclick = () => loadRuns(false);
+  $('runDecided').onclick = () => loadRuns(true);
+  $('repReload').onclick = loadReports;
   $('sigSearch').onclick = () => loadSignatures($('sigQuery').value.trim());
   $('sigQuery').addEventListener('keydown', e => { if (e.key === 'Enter') loadSignatures($('sigQuery').value.trim()); });
   $('sigRecent').onclick = () => { $('sigQuery').value = ''; loadSignatures(''); };

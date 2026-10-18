@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.Net.Http.Headers;
 using Promuse.Api.Infrastructure;
+using Promuse.Contracts.Moderation;
 using Promuse.Contracts.Players;
 
 namespace Promuse.Api.Players;
@@ -20,6 +21,19 @@ public static class PlayerEndpoints
 
         group.MapGet("/me/profile", GetMyProfileAsync);
         group.MapGet("/{playerId:guid}/profile", GetProfileAsync);
+
+        // 举报 / Reporting the line on someone else's card, for the moderators' queue.
+        group.MapPost("/{playerId:guid}/signature/report", ReportSignatureAsync);
+    }
+
+    private static async Task<IResult> ReportSignatureAsync(
+        Guid playerId, SignatureReportRequest request, ClaimsPrincipal user,
+        SignatureReportService reports, CancellationToken ct)
+    {
+        if (!user.TryGetAccountId(out Guid accountId)) return ApiProblems.Unauthorized().ToResult();
+
+        var outcome = await reports.ReportAsync(accountId, playerId, request, ct);
+        return outcome.IsSuccess ? Results.NoContent() : outcome.Problem!.ToResult();
     }
 
     private static Task<IResult> GetMyProfileAsync(

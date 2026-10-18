@@ -1652,6 +1652,24 @@ namespace Promuse.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("claimed_won");
 
+                    b.Property<DateTimeOffset?>("DecidedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("decided_at");
+
+                    b.Property<Guid?>("DecidedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("decided_by");
+
+                    b.Property<string>("Decision")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("decision");
+
+                    b.Property<string>("DecisionNote")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("decision_note");
+
                     b.PrimitiveCollection<string[]>("Flags")
                         .IsRequired()
                         .HasColumnType("text[]")
@@ -1688,6 +1706,10 @@ namespace Promuse.Persistence.Migrations
                     b.Property<int>("Presses")
                         .HasColumnType("integer")
                         .HasColumnName("presses");
+
+                    b.Property<int?>("RankedScore")
+                        .HasColumnType("integer")
+                        .HasColumnName("ranked_score");
 
                     b.PrimitiveCollection<string[]>("Reasons")
                         .IsRequired()
@@ -1746,6 +1768,9 @@ namespace Promuse.Persistence.Migrations
 
                     b.HasKey("RunId")
                         .HasName("pk_run_scores");
+
+                    b.HasIndex("DecidedBy")
+                        .HasDatabaseName("ix_run_scores_decided_by");
 
                     b.HasIndex("Verdict")
                         .HasDatabaseName("ix_run_scores_verdict");
@@ -2017,6 +2042,89 @@ namespace Promuse.Persistence.Migrations
                         .HasDatabaseName("ix_signature_moderations_account_id_created_at");
 
                     b.ToTable("signature_moderations", (string)null);
+                });
+
+            modelBuilder.Entity("Promuse.Persistence.Entities.SignatureReport", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("MailId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("mail_id");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("note");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("reason");
+
+                    b.Property<Guid>("ReporterId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reporter_id");
+
+                    b.Property<string>("Resolution")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("resolution");
+
+                    b.Property<string>("ResolutionNote")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("resolution_note");
+
+                    b.Property<DateTimeOffset?>("ResolvedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("resolved_at");
+
+                    b.Property<Guid?>("ResolvedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("resolved_by");
+
+                    b.Property<string>("Signature")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("signature");
+
+                    b.Property<Guid>("TargetId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("target_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_signature_reports");
+
+                    b.HasIndex("MailId")
+                        .HasDatabaseName("ix_signature_reports_mail_id");
+
+                    b.HasIndex("ResolvedBy")
+                        .HasDatabaseName("ix_signature_reports_resolved_by");
+
+                    b.HasIndex("ReporterId", "CreatedAt")
+                        .HasDatabaseName("ix_signature_reports_reporter_id_created_at");
+
+                    b.HasIndex("ReporterId", "TargetId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_signature_reports_open")
+                        .HasFilter("resolved_at IS NULL");
+
+                    b.HasIndex("TargetId", "ResolvedAt")
+                        .HasDatabaseName("ix_signature_reports_target_id_resolved_at");
+
+                    b.ToTable("signature_reports", (string)null);
                 });
 
             modelBuilder.Entity("Promuse.Persistence.Entities.SquadSlot", b =>
@@ -2466,6 +2574,12 @@ namespace Promuse.Persistence.Migrations
 
             modelBuilder.Entity("Promuse.Persistence.Entities.RunScore", b =>
                 {
+                    b.HasOne("Promuse.Persistence.Entities.Account", null)
+                        .WithMany()
+                        .HasForeignKey("DecidedBy")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_run_scores_accounts_decided_by");
+
                     b.HasOne("Promuse.Persistence.Entities.Run", "Run")
                         .WithOne()
                         .HasForeignKey("Promuse.Persistence.Entities.RunScore", "RunId")
@@ -2515,6 +2629,35 @@ namespace Promuse.Persistence.Migrations
                         .HasForeignKey("MailId")
                         .OnDelete(DeleteBehavior.SetNull)
                         .HasConstraintName("fk_signature_moderations_mails_mail_id");
+                });
+
+            modelBuilder.Entity("Promuse.Persistence.Entities.SignatureReport", b =>
+                {
+                    b.HasOne("Promuse.Persistence.Entities.MailMessage", null)
+                        .WithMany()
+                        .HasForeignKey("MailId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_signature_reports_mails_mail_id");
+
+                    b.HasOne("Promuse.Persistence.Entities.Account", null)
+                        .WithMany()
+                        .HasForeignKey("ReporterId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_signature_reports_accounts_reporter_id");
+
+                    b.HasOne("Promuse.Persistence.Entities.Account", null)
+                        .WithMany()
+                        .HasForeignKey("ResolvedBy")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_signature_reports_accounts_resolved_by");
+
+                    b.HasOne("Promuse.Persistence.Entities.Player", null)
+                        .WithMany()
+                        .HasForeignKey("TargetId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_signature_reports_players_target_id");
                 });
 
             modelBuilder.Entity("Promuse.Persistence.Entities.SquadSlot", b =>

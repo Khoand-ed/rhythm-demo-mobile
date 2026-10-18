@@ -14,6 +14,7 @@ using Promuse.Contracts.Events;
 using Promuse.Contracts.Gacha;
 using Promuse.Contracts.Leaderboards;
 using Promuse.Contracts.Missions;
+using Promuse.Contracts.Moderation;
 using Promuse.Contracts.Players;
 using Promuse.Contracts.Runs;
 using Promuse.Contracts.Shop;
@@ -232,6 +233,14 @@ namespace Promuse.Net
 
             return SendAsync<PlayerProfile>(UnityWebRequest.kHttpVerbGET, path, body: null, authenticate: true);
         }
+
+        /// <summary>
+        /// 举报签名 / Reports the line on another player's card to the moderators. Answers with nothing;
+        /// ALREADY_REPORTED and REPORT_LIMIT_REACHED come back as problems whose message says so.
+        /// </summary>
+        public Task<ApiResult<object>> ReportSignatureAsync(Guid playerId, SignatureReportReason reason, string? note) =>
+            SendAsync<object>(UnityWebRequest.kHttpVerbPOST, "/v1/players/" + playerId.ToString("D") + "/signature/report",
+                body: new SignatureReportRequest(reason, note), authenticate: true);
 
         /// <summary>
         /// 升级 / Spends battle records - and the LMD they cost - on an operator. Names only the

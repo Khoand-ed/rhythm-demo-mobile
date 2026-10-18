@@ -78,9 +78,11 @@ public sealed class ProfileService(PromuseDbContext db, CampaignService campaign
             .Distinct()
             .CountAsync(ct);
 
-        int? best = await db.RunScores
-            .Where(s => s.AccountId == accountId && s.Verdict == ScoreVerdict.Accepted)
-            .MaxAsync(s => (int?)s.Score, ct);
+        // 榜上的最好成绩 / The best all-time board line: an accepted run, or a flagged one a moderator
+        // approved - at the score it was ranked with.
+        int? best = await db.LeaderboardScores
+            .Where(e => e.AccountId == accountId && e.PeriodKey == Leaderboards.LeaderboardService.AllTimeKey)
+            .MaxAsync(e => (int?)e.Score, ct);
 
         return new RhythmRecord(plays, cleared, fullCombos, best);
     }

@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Promuse Backend API
-  version: 1.0.0-draft.18
+  version: 1.0.0-draft.19
   summary: Authentication and player state for the Promuse mobile rhythm game.
   description: |
     **Phase 1** authentication, **Phase 2** player state, **Phase 3** the economy -
@@ -573,6 +573,54 @@ paths:
           $ref: '#/components/responses/PreconditionRequired'
         '500':
           $ref: '#/components/responses/InternalError'
+
+  /v1/players/{playerId}/signature/report:
+    post:
+      tags: [players]
+      operationId: reportSignature
+      summary: Report the line on someone else's profile card to the moderators.
+      description: |
+        A player reports a line once: while their report is open, and after a moderator
+        has closed it, the same line cannot be reported by them again - a changed one can.
+        At most 10 reports in any 24 hours. Not your own card, and not a card with no line.
+      parameters:
+        - name: playerId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignatureReportRequest'
+      responses:
+        '204':
+          description: Reported.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: '`PLAYER_NOT_FOUND` - no player has that id, or the account is banned.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: '`ALREADY_REPORTED`.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          description: '`REPORT_LIMIT_REACHED` - 10 reports in the last 24 hours.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
 
   /v1/players/me/profile:
     get:
@@ -1947,7 +1995,8 @@ paths:
       summary: Take a player's line down, lock it for a while if asked, and tell them by mail if asked.
       description: |
         One transaction: the line goes, the lock is set, the mail is sent and the history
-        is written together. A new lock never shortens one already running. A lock alone,
+        is written together - and every open report on the line closes as Removed, each
+        reporter thanked by mail. A new lock never shortens one already running. A lock alone,
         on a player with no line, is allowed; neither a line to remove nor a lock is
         refused with 422. The player's state version moves, as it does for any write to
         the save.
@@ -2023,6 +2072,201 @@ paths:
                 $ref: '#/components/schemas/Problem'
         '404':
           description: '`PLAYER_NOT_FOUND`.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /v1/admin/signatures/reports:
+    get:
+      tags: [admin]
+      operationId: getSignatureReports
+      summary: The players whose lines have open reports, the most reported first.
+      responses:
+        '200':
+          description: The queue.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminReportQueue'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: '`FORBIDDEN`.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
+  /v1/admin/signatures/{playerId}/dismiss-reports:
+    post:
+      tags: [admin]
+      operationId: dismissSignatureReports
+      summary: The line is within the rules - close its open reports and thank each reporter by mail.
+      parameters:
+        - name: playerId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignatureReportDismissRequest'
+      responses:
+        '204':
+          description: Dismissed.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: '`FORBIDDEN`.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /v1/admin/runs/flagged:
+    get:
+      tags: [admin]
+      operationId: listFlaggedRuns
+      summary: Clears the review flagged, waiting for a decision - or, with decided=true, the decisions made.
+      description: |
+        Waiting runs oldest first; decided ones newest first. Each carries the claim beside
+        what the server's replay of its trace counted, the flags, and the timing measured.
+      parameters:
+        - name: decided
+          in: query
+          schema:
+            type: boolean
+            default: false
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        '200':
+          description: The runs.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminFlaggedRunList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: '`FORBIDDEN`.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /v1/admin/runs/{runId}/approve:
+    post:
+      tags: [admin]
+      operationId: approveFlaggedRun
+      summary: Rank a flagged clear, at the score the server's replay came to.
+      description: |
+        On the all-time board and the board of the week it was played in, each only if it
+        beats the player's line there. With no replay (an operator the ruleset did not
+        hold) at the claimed score. A replay that lost the run has nothing to rank.
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunDecisionRequest'
+      responses:
+        '200':
+          description: Approved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminFlaggedRun'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: '`FORBIDDEN`.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '404':
+          description: '`RUN_NOT_FOUND`.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: |
+            `RUN_NOT_IN_REVIEW` - not flagged, not a clear, or already decided;
+            `RUN_NOT_RANKABLE` - the replay loses the run.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /v1/admin/runs/{runId}/reject:
+    post:
+      tags: [admin]
+      operationId: rejectFlaggedRun
+      summary: Keep a flagged clear off the boards for good, and mail the player why.
+      description: The note is required - it is the reason the player is mailed. The clear and its rewards stand.
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunDecisionRequest'
+      responses:
+        '200':
+          description: Rejected.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminFlaggedRun'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: '`FORBIDDEN`.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '404':
+          description: '`RUN_NOT_FOUND`.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: '`RUN_NOT_IN_REVIEW` - not flagged, not a clear, or already decided.'
           content:
             application/problem+json:
               schema:
@@ -4367,6 +4611,195 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SignatureModerationEntry'
+
+    SignatureReportReason:
+      type: string
+      enum: [Spam, Offensive, Other]
+
+    SignatureReportRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          $ref: '#/components/schemas/SignatureReportReason'
+        note:
+          type: [string, 'null']
+          maxLength: 200
+
+    AdminSignatureReport:
+      type: object
+      required: [id, reporterId, reporterName, reporterTag, reason, signature, at]
+      properties:
+        id:
+          type: integer
+          format: int64
+        reporterId:
+          type: string
+          format: uuid
+        reporterName:
+          type: string
+        reporterTag:
+          $ref: '#/components/schemas/PlayerTag'
+        reason:
+          $ref: '#/components/schemas/SignatureReportReason'
+        note:
+          type: [string, 'null']
+        signature:
+          type: string
+          description: The line as the reporter saw it; it may since have changed.
+        at:
+          type: string
+          format: date-time
+
+    AdminReportedPlayer:
+      type: object
+      required: [playerId, displayName, tag, removals, reports]
+      properties:
+        playerId:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        tag:
+          $ref: '#/components/schemas/PlayerTag'
+        signature:
+          type: [string, 'null']
+          description: The line as it stands now; null when it is already gone.
+        lockedUntil:
+          type: [string, 'null']
+          format: date-time
+        removals:
+          type: integer
+        reports:
+          type: array
+          description: The open reports, oldest first.
+          items:
+            $ref: '#/components/schemas/AdminSignatureReport'
+
+    AdminReportQueue:
+      type: object
+      required: [players]
+      properties:
+        players:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminReportedPlayer'
+
+    SignatureReportDismissRequest:
+      type: object
+      properties:
+        note:
+          type: [string, 'null']
+          maxLength: 200
+
+    RunReviewDecision:
+      type: string
+      enum: [Approved, Rejected]
+
+    AdminRunNumbers:
+      type: object
+      required: [score, maxCombo, perfect, great, hit, miss, fullCombo, won]
+      properties:
+        score:
+          type: integer
+        maxCombo:
+          type: integer
+        perfect:
+          type: integer
+        great:
+          type: integer
+        hit:
+          type: integer
+        miss:
+          type: integer
+        fullCombo:
+          type: boolean
+        won:
+          type: boolean
+          description: Claimed as won, or a replay whose HP never ran out.
+
+    AdminFlaggedRun:
+      type: object
+      required: [runId, playerId, displayName, tag, stageId, characterLevel, submittedAt, flags, claimed, presses, traceFrames]
+      properties:
+        runId:
+          type: string
+          format: uuid
+        playerId:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        tag:
+          $ref: '#/components/schemas/PlayerTag'
+        stageId:
+          type: string
+        songName:
+          type: [string, 'null']
+        characterId:
+          type: [string, 'null']
+        characterLevel:
+          type: integer
+        submittedAt:
+          type: string
+          format: date-time
+        flags:
+          type: array
+          items:
+            type: string
+          description: REPLAY_MISMATCH, TIMING_FRAME_LOCKED, INPUT_SPAM or UNVERIFIABLE.
+        claimed:
+          $ref: '#/components/schemas/AdminRunNumbers'
+        replay:
+          oneOf:
+            - $ref: '#/components/schemas/AdminRunNumbers'
+            - type: 'null'
+          description: What the server's replay counted; null when it could not run.
+        ceiling:
+          type: [integer, 'null']
+        presses:
+          type: integer
+        traceFrames:
+          type: integer
+        timingSamples:
+          type: [integer, 'null']
+        timingMeanMs:
+          type: [number, 'null']
+        timingStdDevMs:
+          type: [number, 'null']
+        frameIntervalMs:
+          type: [number, 'null']
+        decision:
+          oneOf:
+            - $ref: '#/components/schemas/RunReviewDecision'
+            - type: 'null'
+        decisionNote:
+          type: [string, 'null']
+        decidedBy:
+          type: [string, 'null']
+        decidedAt:
+          type: [string, 'null']
+          format: date-time
+        rankedScore:
+          type: [integer, 'null']
+          description: The score an approval put on the boards.
+
+    AdminFlaggedRunList:
+      type: object
+      required: [runs]
+      properties:
+        runs:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminFlaggedRun'
+
+    RunDecisionRequest:
+      type: object
+      properties:
+        note:
+          type: [string, 'null']
+          maxLength: 200
+          description: Required to reject (the player is mailed it), optional to approve.
 
     NoticeCategory:
       type: string

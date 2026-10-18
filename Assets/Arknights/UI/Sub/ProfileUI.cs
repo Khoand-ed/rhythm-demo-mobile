@@ -49,6 +49,10 @@ namespace UI.Sub {
         public TextMeshProUGUI signaturePlaceholder;
         public GameObject editHint;
 
+        [Tooltip("REPORT, on someone else's card with a line. Added by Arknights/Home/Build Signature Report UI; " +
+                 "left empty, the card has no report button.")]
+        public Button reportButton;
+
         [Header("节奏记录 / Rhythm record")]
         public TextMeshProUGUI playsText;
         public TextMeshProUGUI clearedText;
@@ -86,6 +90,15 @@ namespace UI.Sub {
             change.onClick.AddListener(() => {
                 if (profile != null && profile.IsSelf) AssistantUI.Open();
             });
+
+            // 举报别人的签名 / Someone else's line goes to the moderators as the card shows it.
+            if (reportButton != null) {
+                reportButton.onClick.AddListener(() => {
+                    if (profile != null && !profile.IsSelf && !string.IsNullOrEmpty(profile.Signature)) {
+                        SignatureReportUI.Open(profile.PlayerId, profile.DisplayName, profile.Tag, profile.Signature);
+                    }
+                });
+            }
         }
 
         /// <summary>
@@ -191,6 +204,11 @@ namespace UI.Sub {
         }
 
         private void DrawSignature(string signature, bool editable) {
+            // 只有别人的、写了字的名片能举报 / Only someone else's card, and only a line that is there.
+            if (reportButton != null) {
+                reportButton.gameObject.SetActive(profile != null && !profile.IsSelf && !string.IsNullOrEmpty(signature));
+            }
+
             // 被锁就不能写 / A line a moderator has locked cannot be written, and the card says until when.
             DateTimeOffset? locked = editable ? LockedUntil() : null;
             bool writable = editable && locked == null;

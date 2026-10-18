@@ -1,3 +1,4 @@
+using Promuse.Contracts.Moderation;
 using Promuse.Contracts.Runs;
 
 namespace Promuse.Persistence.Entities;
@@ -7,8 +8,8 @@ namespace Promuse.Persistence.Entities;
 ///
 /// 什么都留 / Kept whatever the verdict. A rejected result is evidence - of a cheat, or of a bug
 /// in the checks that rejected it - and either way the only way to tell which is to still have
-/// it. The same goes for the trace: nothing replays it yet, and the replay that will is only
-/// worth building if the runs it should judge were kept.
+/// it. The same goes for the trace: the server replays it as the result arrives, and a moderator
+/// deciding a flagged run reads the claim, the replay and the timing beside each other here.
 ///
 /// 和 runs 一对一 / One per run, in its own table rather than as columns on runs: a trace is tens
 /// of kilobytes, and every query that lists runs would otherwise drag them along.
@@ -61,6 +62,23 @@ public class RunScore
     /// REPLAY_MISMATCH flag is looked into with.
     /// </summary>
     public string? Replay { get; set; }
+
+    /// <summary>
+    /// 人工审核 / A moderator's decision on a flagged result: Approved ranks it at the replay's score,
+    /// Rejected keeps it off the boards for good. Null while it waits, and for every result that was
+    /// never flagged. <see cref="Verdict"/> keeps what the automatic review said.
+    /// </summary>
+    public RunReviewDecision? Decision { get; set; }
+
+    public string? DecisionNote { get; set; }
+
+    /// <summary>The moderator. Null once that account is gone.</summary>
+    public Guid? DecidedBy { get; set; }
+
+    public DateTimeOffset? DecidedAt { get; set; }
+
+    /// <summary>The score an approval put on the boards: the replay's, or the claim's when no replay ran.</summary>
+    public int? RankedScore { get; set; }
 
     public int? TimingSamples { get; set; }
     public double? TimingMeanMs { get; set; }
