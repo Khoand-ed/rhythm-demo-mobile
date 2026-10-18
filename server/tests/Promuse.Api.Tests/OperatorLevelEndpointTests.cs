@@ -343,7 +343,7 @@ public class OperatorLevelEndpointTests(PromuseApiFactory factory)
     }
 
     [Fact]
-    public async Task The_seeded_campaign_drops_every_battle_record()
+    public async Task The_seeded_campaign_drops_every_battle_record_and_promotion_material()
     {
         AuthSession session = await SignInAsync();
 
@@ -351,9 +351,12 @@ public class OperatorLevelEndpointTests(PromuseApiFactory factory)
         response.EnsureSuccessStatusCode();
         CampaignView view = (await response.Content.ReadFromJsonAsync<CampaignView>(Json))!;
 
-        // The migration updated the campaign the database was seeded with.
+        // The migrations updated the campaign the database was seeded with: every record, and the
+        // promotion materials besides LMD.
         HashSet<int> dropped = [.. view.Chapters.SelectMany(c => c.Stages).SelectMany(s => s.Stage.Drops).Select(d => d.ItemId)];
         Assert.All(OperatorLevels.Records, r => Assert.Contains(r.ItemId, dropped));
+        Assert.Contains(OperatorLevels.OrirockItemId, dropped);
+        Assert.Contains(OperatorLevels.SugarSubstituteItemId, dropped);
     }
 
     // ------------------------------------------------------------- the run
