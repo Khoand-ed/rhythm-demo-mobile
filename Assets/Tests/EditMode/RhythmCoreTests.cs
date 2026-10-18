@@ -206,9 +206,9 @@ public class SongChartTests
         SongChart chart = ChartWith();
 
         chart.difficulty = 5;
-        Assert.AreEqual("Dễ", chart.DifficultyLabel);
+        Assert.AreEqual("EASY", chart.DifficultyLabel);
 
         chart.difficulty = 6;
-        Assert.AreEqual("Khó", chart.DifficultyLabel);
+        Assert.AreEqual("HARD", chart.DifficultyLabel);
     }
 }

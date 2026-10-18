@@ -2664,7 +2664,7 @@ components:
         signature:
           type: [string, 'null']
           description: At most 60 characters. Null or blank clears it.
-          examples: ['Chơi nhạc mỗi ngày']
+          examples: ['Music every day']
 
     LevelUpRequest:
       type: object

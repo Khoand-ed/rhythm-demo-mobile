@@ -200,14 +200,14 @@ public class ProfileEndpointTests(PromuseApiFactory factory)
         (_, string etag) = await StateAsync(owner);
 
         HttpResponseMessage saved = await _client.SendAsync(Send(HttpMethod.Put, "/v1/players/me/signature", owner,
-            new SignatureRequest("  Chơi nhạc\n mỗi ngày  "), etag));
+            new SignatureRequest("  Music\n every day  "), etag));
 
         Assert.Equal(HttpStatusCode.OK, saved.StatusCode);
         PlayerState state = (await saved.Content.ReadFromJsonAsync<PlayerState>())!;
-        Assert.Equal("Chơi nhạc mỗi ngày", state.Signature);
+        Assert.Equal("Music every day", state.Signature);
         Assert.NotEqual(etag, saved.Headers.ETag!.ToString());
 
-        Assert.Equal("Chơi nhạc mỗi ngày", (await ProfileAsync(stranger, owner.PlayerId)).Signature);
+        Assert.Equal("Music every day", (await ProfileAsync(stranger, owner.PlayerId)).Signature);
 
         // Blank clears it.
         HttpResponseMessage cleared = await _client.SendAsync(Send(HttpMethod.Put, "/v1/players/me/signature", owner,

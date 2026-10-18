@@ -972,7 +972,7 @@ namespace Arknights.EditorTools {
         ///
         /// 音游数值来自 GDD / The rhythm numbers are the GDD's MVP table (1x5*, 2x4*, 1x3*), and the
         /// passives are its Character-Driven Gameplay examples. The names are invented - the GDD
-        /// only ever says "Nhân vật A/B/C/D" - so change them here and nowhere else.
+        /// only ever says "Character A/B/C/D" - so change them here and nowhere else.
         /// </summary>
         /// <summary>
         /// 只给生成器用的映射 / Which PassiveSO subclass an operator gets. A switch on this is
