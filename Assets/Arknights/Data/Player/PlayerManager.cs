@@ -183,6 +183,22 @@ namespace Data.Player {
             }
         }
 
+        // ------------------------------------------------------------- operators
+
+        /// <summary>
+        /// 干员升级 / Levels an operator up with the records chosen, and takes the save the server
+        /// answers with - the operator, the records and the LMD all moved together.
+        /// </summary>
+        public async Task<ApiResult<Promuse.Contracts.Characters.LevelUpResult>> LevelUpAsync(
+            string characterId, System.Collections.Generic.IReadOnlyList<ItemStack> records) {
+
+            ApiResult<Promuse.Contracts.Characters.LevelUpResult> result = await api.LevelUpAsync(characterId, records);
+
+            if (result.IsSuccess && playerData != null) playerData.ApplyServerState(result.Value.Player);
+
+            return result;
+        }
+
         // -------------------------------------------------------------- sign-out
 
         /// <summary>

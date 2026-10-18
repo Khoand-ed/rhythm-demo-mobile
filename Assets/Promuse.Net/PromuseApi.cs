@@ -8,6 +8,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 using Promuse.Contracts;
 using Promuse.Contracts.Auth;
+using Promuse.Contracts.Characters;
 using Promuse.Contracts.Config;
 using Promuse.Contracts.Events;
 using Promuse.Contracts.Gacha;
@@ -230,6 +231,24 @@ namespace Promuse.Net
                 : "/v1/players/me/profile";
 
             return SendAsync<PlayerProfile>(UnityWebRequest.kHttpVerbGET, path, body: null, authenticate: true);
+        }
+
+        /// <summary>
+        /// 升级 / Spends battle records - and the LMD they cost - on an operator. Names only the
+        /// records: the server works out the level they reach. Idempotent, because it spends.
+        /// </summary>
+        public async Task<ApiResult<LevelUpResult>> LevelUpAsync(string characterId, IReadOnlyList<ItemStack> records)
+        {
+            ApiResult<LevelUpResult> result = await SendAsync<LevelUpResult>(
+                UnityWebRequest.kHttpVerbPOST,
+                "/v1/characters/" + Uri.EscapeDataString(characterId) + "/level-up",
+                new LevelUpRequest(records),
+                authenticate: true,
+                idempotencyKey: Guid.NewGuid().ToString());
+
+            if (result.IsSuccess) _playerETag = ETagFor(result.Value!.Player);
+
+            return result;
         }
 
         private async Task<ApiResult<PlayerState>> WriteAsync(string path, object body)

@@ -52,6 +52,13 @@ public static class SongSession
     /// <summary>What the run cost, so a ranked retry can say what it will cost again.</summary>
     public static int StaminaCost { get; private set; }
 
+    /// <summary>
+    /// 按哪一级打 / The operator's level for this run: the one the server recorded on the ticket for
+    /// a ranked run, the operator's own for practice. Its stats grow with it, and a ranked result is
+    /// reviewed at exactly this level. 0 when gameplay was entered straight from the Editor.
+    /// </summary>
+    public static int CharacterLevel { get; private set; }
+
     /// <summary>Ranked unless the player chose Practice; see <see cref="PlayMode"/>.</summary>
     public static PlayMode Mode { get; private set; }
 
@@ -123,11 +130,12 @@ public static class SongSession
     /// Written once, by whatever opened the run against the server - or, for practice, with an
     /// empty run id and a seed of the device's own choosing, since nothing is ever reported.
     /// </summary>
-    public static void SetRun(System.Guid runId, long seed, int staminaCost)
+    public static void SetRun(System.Guid runId, long seed, int staminaCost, int characterLevel)
     {
         RunId = runId;
         Seed = seed;
         StaminaCost = staminaCost;
+        CharacterLevel = characterLevel;
     }
 
     public static void SetMode(PlayMode mode)
@@ -151,6 +159,7 @@ public static class SongSession
         RunId = System.Guid.Empty;
         Seed = 0;
         StaminaCost = 0;
+        CharacterLevel = 0;
         Mode = PlayMode.Ranked;
     }
 }
