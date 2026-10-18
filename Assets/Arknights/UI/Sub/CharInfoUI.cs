@@ -73,6 +73,21 @@ namespace UI.Sub {
             canvasGroup.DOFade(1, 0.3f);
         }
 
+        /// <summary>
+        /// 升级后重读 / Re-reads every page from the save - called after a level-up
+        /// (UIManager.Update), when the operators' CharData objects have been replaced.
+        /// </summary>
+        public override void UpdateView() {
+            if (playerData == null) return;
+
+            foreach (CharPrefab page in charPrefabs) {
+                if (page.charData == null) continue;
+
+                CharData fresh = playerData.GetCharData(page.charData.GetId());
+                if (fresh != null) page.SetData(fresh);
+            }
+        }
+
         public override void Hide(bool destroy = false) {
             canvasGroup.DOFade(0, 0.2f).OnComplete(() => { base.Hide(destroy); });
         }
@@ -146,6 +161,7 @@ namespace UI.Sub {
             private Image img_atk_percentage;
             private Image img_def_percentage;
             private Image img_magic_resistance_percentage;
+            private GameObject magicResistanceRow;
 
             private Button btn_add_exp;
             private Text txt_level;
@@ -175,6 +191,15 @@ namespace UI.Sub {
                 img_atk_percentage = transform.GetComponent<Image>("CharInfoPanel/MiddleLeftPanel/Atk/img_ground/img_value_percentage");
                 img_def_percentage = transform.GetComponent<Image>("CharInfoPanel/MiddleLeftPanel/Def/img_ground/img_value_percentage");
                 img_magic_resistance_percentage = transform.GetComponent<Image>("CharInfoPanel/MiddleLeftPanel/MagicResistance/img_ground/img_value_percentage");
+
+                // 前三行是音游数值 / The top three rows show the rhythm stats the operator plays with, at its
+                // level - the tower-defense HP/ATK/DEF/RES they were made for are all zero for every
+                // operator here, and nothing plays with them. The fourth row has nothing to show.
+                transform.GetComponent<Text>("CharInfoPanel/MiddleLeftPanel/Health/Caption").text = "MAX HP";
+                transform.GetComponent<Text>("CharInfoPanel/MiddleLeftPanel/Atk/Caption").text = "SCORE";
+                transform.GetComponent<Text>("CharInfoPanel/MiddleLeftPanel/Def/Caption").text = "FEVER";
+                magicResistanceRow = transform.Find("CharInfoPanel/MiddleLeftPanel/MagicResistance").gameObject;
+                magicResistanceRow.SetActive(false);
 
                 btn_add_exp = transform.GetComponent<Button>("CharInfoPanel/RightPanel/Level");
                 txt_level = transform.GetComponent<Text>("CharInfoPanel/RightPanel/Level/txt_level");
@@ -206,8 +231,9 @@ namespace UI.Sub {
                 transform.GetComponent<Text>("CharInfoPanel/LowerLeftPanel/img_tag_ground/txt_tag").text = meta.GetTags().Aggregate(" ", (current, charTag) => current + (charTag.GetName() + " "));
                 transform.GetComponent<Text>("CharInfoPanel/LowerLeftPanel/img_position_ground/txt_position").text = meta.GetPosition().GetName();
 
+                // 等级面板打开升级 / The level panel opens the level-up screen on this operator.
                 btn_add_exp.onClick.RemoveAllListeners();
-                btn_add_exp.onClick.AddListener(() => { Debug.Log("click [add_exp] to: " + meta.GetChineseName()); });
+                btn_add_exp.onClick.AddListener(() => LevelUpUI.Open(charData.GetId()));
                 btn_add_elite.onClick.RemoveAllListeners();
                 btn_add_elite.onClick.AddListener(() => { Debug.Log("click [add_elite] to: " + meta.GetChineseName()); });
 
@@ -228,19 +254,22 @@ namespace UI.Sub {
 
             public void update() {
                 CharAttribute charAttribute = charData.GetAttribute();
-                txt_health.text = $"{charAttribute.GetMaxHealth():0}";
-                txt_atk.text = $"{charAttribute.GetAtk():0}";
-                txt_def.text = $"{charAttribute.GetDef():0}";
-                txt_magic_resistance.text = $"{charAttribute.GetMagicResistance():0}";
+
+                // 按当前等级 / At the operator's level now, through the shared rules a run plays with.
+                OperatorRules stats = charData.GetCharMeta().RulesAt(charData.GetLevel());
+                txt_health.text = $"{stats.maxHp}";
+                txt_atk.text = $"x{stats.scoreModifier:0.000}";
+                txt_def.text = $"x{stats.feverModifier:0.000}";
+                txt_magic_resistance.text = "";
                 txt_respawn_time.text = charAttribute.GetRespawnTime() > 60 ? "Slow" : charAttribute.GetRespawnTime() > 40 ? "Average" : "Fast";
                 txt_cost.text = $"{charAttribute.GetCost():0}";
                 txt_block.text = $"{charAttribute.GetBlock():0}";
                 txt_atk_speed.text = charAttribute.GetAtkSpeed() >= 1.6 ? "Very Slow" : charAttribute.GetAtkSpeed() >= 1.2 ? "Slow" : charAttribute.GetAtkSpeed() >= 1 ? "Average" : charAttribute.GetAtkSpeed() >= 0.8 ? "Fast" : "Very Fast";
 
-                img_health_percentage.fillAmount = charAttribute.GetMaxHealth() / 5000;
-                img_atk_percentage.fillAmount = charAttribute.GetAtk() / 1000;
-                img_def_percentage.fillAmount = charAttribute.GetDef() / 1000;
-                img_magic_resistance_percentage.fillAmount = charAttribute.GetMagicResistance() / 100;
+                img_health_percentage.fillAmount = stats.maxHp / 500f;
+                img_atk_percentage.fillAmount = Mathf.InverseLerp(1f, 1.5f, stats.scoreModifier);
+                img_def_percentage.fillAmount = Mathf.InverseLerp(1f, 1.5f, stats.feverModifier);
+                img_magic_resistance_percentage.fillAmount = 0f;
 
                 txt_level.text = $"{charData.GetLevel()}";
                 txt_max_level.text = $"{charData.GetMaxLevel()}";
