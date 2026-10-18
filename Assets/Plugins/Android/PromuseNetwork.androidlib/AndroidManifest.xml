@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Plain HTTP only to this device itself. The dev API is reached with `adb reverse tcp:5199 tcp:5199`,
+  which makes 127.0.0.1:5199 on the phone the PC's API; Android blocks cleartext traffic by default,
+  so without this a development build could not sign in. Every other host still needs HTTPS.
+  Merged into the app's <application> by the manifest merger.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.ab67.promuse.network">
+    <application android:networkSecurityConfig="@xml/promuse_network_security" />
+</manifest>
