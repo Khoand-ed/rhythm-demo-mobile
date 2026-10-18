@@ -187,6 +187,24 @@ public static class ApiProblems
     public static ApiProblem PlayerNotFound() =>
         Create(404, ErrorCodes.PlayerNotFound, "No such player", "There is no player with that id.");
 
+    public static ApiProblem AlreadyReported() =>
+        Create(409, ErrorCodes.AlreadyReported, "Already reported",
+            "You have already reported this signature. A moderator will look at it.");
+
+    public static ApiProblem ReportLimitReached(int perDay) =>
+        Create(429, ErrorCodes.ReportLimitReached, "Too many reports",
+            $"You can send {perDay} reports a day. Please try again tomorrow.");
+
+    public static ApiProblem RunNotFound() =>
+        Create(404, ErrorCodes.RunNotFound, "No such run", "No result is stored for that run.");
+
+    public static ApiProblem RunNotInReview(string why) =>
+        Create(409, ErrorCodes.RunNotInReview, "Not waiting for a decision", why);
+
+    public static ApiProblem RunNotRankable() =>
+        Create(409, ErrorCodes.RunNotRankable, "Nothing to rank",
+            "The server's replay of this run's input loses it, so it has no score to rank. Reject it instead.");
+
     public static ApiProblem SignatureLocked(DateTimeOffset until) =>
         Create(409, ErrorCodes.SignatureLocked, "Signature locked",
             SignatureLock.IsPermanent(until)

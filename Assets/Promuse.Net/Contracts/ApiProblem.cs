@@ -159,6 +159,21 @@ namespace Promuse.Contracts
         /// </summary>
         public const string SignatureLocked = "SIGNATURE_LOCKED";
 
+        /// <summary>This player already reported that line, and a moderator has it or has seen it.</summary>
+        public const string AlreadyReported = "ALREADY_REPORTED";
+
+        /// <summary>Too many reports in the last 24 hours. Not worth retrying soon.</summary>
+        public const string ReportLimitReached = "REPORT_LIMIT_REACHED";
+
+        /// <summary>No stored result for that run.</summary>
+        public const string RunNotFound = "RUN_NOT_FOUND";
+
+        /// <summary>The run is not waiting for a decision: not flagged, not a clear, or already decided.</summary>
+        public const string RunNotInReview = "RUN_NOT_IN_REVIEW";
+
+        /// <summary>The server's replay says this run was lost, so there is no score to rank.</summary>
+        public const string RunNotRankable = "RUN_NOT_RANKABLE";
+
         /// <summary>
         /// The operator is already at its level cap for its elite phase. More EXP would go nowhere;
         /// promotion raises the cap.

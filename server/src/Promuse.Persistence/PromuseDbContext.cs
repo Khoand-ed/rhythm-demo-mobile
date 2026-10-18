@@ -89,6 +89,8 @@ public class PromuseDbContext(DbContextOptions<PromuseDbContext> options) : DbCo
 
     public DbSet<SignatureModeration> SignatureModerations => Set<SignatureModeration>();
 
+    public DbSet<SignatureReport> SignatureReports => Set<SignatureReport>();
+
     /// <summary>Hands every story correction its revision - see <see cref="StoryLinePatch"/>.</summary>
     public const string StoryPatchRevisions = "story_patch_revisions";
 
@@ -257,6 +259,39 @@ public class PromuseDbContext(DbContextOptions<PromuseDbContext> options) : DbCo
             // Newest first, for everyone and for one player.
             entity.HasIndex(m => m.CreatedAt);
             entity.HasIndex(m => new { m.AccountId, m.CreatedAt });
+        });
+
+        modelBuilder.Entity<SignatureReport>(entity =>
+        {
+            entity.ToTable("signature_reports");
+            entity.HasKey(r => r.Id);
+            entity.Property(r => r.Id).UseIdentityAlwaysColumn();
+
+            entity.Property(r => r.Signature).HasMaxLength(256).IsRequired();
+            entity.Property(r => r.Reason).HasConversion<string>().HasMaxLength(16);
+            entity.Property(r => r.Note).HasMaxLength(200);
+            entity.Property(r => r.Resolution).HasConversion<string>().HasMaxLength(16);
+            entity.Property(r => r.ResolutionNote).HasMaxLength(200);
+
+            entity.HasOne<Account>().WithMany()
+                  .HasForeignKey(r => r.ReporterId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<Player>().WithMany()
+                  .HasForeignKey(r => r.TargetId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<Account>().WithMany()
+                  .HasForeignKey(r => r.ResolvedBy).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne<MailMessage>().WithMany()
+                  .HasForeignKey(r => r.MailId).OnDelete(DeleteBehavior.SetNull);
+
+            // 一人一条未结的 / One open report per reporter and player. The index is what makes that
+            // true when two reports race, not the check before the insert.
+            entity.HasIndex(r => new { r.ReporterId, r.TargetId })
+                  .IsUnique()
+                  .HasFilter("resolved_at IS NULL")
+                  .HasDatabaseName("ux_signature_reports_open");
+
+            // The queue (open, by player) and the daily limit (by reporter, by time).
+            entity.HasIndex(r => new { r.TargetId, r.ResolvedAt });
+            entity.HasIndex(r => new { r.ReporterId, r.CreatedAt });
         });
 
         // 三张表都用组合主键 / All three use a composite key rather than a surrogate
@@ -838,6 +873,12 @@ public class PromuseDbContext(DbContextOptions<PromuseDbContext> options) : DbCo
             // should say what it is.
             entity.Property(s => s.Verdict).HasConversion<string>().HasMaxLength(16);
             entity.Property(s => s.Replay).HasColumnType("jsonb");
+
+            // 人工审核 / A moderator's decision, by name like the verdict beside it.
+            entity.Property(s => s.Decision).HasConversion<string>().HasMaxLength(16);
+            entity.Property(s => s.DecisionNote).HasMaxLength(200);
+            entity.HasOne<Account>().WithMany()
+                  .HasForeignKey(s => s.DecidedBy).OnDelete(DeleteBehavior.SetNull);
 
             entity.HasIndex(s => new { s.AccountId, s.SubmittedAt });
 
