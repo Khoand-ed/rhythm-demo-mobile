@@ -232,7 +232,7 @@ the LMD they cost.
   campaign from 1-3 onwards. The admin can also mail them.
 - **LMD:** 3 in 10 of the EXP that goes in, at elite 0.
 - **Cap:** set by rarity and elite phase - 40 for a 3-star at elite 0, 45 for a 4-star, 50 for a
-  5-star. Promotion, which raises it, is not built yet.
+  5-star. Promotion raises it (below).
 - **Stats:** each level past the first adds 2 max HP and +0.002 to the score and fever modifiers
   (per operator, in `CharMeta` and `server/data/ruleset.json`). A run is played, and reviewed, at
   the level the server recorded when it opened, so a level-up mid-song changes nothing about it.
@@ -240,6 +240,14 @@ the LMD they cost.
 The curve, the caps and what a record is worth live in one place, `OperatorLevels` in the shared
 contracts, so the screen previews exactly what the server does. Built by
 `Arknights/Character/Build Level Up UI`; `Reset Level Up UI To Default` rebuilds it.
+
+**Promotion.** The PROMOTION panel on the same page opens the promotion screen. At the level cap, an
+operator can be promoted one elite phase - a 3-star to Elite 1, a 4-star and up to Elite 2 - for
+LMD, Orirock and Sugar Substitute by rarity and phase (`OperatorLevels.PromotionCost`; Sugar
+Substitute drops from 1-2, 2-1 and 2-3). Promotion keeps the level and only raises the cap - 40 to
+55 for a 3-star, 45 to 60 to 70 for a 4-star, 50 to 70 to 80 for a 5-star - so nothing about how
+the operator plays changes until it is levelled again, on the new phase's EXP curve and LMD rate.
+Built by `Arknights/Character/Build Promotion UI`; `Reset Promotion UI To Default` rebuilds it.
 
 ### Four red errors on boot are expected
 
@@ -299,7 +307,7 @@ above and for device builds.
 
 | Menu | What lives there |
 |---|---|
-| **`Arknights/`** | Content pipeline — AssetBundles, placeholder art, audio import, local character art, the Home / Depot / event / campaign / mail, notice and calendar / profile / level-up screen builders, and the story tools |
+| **`Arknights/`** | Content pipeline — AssetBundles, placeholder art, audio import, local character art, the Home / Depot / event / campaign / mail, notice and calendar / profile / level-up / promotion screen builders, and the story tools |
 | **`Beatmap/`** | Charting — `Beatmap Studio...` and `Timeline Editor...` author charts; `Import All Beatmaps` turns the JSON under `Assets/Beatmaps/` into `SongChart` assets |
 | **`Tools/Rhythm/`** | Gameplay scene setup — note system, HUD, hit feedback, character stage, skip button, song-select wiring, loading screen |
 
