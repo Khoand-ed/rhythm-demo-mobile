@@ -54,6 +54,14 @@ public class RunScore
     public int TraceFrames { get; set; }
     public int Presses { get; set; }
 
+    /// <summary>
+    /// What the server's replay of the trace scored, as JSON (jsonb): score, maxCombo, perfect,
+    /// great, hit, miss, fullCombo, failed, frames. Null when it could not run - no trace, or an
+    /// operator the ruleset does not hold. Beside the claimed numbers above, it is what a
+    /// REPLAY_MISMATCH flag is looked into with.
+    /// </summary>
+    public string? Replay { get; set; }
+
     public int? TimingSamples { get; set; }
     public double? TimingMeanMs { get; set; }
     public double? TimingStdDevMs { get; set; }

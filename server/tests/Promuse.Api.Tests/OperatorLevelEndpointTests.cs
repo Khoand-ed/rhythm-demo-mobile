@@ -389,7 +389,7 @@ public class OperatorLevelEndpointTests(PromuseApiFactory factory)
         RunTicket ticket = await StartAsync(session);
         Assert.Equal(20, ticket.CharacterLevel);
 
-        ScoreReview review = await CompleteAsync(session, ticket, Played.Win(factory, 1000, characterId: Pulse, level: 20));
+        ScoreReview review = await CompleteAsync(session, ticket, Played.Win(factory, characterId: Pulse, level: 20));
 
         Assert.Equal(ScoreVerdict.Accepted, review.Verdict);
     }
@@ -401,7 +401,7 @@ public class OperatorLevelEndpointTests(PromuseApiFactory factory)
         await SetLevelAsync(session, 20);
 
         RunTicket ticket = await StartAsync(session);
-        ScoreReview review = await CompleteAsync(session, ticket, Played.Win(factory, 1000, characterId: Pulse, level: 1));
+        ScoreReview review = await CompleteAsync(session, ticket, Played.Win(factory, characterId: Pulse, level: 1));
 
         Assert.Equal(ScoreVerdict.Rejected, review.Verdict);
         Assert.Contains(ScoreReviewCodes.RulesetMismatch, review.Reasons);
@@ -416,7 +416,7 @@ public class OperatorLevelEndpointTests(PromuseApiFactory factory)
         RunTicket ticket = await StartAsync(session);
         await SetLevelAsync(session, 30);
 
-        ScoreReview review = await CompleteAsync(session, ticket, Played.Win(factory, 1000, characterId: Pulse, level: 20));
+        ScoreReview review = await CompleteAsync(session, ticket, Played.Win(factory, characterId: Pulse, level: 20));
 
         Assert.Equal(ScoreVerdict.Accepted, review.Verdict);
     }

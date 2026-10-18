@@ -1694,6 +1694,10 @@ namespace Promuse.Persistence.Migrations
                         .HasColumnType("text[]")
                         .HasColumnName("reasons");
 
+                    b.Property<string>("Replay")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("replay");
+
                     b.Property<string>("RulesetFingerprint")
                         .IsRequired()
                         .HasMaxLength(32)

@@ -34,7 +34,7 @@ using System;
 namespace UnityEngine
 {
     /// <summary>
-    /// Only the six members the linked scoring code calls.
+    /// Only the members the linked scoring code calls - RunJudge added Abs and FloorToInt.
     /// </summary>
     public static class Mathf
     {
@@ -90,6 +90,15 @@ namespace UnityEngine
         /// return different scores and a clean run would be flagged as tampered.
         /// </summary>
         public static int RoundToInt(float f) => (int)Math.Round((double)f);
+
+        /// <summary>As Unity writes it: Math.Abs on the float itself, exact.</summary>
+        public static float Abs(float f) => Math.Abs(f);
+
+        /// <summary>
+        /// As Unity writes it, (int)Math.Floor(f) - through a double, which holds every float
+        /// exactly, so the floor is of the value RunJudge computed and nothing rounds on the way.
+        /// </summary>
+        public static int FloorToInt(float f) => (int)Math.Floor(f);
     }
 
     /// <summary>

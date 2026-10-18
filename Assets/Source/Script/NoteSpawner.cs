@@ -3,6 +3,9 @@ using UnityEngine;
 
 // Walks the chart in song-time order, spawning each note one lead time before
 // it is due and retiring it once it is resolved and finished animating.
+//
+// 不判定 / It no longer judges anything - not even a note running out unplayed. RunJudge decides
+// every note, in a fixed order the server can replay, and GameManager marks the view it names.
 public class NoteSpawner : MonoBehaviour
 {
     public SongChart chart;
@@ -23,7 +26,8 @@ public class NoteSpawner : MonoBehaviour
 
     // The chart split per lane, with every Twin expanded into one entry in
     // each lane. Lanes can have different lead times, so a single cursor over
-    // the chart would spawn one half of a Twin early or late.
+    // the chart would spawn one half of a Twin early or late. Split by
+    // RunJudge.SplitByLane, so a note's index here is the one the judge reports.
     private List<NoteData>[] queueByLane;
     private int[] nextByLane;
     private SongChart queuedChart;
@@ -72,39 +76,20 @@ public class NoteSpawner : MonoBehaviour
         if (queuedChart == chart && queueByLane != null) return;
 
         queuedChart = chart;
-        queueByLane = new List<NoteData>[lanes.Length];
         nextByLane = new int[lanes.Length];
-
-        for (int i = 0; i < lanes.Length; i++) queueByLane[i] = new List<NoteData>();
+        queueByLane = RunJudge.SplitByLane(chart != null ? chart.notes : null, lanes.Length);
 
         if (chart == null) return;
 
-        // The chart is sorted, and appending in chart order keeps every lane's
-        // queue sorted too.
+        // The split leaves these out, and so does the judge; say so once.
         for (int i = 0; i < chart.notes.Count; i++)
         {
             NoteData data = chart.notes[i];
 
-            if (data.type == NoteType.Twin)
-            {
-                for (int lane = 0; lane < Mathf.Min(2, lanes.Length); lane++)
-                {
-                    NoteData half = data;
-                    half.lane = lane;
-                    half.duration = 0f;
-                    queueByLane[lane].Add(half);
-                }
-
-                continue;
-            }
-
-            if (data.lane < 0 || data.lane >= lanes.Length)
+            if (data.type != NoteType.Twin && (data.lane < 0 || data.lane >= lanes.Length))
             {
                 Debug.LogError($"{chart.name}: note {i} is on lane {data.lane}, which does not exist.", chart);
-                continue;
             }
-
-            queueByLane[data.lane].Add(data);
         }
     }
 
@@ -127,14 +112,21 @@ public class NoteSpawner : MonoBehaviour
             // means nothing later in this lane is due either.
             while (nextByLane[laneIndex] < queue.Count)
             {
-                NoteData data = queue[nextByLane[laneIndex]];
+                int index = nextByLane[laneIndex];
+                NoteData data = queue[index];
                 if (songTime < data.hitTime - leadTime) break;
+
+                nextByLane[laneIndex]++;
+
+                // 已经判过的不画 / Already decided - only possible after a skip jumped past its
+                // spawn time - so there is nothing left to show.
+                if (GameManager.instance.IsNoteResolved(laneIndex, index)) continue;
 
                 NoteView note = PoolFor(data.type).Get();
                 note.Bind(data, lane, chart.noteSpeed, middlePos, standAtMiddleDuration);
+                note.Index = index;
                 note.UpdatePosition(songTime);
                 activeByLane[laneIndex].Add(note);
-                nextByLane[laneIndex]++;
             }
         }
     }
@@ -148,8 +140,6 @@ public class NoteSpawner : MonoBehaviour
 
     private void UpdateActive(float songTime)
     {
-        JudgeSettings judge = GameManager.instance.judge;
-
         for (int laneIndex = 0; laneIndex < activeByLane.Length; laneIndex++)
         {
             List<NoteView> notes = activeByLane[laneIndex];
@@ -158,13 +148,6 @@ public class NoteSpawner : MonoBehaviour
             {
                 NoteView note = notes[i];
                 note.UpdatePosition(songTime);
-
-                // The window is a property of the note type now, not the lane.
-                if (!note.Judged && songTime > note.Data.hitTime + judge.MaxWindow(note.Data.type))
-                {
-                    note.MarkMissed();
-                    GameManager.instance.NoteMissedInLane(note.Data.type, laneIndex);
-                }
 
                 if (note.IsFinished(songTime))
                 {
@@ -181,33 +164,9 @@ public class NoteSpawner : MonoBehaviour
         owner.Release(note);
     }
 
-    // The note a press in this lane should resolve against: the earliest
-    // unjudged note still inside the hit window, or null if there is none.
-    // Resolving at most one note per call preserves the old rule that two
-    // notes close together can never both consume the same press.
-    public NoteView PeekJudgeable(int laneIndex, float songTime)
-    {
-        if (activeByLane == null || laneIndex < 0 || laneIndex >= activeByLane.Length) return null;
-
-        List<NoteView> notes = activeByLane[laneIndex];
-        JudgeSettings judge = GameManager.instance.judge;
-        NoteView best = null;
-
-        for (int i = 0; i < notes.Count; i++)
-        {
-            NoteView note = notes[i];
-
-            if (note.Judged) continue;
-            if (Mathf.Abs(songTime - note.Data.hitTime) > judge.MaxWindow(note.Data.type)) continue;
-            if (best == null || note.Data.hitTime < best.Data.hitTime) best = note;
-        }
-
-        return best;
-    }
-
-    // The hold currently being held down in this lane, or null. The chart
-    // generator never overlaps two holds in one lane, so there is at most one.
-    public NoteView ActiveHold(int laneIndex)
+    // The view of the note the judge names by lane and index, or null when it is
+    // not on screen - not spawned yet, or already gone.
+    public NoteView ViewOf(int laneIndex, int index)
     {
         if (activeByLane == null || laneIndex < 0 || laneIndex >= activeByLane.Length) return null;
 
@@ -215,7 +174,7 @@ public class NoteSpawner : MonoBehaviour
 
         for (int i = 0; i < notes.Count; i++)
         {
-            if (notes[i].Holding) return notes[i];
+            if (notes[i].Index == index) return notes[i];
         }
 
         return null;
