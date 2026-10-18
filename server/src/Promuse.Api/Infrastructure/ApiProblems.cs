@@ -1,4 +1,5 @@
 using Promuse.Contracts;
+using Promuse.Contracts.Players;
 
 namespace Promuse.Api.Infrastructure;
 
@@ -185,6 +186,12 @@ public static class ApiProblems
 
     public static ApiProblem PlayerNotFound() =>
         Create(404, ErrorCodes.PlayerNotFound, "No such player", "There is no player with that id.");
+
+    public static ApiProblem SignatureLocked(DateTimeOffset until) =>
+        Create(409, ErrorCodes.SignatureLocked, "Signature locked",
+            SignatureLock.IsPermanent(until)
+                ? "A moderator has locked your profile signature."
+                : $"A moderator has locked your profile signature until {until.UtcDateTime:yyyy-MM-dd HH:mm} UTC.");
 
     public static ApiProblem StageLocked(string previousStageId) =>
         Create(409, ErrorCodes.StageLocked, "Stage is locked",

@@ -26,6 +26,10 @@ namespace Promuse.Contracts.Players
     /// and its tag never do.
     /// </param>
     /// <param name="Signature">The line on the player's profile card, or null.</param>
+    /// <param name="SignatureLockedUntil">
+    /// While a moderator has locked the line, when the player may write it again - or
+    /// <see cref="SignatureLock.Permanent"/> for never. Null when it is not locked.
+    /// </param>
     public sealed record PlayerState(
         Guid PlayerId,
         string DisplayName,
@@ -38,6 +42,7 @@ namespace Promuse.Contracts.Players
         IReadOnlyList<string?> Squad,
         string? DesktopCharacterId,
         string? Signature,
+        DateTimeOffset? SignatureLockedUntil,
         IReadOnlyList<ItemStack> Inventory,
         int StateVersion,
         DateTimeOffset ServerTime);
@@ -114,6 +119,21 @@ namespace Promuse.Contracts.Players
     {
         /// <summary>"#0420": always four digits, so "#7" and "#0007" are never two spellings of one player.</summary>
         public static string Format(int tag) => "#" + tag.ToString("D4", CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>
+    /// 禁止改签名 / A moderator's lock on the profile line: until it lifts, writing the line is
+    /// refused with SIGNATURE_LOCKED.
+    /// </summary>
+    public static class SignatureLock
+    {
+        /// <summary>
+        /// A lock that never lifts by itself, stored as a date no one will reach rather than as a
+        /// second column that could disagree with the first. Only a moderator lifts it.
+        /// </summary>
+        public static readonly DateTimeOffset Permanent = new DateTimeOffset(9999, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
+        public static bool IsPermanent(DateTimeOffset until) => until >= Permanent;
     }
 
     /// <summary>
