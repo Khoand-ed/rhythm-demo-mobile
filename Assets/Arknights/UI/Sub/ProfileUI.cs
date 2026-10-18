@@ -191,13 +191,30 @@ namespace UI.Sub {
         }
 
         private void DrawSignature(string signature, bool editable) {
+            // 被锁就不能写 / A line a moderator has locked cannot be written, and the card says until when.
+            DateTimeOffset? locked = editable ? LockedUntil() : null;
+            bool writable = editable && locked == null;
+
             signatureField.SetTextWithoutNotify(signature ?? "");
-            signatureField.interactable = editable && !saving;
-            signaturePlaceholder.text = editable
-                ? "Tap to write something about yourself"
+            signatureField.interactable = writable && !saving;
+            signaturePlaceholder.text = locked is { } until ? LockedText(until)
+                : editable ? "Tap to write something about yourself"
                 : profile != null ? "This Doctor has not written anything yet." : "";
-            editHint.SetActive(editable);
+            editHint.SetActive(writable);
         }
+
+        /// <summary>The lock on the player's own line, from their save; null when there is none or it has passed.</summary>
+        private static DateTimeOffset? LockedUntil() {
+            PlayerData player = PlayerManager.Inst().Get();
+            DateTimeOffset? until = player != null ? player.GetSignatureLockedUntil() : null;
+            return until is { } value && value > DateTimeOffset.UtcNow ? until : null;
+        }
+
+        private static string LockedText(DateTimeOffset until) =>
+            SignatureLock.IsPermanent(until)
+                ? "A moderator has locked your signature."
+                : "A moderator has locked your signature until " +
+                  until.ToLocalTime().ToString("yyyy-M-d HH:mm", CultureInfo.InvariantCulture) + ".";
 
         /// <summary>
         /// 只认有元数据的干员 / Only an id with a meta in Resources: asking CharManager for anything
