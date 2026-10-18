@@ -60,13 +60,16 @@ namespace Data.Char {
 
         // 最大精英等级
         public int GetMaxElite() {
-            return CharMeta.GetMaxElite(data.GetRarity());
+            return CharMeta.GetMaxElite(GetCharMeta().GetRarity());
         }
         
         // 最大等级
         public int GetMaxLevel() {
-            return CharMeta.GetMaxLevel(data.GetRarity(),elite);
+            return CharMeta.GetMaxLevel(GetCharMeta().GetRarity(),elite);
         }
+
+        /// <summary>At its level cap for its elite phase: no more EXP can go in.</summary>
+        public bool IsAtMaxLevel() => level >= GetMaxLevel();
         
         // 获得最大经验值
         public int GetMaxExp() {

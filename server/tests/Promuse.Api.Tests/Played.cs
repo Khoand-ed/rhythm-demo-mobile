@@ -23,14 +23,15 @@ internal static class Played
     /// <summary>
     /// A clean win: every judgement a Perfect, a full combo, the fingerprint the server expects,
     /// and a trace of presses with a person's spread. The score is whatever the test needs - the
-    /// review bounds it from above, it does not recompute it.
+    /// review bounds it from above, it does not recompute it. Played at <paramref name="level"/>,
+    /// which is part of the rules the fingerprint names.
     /// </summary>
     public static RunResult Win(PromuseApiFactory factory, int score = 1000, string stage = Stage,
-                                string characterId = Operator, double jitterMs = 25)
+                                string characterId = Operator, double jitterMs = 25, int level = 1)
     {
         GameData data = Data(factory);
         ScoringChart chart = data.ChartFor(stage)!;
-        OperatorRules op = data.Rules.FindOperator(characterId)!;
+        OperatorRules op = data.Rules.FindOperator(characterId)!.AtLevel(level);
         int total = chart.JudgementCount;
 
         return new RunResult(

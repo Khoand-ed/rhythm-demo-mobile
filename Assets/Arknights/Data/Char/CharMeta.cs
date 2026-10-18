@@ -66,6 +66,19 @@ namespace Data.Char {
         [Header("狂热系数"),SerializeField]
         private float feverModifier;
 
+        // 等级成长 / What each level past the first adds to the three values above - the operator as
+        // it plays is OperatorRules.AtLevel. The two modifiers grow in ten-thousandths (20 is +0.002
+        // a level) so the device and the server compute the same bits. Mirrored in
+        // server/data/ruleset.json, which RulesetParityTests checks field by field.
+        [Header("每级生命 / Max HP per level"),SerializeField]
+        private int maxHpPerLevel;
+
+        [Header("每级分数系数 (万分之) / Score per level, ten-thousandths"),SerializeField]
+        private int scorePerLevel;
+
+        [Header("每级狂热系数 (万分之) / Fever per level, ten-thousandths"),SerializeField]
+        private int feverPerLevel;
+
         [Header("被动"),SerializeField]
         private PassiveSO passive;
 
@@ -122,6 +135,27 @@ namespace Data.Char {
         public float GetScoreModifier() => scoreModifier;
         public float GetFeverModifier() => feverModifier;
         public PassiveSO GetPassive() => passive;
+
+        /// <summary>
+        /// 音游数值 / The rhythm stats as the shared rules describe them, at <paramref name="level"/>.
+        /// The same fallbacks GameManager plays with: a modifier of 0 is a meta from before the rhythm
+        /// fields and plays at 1; a maxHp of 0 means HealthSettings decides. The passive is described,
+        /// not run - GameManager still takes the PassiveSO itself.
+        /// </summary>
+        public OperatorRules RulesAt(int level) {
+            OperatorRules rules = new OperatorRules {
+                id = string.IsNullOrEmpty(id) ? name : id,
+                scoreModifier = scoreModifier > 0f ? scoreModifier : 1f,
+                feverModifier = feverModifier > 0f ? feverModifier : 1f,
+                maxHp = Mathf.Max(0, maxHp),
+                passive = PassiveRules.From(passive),
+                rarity = rarity,
+                maxHpPerLevel = maxHpPerLevel,
+                scorePerLevel = scorePerLevel,
+                feverPerLevel = feverPerLevel,
+            };
+            return rules.AtLevel(level);
+        }
         // 本地美术优先 / Art installed on this machine beats the tracked fields. See
         // CharArtOverrides for why that registry exists, and why it is the one that points at the
         // ignored folder rather than this asset.
@@ -202,62 +236,20 @@ namespace Data.Char {
          * 获得最大精英值
          * rarity - 稀有度
          */
-        public static int GetMaxElite(int rarity) {
-            switch (rarity) {
-                case 1:
-                case 2:
-                    return 0;
-                case 3:
-                    return 1;
-                case 4:
-                case 5:
-                case 6:
-                    return 2;
-                default:
-                    return -1;
-            }
-        }
+        public static int GetMaxElite(int rarity) => Promuse.Contracts.Characters.OperatorLevels.MaxElite(rarity);
 
         /**
          * 获得最大等级
          * rarity - 稀有度
          * elite - 当前精英阶级
          */
-        public static int GetMaxLevel(int rarity,int elite) {
-            switch (rarity) {
-                case 1:
-                case 2:
-                    if (elite == 0) return 30;
-                    break;
-                case 3:
-                    if (elite == 0) return 40;
-                    if (elite == 1) return 55;
-                    break;
-                case 4:
-                    return elite == 0 ? 45 : elite == 1 ? 60 : 70;
-                case 5:
-                    return elite == 0 ? 50 : elite == 1 ? 70 : 80;
-                case 6:
-                    return elite == 0 ? 50 : elite == 1 ? 80 : 90;
-            }
-            return -1;
-        }
+        public static int GetMaxLevel(int rarity,int elite) => Promuse.Contracts.Characters.OperatorLevels.MaxLevel(rarity, elite);
 
         /**
          * 获得最大经验值
          * elite - 当前精英阶级
          * level - 当前等级
          */
-        public static int GetMaxExp(int elite,int level) {
-            switch (elite) {
-                case 0:
-                    return 100 + level * 20;
-                case 1:
-                    return 120 + level * 60;
-                case 2:
-                    return 120 + level * 120;
-            }
-            return -1;
-        }
+        public static int GetMaxExp(int elite,int level) => Promuse.Contracts.Characters.OperatorLevels.ExpToNext(elite, level);
     }
 }

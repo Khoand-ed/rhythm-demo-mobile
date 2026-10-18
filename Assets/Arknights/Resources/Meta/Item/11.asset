@@ -17,6 +17,6 @@ MonoBehaviour:
   icon: {fileID: 21300000, guid: 7f48b19758f873c4eb95de680cb22612, type: 3}
   rarity: 3
   type: 0
-  useInfo: Grants a small amount of operator experience.
+  useInfo: Grants 200 operator EXP when used to level an operator up.
   description: Grants a small amount of operator experience.
-  waysObtain: Certificate Exchange
+  waysObtain: Stage Drops, Certificate Exchange

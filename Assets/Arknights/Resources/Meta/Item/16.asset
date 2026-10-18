@@ -1,0 +1,23 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c59fa90f2e268314da2e2c346e9c0066, type: 3}
+  m_Name: 16
+  m_EditorClassIdentifier: Arknights::Data.Item.ItemMeta
+  id: 16
+  name: Strategic Battle Record
+  icon: {fileID: 21300000, guid: b0c44228c38449d44b6e9a5113c3e928, type: 3}
+  rarity: 5
+  type: 0
+  useInfo: Grants 2000 operator EXP when used to level an operator up.
+  description: A strategic record kept by Rhodes Island's command. Rarely seen outside
+    it.
+  waysObtain: Stage Drops

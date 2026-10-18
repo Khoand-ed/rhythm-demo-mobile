@@ -221,6 +221,26 @@ Built by `Arknights/Home/Build Profile UI`, which also places the button inside 
 so it leans with the news panel. `Reset Profile UI To Default` rebuilds the screen and puts the
 button back where it started.
 
+### Operator levels
+
+Pressing the level panel on an operator's page (LV, EXP and the cap) opens the level-up screen. Drag
+the dial down to choose a target level and the battle records for it are picked - as few as reach it,
+with the least EXP left over - or press a record to add one by hand. Level Up spends the records and
+the LMD they cost.
+
+- **Records:** Basic (200 EXP), Frontline (400), Tactical (1000) and Strategic (2000), dropped by the
+  campaign from 1-3 onwards. The admin can also mail them.
+- **LMD:** 3 in 10 of the EXP that goes in, at elite 0.
+- **Cap:** set by rarity and elite phase - 40 for a 3-star at elite 0, 45 for a 4-star, 50 for a
+  5-star. Promotion, which raises it, is not built yet.
+- **Stats:** each level past the first adds 2 max HP and +0.002 to the score and fever modifiers
+  (per operator, in `CharMeta` and `server/data/ruleset.json`). A run is played, and reviewed, at
+  the level the server recorded when it opened, so a level-up mid-song changes nothing about it.
+
+The curve, the caps and what a record is worth live in one place, `OperatorLevels` in the shared
+contracts, so the screen previews exactly what the server does. Built by
+`Arknights/Character/Build Level Up UI`; `Reset Level Up UI To Default` rebuilds it.
+
 ### Four red errors on boot are expected
 
 ```
@@ -279,7 +299,7 @@ above and for device builds.
 
 | Menu | What lives there |
 |---|---|
-| **`Arknights/`** | Content pipeline — AssetBundles, placeholder art, audio import, local character art, the Home / Depot / event / campaign / mail, notice and calendar / profile screen builders, and the story tools |
+| **`Arknights/`** | Content pipeline — AssetBundles, placeholder art, audio import, local character art, the Home / Depot / event / campaign / mail, notice and calendar / profile / level-up screen builders, and the story tools |
 | **`Beatmap/`** | Charting — `Beatmap Studio...` and `Timeline Editor...` author charts; `Import All Beatmaps` turns the JSON under `Assets/Beatmaps/` into `SongChart` assets |
 | **`Tools/Rhythm/`** | Gameplay scene setup — note system, HUD, hit feedback, character stage, skip button, song-select wiring, loading screen |
 

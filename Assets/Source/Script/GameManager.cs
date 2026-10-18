@@ -1039,6 +1039,10 @@ void Update()
         runSeed = ticket.Value.Seed;
         runCost = ticket.Value.StaminaSpent;
 
+        // 新的一局按它自己的等级 / The new run is reviewed at the level on its own ticket, which a
+        // level-up since the last one would have moved.
+        ApplyOperatorLevel(ticket.Value.CharacterLevel);
+
         if (abandoned != System.Guid.Empty) AbandonRun(abandoned);
 
         HideNotice();
@@ -1354,6 +1358,10 @@ void Update()
 
         operatorId = SongSession.Character.GetId();
 
+        // 票上的等级优先 / The ticket's level for a ranked run, the operator's own for practice or a
+        // session entered from the Editor.
+        int level = SongSession.CharacterLevel > 0 ? SongSession.CharacterLevel : SongSession.Character.GetLevel();
+
         try
         {
             CharMeta meta = SongSession.Character.GetCharMeta();
@@ -1365,26 +1373,30 @@ void Update()
             }
 
             operatorMeta = meta;
-
-            // 0 说明这份 meta 是模板升级前生成的 / A zero means the asset predates the rhythm
-            // fields, not that the operator is meant to score nothing. Fall back to neutral.
-            float score = meta.GetScoreModifier();
-            float feverGain = meta.GetFeverModifier();
-
-            operatorScoreModifier = score > 0f ? score : 1f;
-            operatorFeverModifier = feverGain > 0f ? feverGain : 1f;
             operatorPassive = meta.GetPassive();
-
-            // 0 就退回 HealthSettings / Zero falls back to the tuning asset, same as the two
-            // modifiers above: a meta predating the rhythm fields is missing data, not an
-            // operator meant to start on no HP at all.
-            operatorMaxHp = Mathf.Max(0, meta.GetMaxHp());
+            ApplyOperatorLevel(level);
         }
         catch (System.Exception e)
         {
             Debug.LogWarning("[GameManager] Could not read the operator's modifiers, " +
                              "playing without them: " + e.Message);
         }
+    }
+
+    /// <summary>
+    /// 按等级取数值 / The operator's modifiers and max HP at <paramref name="level"/>, through the
+    /// shared rules (CharMeta.RulesAt -> OperatorRules.AtLevel) the server reviews with. Those carry
+    /// the old fallbacks too: a modifier of 0 is a meta from before the rhythm fields and plays at 1,
+    /// and a max HP of 0 leaves HealthSettings to decide.
+    /// </summary>
+    private void ApplyOperatorLevel(int level)
+    {
+        if (operatorMeta == null) return;
+
+        OperatorRules rules = operatorMeta.RulesAt(level);
+        operatorScoreModifier = rules.scoreModifier;
+        operatorFeverModifier = rules.feverModifier;
+        operatorMaxHp = rules.maxHp;
     }
 
     // 资产缺失时不要每帧抛异常 / Guarded on the assets, not just the bars. RequireTuning has

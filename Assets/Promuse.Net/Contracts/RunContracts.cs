@@ -50,13 +50,19 @@ namespace Promuse.Contracts.Runs
     ///
     /// The client seeds its own generator from this before the first note.
     /// </param>
+    /// <param name="CharacterLevel">
+    /// 按开局时的等级 / The operator's level as the server recorded it when the run opened. The run
+    /// is played at it and reviewed at it, whatever happens to the operator before the result
+    /// arrives, so the device takes this number rather than the one it holds.
+    /// </param>
     public sealed record RunTicket(
         Guid RunId,
         string StageId,
         long Seed,
         int StaminaSpent,
         PlayerState Player,
-        DateTimeOffset ServerTime);
+        DateTimeOffset ServerTime,
+        int CharacterLevel = 1);
 
     /// <param name="Won">
     /// 通关才算 / Only a win advances the "clear any song" missions, matching what

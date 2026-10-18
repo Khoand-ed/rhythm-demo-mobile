@@ -35,6 +35,12 @@ public class Run
     public string? CharacterId { get; set; }
 
     /// <summary>
+    /// The operator's level when the run opened. Its stats grow with level, so the result is
+    /// reviewed at this one - a level-up landing while the song plays changes nothing about it.
+    /// </summary>
+    public int CharacterLevel { get; set; } = 1;
+
+    /// <summary>
     /// 活动关卡 / The event this run was played as a stage of, from the event screen; null for
     /// every other run. Only such a run pays the event currency and clears the stage.
     /// </summary>

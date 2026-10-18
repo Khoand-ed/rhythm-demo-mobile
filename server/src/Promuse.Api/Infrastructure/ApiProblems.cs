@@ -131,9 +131,9 @@ public static class ApiProblems
         Create(409, ErrorCodes.NotEnoughPoints, "Not enough points",
             $"This reward needs {required} claimed points and you have {points}.");
 
-    public static ApiProblem CharacterNotOwned(string characterId) =>
+    public static ApiProblem CharacterNotOwned(string characterId, string because = "a run cannot be played with it") =>
         Create(409, ErrorCodes.CharacterNotOwned, "Operator not owned",
-            $"'{characterId}' is not on this player's roster, so a run cannot be played with it.");
+            $"'{characterId}' is not on this player's roster, so {because}.");
 
     public static ApiProblem BannerNotFound(string bannerId) =>
         Create(404, ErrorCodes.BannerNotFound, "No such banner",
@@ -170,6 +170,10 @@ public static class ApiProblems
 
     public static ApiProblem NoticeNotFound() =>
         Create(404, ErrorCodes.NoticeNotFound, "No such notice", "That notice is not showing.");
+
+    public static ApiProblem LevelCapped(int maxLevel) =>
+        Create(409, ErrorCodes.LevelCapped, "Already at the level cap",
+            $"The operator is at level {maxLevel}, the cap for its elite phase.");
 
     public static ApiProblem PlayerNotFound() =>
         Create(404, ErrorCodes.PlayerNotFound, "No such player", "There is no player with that id.");

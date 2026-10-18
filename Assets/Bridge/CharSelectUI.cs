@@ -192,9 +192,11 @@ public class CharSelectUI : UIBase
             portraitProfession.sprite = SafeSprite(() => CharManager.Inst().GetProfessionSmallImage(meta.GetProfession()));
             rarityRule.color = RarityTint(meta.GetRarity());
 
-            hpValue.text = meta.GetMaxHp().ToString();
-            scoreValue.text = $"x{meta.GetScoreModifier():0.00}";
-            feverValue.text = $"x{meta.GetFeverModifier():0.00}";
+            // 按这名干员现在的等级 / At the operator's level now - what the run will play with.
+            OperatorRules stats = meta.RulesAt(selected.GetLevel());
+            hpValue.text = stats.maxHp.ToString();
+            scoreValue.text = $"x{stats.scoreModifier:0.000}";
+            feverValue.text = $"x{stats.feverModifier:0.000}";
 
             // 只有一个被动, 没有占位槽 / Exactly one passive and no empty slot: the block is
             // drawn when there is something in it and hidden when there is not - line 175
@@ -279,7 +281,7 @@ public class CharSelectUI : UIBase
             long seed = ((long)UnityEngine.Random.Range(int.MinValue, int.MaxValue) << 32)
                         | (uint)UnityEngine.Random.Range(int.MinValue, int.MaxValue);
 
-            EnterGameplay(chart, selected, PlayMode.Practice, System.Guid.Empty, seed, 0);
+            EnterGameplay(chart, selected, PlayMode.Practice, System.Guid.Empty, seed, 0, selected.GetLevel());
             return;
         }
 
@@ -318,8 +320,10 @@ public class CharSelectUI : UIBase
 
         // A submitted result has to name the run it belongs to, and have been played
         // against the sequence the server issued.
+        // 按服务端记下的等级打 / At the level the server recorded for this run, which is the level it
+        // will be reviewed at - not one this device may hold out of date.
         EnterGameplay(starting, operatorChosen, PlayMode.Ranked,
-                      ticket.Value.RunId, ticket.Value.Seed, ticket.Value.StaminaSpent);
+                      ticket.Value.RunId, ticket.Value.Seed, ticket.Value.StaminaSpent, ticket.Value.CharacterLevel);
     }
 
     /// <summary>
@@ -330,12 +334,12 @@ public class CharSelectUI : UIBase
     /// screen may already be destroyed; nothing below may touch an instance member.
     /// </summary>
     private static void EnterGameplay(SongChart starting, CharData operatorChosen, PlayMode playMode,
-                                      System.Guid runId, long seed, int staminaCost)
+                                      System.Guid runId, long seed, int staminaCost, int characterLevel)
     {
         SongSession.Set(starting);
         SongSession.SetCharacter(operatorChosen);
         SongSession.SetMode(playMode);
-        SongSession.SetRun(runId, seed, staminaCost);
+        SongSession.SetRun(runId, seed, staminaCost, characterLevel);
 
         // SoundManager is DontDestroyOnLoad, so the front-end's music would keep
         // playing underneath the song. HomeUI starts it again on the way back,

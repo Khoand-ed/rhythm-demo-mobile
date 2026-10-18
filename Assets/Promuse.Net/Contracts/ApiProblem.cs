@@ -154,6 +154,12 @@ namespace Promuse.Contracts
         public const string PlayerNotFound = "PLAYER_NOT_FOUND";
 
         /// <summary>
+        /// The operator is already at its level cap for its elite phase. More EXP would go nowhere;
+        /// promotion, which raises the cap, is not built yet.
+        /// </summary>
+        public const string LevelCapped = "LEVEL_CAPPED";
+
+        /// <summary>
         /// The game is down for maintenance. Temporary by definition: a result that could not be
         /// sent is kept and sent afterwards, and the detail says what the operator wrote.
         /// </summary>
