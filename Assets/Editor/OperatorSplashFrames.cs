@@ -20,11 +20,12 @@ using UnityEngine.UI;
 ///   Dialogue             Figure - unclipped, over the scene's background
 ///   Profile card         Figure - the assistant, clipped to the card's left half
 ///   Level up             Figure - clipped to the left of the screen, shaded under the panels
+///   Promotion            Figure - behind the band, shaded under the requirements row
 ///
 /// 找到就不动 / Find-or-create: a frame or shade that exists keeps whatever was tuned on it by hand.
 /// Reset Operator Splash Frames To Default puts the values below back. The builders for the picker,
-/// headhunting, dialogue, profile and level-up screens call <see cref="FitInto"/> too, so a rebuilt
-/// screen keeps its frames.
+/// headhunting, dialogue, profile, level-up and promotion screens call <see cref="FitInto"/> too, so a
+/// rebuilt screen keeps its frames.
 /// </summary>
 public static class OperatorSplashFrames
 {
@@ -119,6 +120,13 @@ public static class OperatorSplashFrames
                 new Shade("ArtClip", "ShadeBottom", SplashShade.Edge.Bottom, 620f, 0.85f, 0.35f),
                 new Shade("ArtClip", "ShadeTop", SplashShade.Edge.Top, 200f, 0.5f, 0.2f),
             },
+        },
+        // 精英化 / The level and the costs sit along the bottom, under the band.
+        new Slot
+        {
+            Prefab = "PromotionUI", Path = "ArtClip/Art",
+            Mode = SplashFrame.Mode.Figure, Clip = "ArtClip",
+            Shades = new[] { new Shade("ArtClip", "ShadeBottom", SplashShade.Edge.Bottom, 460f, 0.92f, 0.45f) },
         },
     };
 
