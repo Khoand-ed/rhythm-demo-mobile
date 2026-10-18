@@ -77,7 +77,7 @@
   <div class="top">
     <div>
       <h1>Promuse LiveOps</h1>
-      <div class="muted">Remote config, events, stories, mail, notices and the monthly sign-in - changed without a build or a restart.</div>
+      <div class="muted">Remote config, events, stories, mail, notices and the monthly sign-in - changed without a build or a restart. Profile signatures are moderated here too.</div>
     </div>
     <button id="signOut" class="ghost" hidden>Sign out</button>
   </div>
@@ -90,6 +90,7 @@
     <button id="tabNotices" type="button">Notices</button>
     <button id="tabSignIn" type="button">Sign-in</button>
     <button id="tabCampaign" type="button">Campaign</button>
+    <button id="tabSignatures" type="button">Signatures</button>
   </nav>
 
   <!-- Sign in with an administrator account. The page holds the access token for this tab only. -->
@@ -306,6 +307,53 @@
     </div>
     <div id="campaignStatus" class="status"></div>
   </section>
+
+  <!-- 签名审核 / The lines players write on their profile cards: newest first, or found by name. -->
+  <section id="signatures" class="panel" hidden>
+    <h2>Signatures</h2>
+    <div class="muted small">The lines players write on their profile cards, the newest first. Search part of a name, or Name#0420 for one player.</div>
+    <div class="row" style="margin-top:10px">
+      <input id="sigQuery" type="text" placeholder="Name or Name#0420 - empty for the newest lines">
+      <button id="sigSearch" type="button">Search</button>
+      <button id="sigRecent" class="ghost" type="button">Newest</button>
+    </div>
+    <div class="scroll"><table>
+      <thead><tr><th>Player</th><th>Signature</th><th>Written</th><th>Locked</th><th>Removed</th><th></th></tr></thead>
+      <tbody id="sigRows"></tbody>
+    </table></div>
+    <div id="sigStatus" class="status"></div>
+
+    <div id="sigRemove" class="module" hidden>
+      <div class="top"><h3 id="sigRemoveTitle"></h3></div>
+      <div id="sigRemoveLine" class="muted" style="margin-bottom:10px;overflow-wrap:anywhere"></div>
+      <div class="row"><label for="sigReason">Reason</label><input id="sigReason" type="text" maxlength="200" placeholder="Kept in the history, and told to the player when mailed"></div>
+      <div class="row">
+        <label for="sigLock">Lock writing for</label>
+        <select id="sigLock">
+          <option value="0">No lock</option>
+          <option value="1">1 day</option>
+          <option value="3">3 days</option>
+          <option value="7">7 days</option>
+          <option value="30">30 days</option>
+          <option value="forever">Until lifted</option>
+        </select>
+      </div>
+      <div class="row">
+        <label>Mail</label>
+        <label style="min-width:0;color:var(--text)"><input id="sigMail" type="checkbox" checked> Tell the player by mail what was removed and why</label>
+      </div>
+      <button id="sigConfirm" type="button" style="background:var(--danger)">Remove</button>
+      <button id="sigCancel" class="ghost" type="button">Cancel</button>
+    </div>
+
+    <div class="module">
+      <div class="top"><h3>History</h3><button id="sigHistoryReload" class="ghost" type="button">Reload</button></div>
+      <div class="scroll"><table>
+        <thead><tr><th>When</th><th>Player</th><th>Action</th><th>Line removed</th><th>Reason</th><th>Lock</th><th>Mail</th><th>By</th></tr></thead>
+        <tbody id="sigHistory"></tbody>
+      </table></div>
+    </div>
+  </section>
 </main>
 
 <script>
@@ -364,7 +412,7 @@
   function signOut(message) {
     sessionStorage.removeItem(TOKEN);
     $('login').hidden = false;
-    for (const id of ['editor', 'history', 'signOut', 'nav', 'events', 'eventEditor', 'stories', 'mail', 'notices', 'noticeEditor', 'signin', 'campaign']) $(id).hidden = true;
+    for (const id of ['editor', 'history', 'signOut', 'nav', 'events', 'eventEditor', 'stories', 'mail', 'notices', 'noticeEditor', 'signin', 'campaign', 'signatures']) $(id).hidden = true;
     if (message) show($('loginStatus'), message, false);
   }
 
@@ -419,7 +467,9 @@
     $('tabNotices').className = which === 'notices' ? 'on' : '';
     $('tabSignIn').className = which === 'signin' ? 'on' : '';
     $('tabCampaign').className = which === 'campaign' ? 'on' : '';
+    $('tabSignatures').className = which === 'signatures' ? 'on' : '';
     $('campaign').hidden = which !== 'campaign';
+    $('signatures').hidden = which !== 'signatures';
     $('editor').hidden = $('history').hidden = which !== 'config';
     $('events').hidden = which !== 'events';
     $('stories').hidden = which !== 'stories';
@@ -433,6 +483,7 @@
     else if (which === 'mail') await loadMail();
     else if (which === 'notices') await loadNotices();
     else if (which === 'campaign') await loadCampaign();
+    else if (which === 'signatures') { await loadSignatures(); await loadModerationHistory(); }
     else await loadSignIn();
   }
 
@@ -1533,6 +1584,133 @@
 
   // ------------------------------------------------------------------ wiring
 
+  // ------------------------------------------------------------------ signatures
+
+  // 只用 textContent / What players wrote goes on this page as text only, never as HTML: a line
+  // reading <img onerror=...> has to show as those characters, in front of the one person whose
+  // session can take lines down.
+  let sigQueryUsed = '';
+  let sigTarget = null; // the AdminSignature being removed or locked
+
+  const tagText = tag => '#' + String(tag).padStart(4, '0');
+
+  // A lock in the year 9999 is SignatureLock.Permanent: it lifts only when a moderator lifts it.
+  function lockText(until) {
+    if (!until) return '-';
+    const at = new Date(until);
+    return at.getUTCFullYear() >= 9999 ? 'until lifted' : 'until ' + at.toLocaleString();
+  }
+
+  function textCell(tr, text, className) {
+    const td = cell(tr);
+    td.textContent = text;
+    if (className) td.className = className;
+    return td;
+  }
+
+  async function loadSignatures(query) {
+    if (query !== undefined) sigQueryUsed = query;
+    const q = sigQueryUsed ? '&query=' + encodeURIComponent(sigQueryUsed) : '';
+    const result = await api('GET', '/v1/admin/signatures?limit=100' + q);
+    if (!result.ok) return show($('sigStatus'), problemText(result), false);
+
+    const rows = $('sigRows');
+    rows.replaceChildren();
+
+    if (!result.data.players.length) {
+      const tr = document.createElement('tr');
+      const td = textCell(tr, sigQueryUsed ? 'No player by that name.' : 'No one has written a line yet.', 'muted');
+      td.colSpan = 6;
+      rows.appendChild(tr);
+    }
+
+    for (const p of result.data.players) {
+      const tr = document.createElement('tr');
+      textCell(tr, p.displayName + tagText(p.tag));
+      textCell(tr, p.signature ?? '(none)', p.signature ? '' : 'muted').style.overflowWrap = 'anywhere';
+      textCell(tr, p.signatureUpdatedAt ? new Date(p.signatureUpdatedAt).toLocaleString() : '-', 'small');
+      textCell(tr, lockText(p.lockedUntil), 'small');
+      textCell(tr, String(p.removals));
+      const actions = cell(tr);
+      actions.appendChild(button(p.signature ? 'Remove...' : 'Lock...', () => openRemove(p)));
+      if (p.lockedUntil) actions.appendChild(button('Unlock', () => unlockSignature(p)));
+      rows.appendChild(tr);
+    }
+  }
+
+  function openRemove(p) {
+    sigTarget = p;
+    const who = p.displayName + tagText(p.tag);
+    $('sigRemove').hidden = false;
+    $('sigRemoveTitle').textContent = p.signature ? 'Remove the line of ' + who : 'Lock ' + who;
+    $('sigRemoveLine').textContent = p.signature
+      ? '"' + p.signature + '"'
+      : 'No line at the moment - this only locks writing a new one.';
+    $('sigConfirm').textContent = p.signature ? 'Remove' : 'Lock';
+    $('sigReason').value = '';
+    $('sigLock').value = p.signature ? '0' : '7';
+    $('sigMail').checked = true;
+    $('sigStatus').textContent = '';
+    $('sigReason').focus();
+  }
+
+  async function removeSignature() {
+    if (!sigTarget) return;
+    const lock = $('sigLock').value;
+    const request = {
+      reason: $('sigReason').value.trim(),
+      lockDays: lock === 'forever' ? 0 : Number(lock),
+      lockPermanently: lock === 'forever',
+      notifyByMail: $('sigMail').checked,
+    };
+    const who = sigTarget.displayName + tagText(sigTarget.tag);
+
+    $('sigConfirm').disabled = true;
+    const result = await api('POST', '/v1/admin/signatures/' + sigTarget.playerId + '/remove', request);
+    $('sigConfirm').disabled = false;
+    if (!result.ok) return show($('sigStatus'), problemText(result), false);
+
+    $('sigRemove').hidden = true;
+    sigTarget = null;
+    await loadSignatures();
+    await loadModerationHistory();
+    show($('sigStatus'), 'Done for ' + who + ' (' + (result.data.lockedUntil ? lockText(result.data.lockedUntil) : 'no lock') + ')' +
+      (request.notifyByMail ? ', mail sent.' : '.'), true);
+  }
+
+  async function unlockSignature(p) {
+    const who = p.displayName + tagText(p.tag);
+    const note = prompt('Lift the lock on ' + who + '? A note for the history (optional):', '');
+    if (note === null) return;
+
+    const result = await api('POST', '/v1/admin/signatures/' + p.playerId + '/unlock', { reason: note.trim() || null });
+    if (!result.ok) return show($('sigStatus'), problemText(result), false);
+
+    await loadSignatures();
+    await loadModerationHistory();
+    show($('sigStatus'), 'Unlocked ' + who + '.', true);
+  }
+
+  async function loadModerationHistory() {
+    const result = await api('GET', '/v1/admin/signatures/history?limit=100');
+    if (!result.ok) return show($('sigStatus'), problemText(result), false);
+
+    const rows = $('sigHistory');
+    rows.replaceChildren();
+    for (const e of result.data.entries) {
+      const tr = document.createElement('tr');
+      textCell(tr, new Date(e.at).toLocaleString(), 'small');
+      textCell(tr, e.displayName + tagText(e.tag));
+      textCell(tr, e.action === 'Unlocked' ? 'Unlocked' : e.removedSignature === null ? 'Locked' : 'Removed');
+      textCell(tr, e.removedSignature ?? '-', e.removedSignature ? '' : 'muted').style.overflowWrap = 'anywhere';
+      textCell(tr, e.reason ?? '-');
+      textCell(tr, lockText(e.lockedUntil), 'small');
+      textCell(tr, e.mailed ? 'sent' : '-');
+      textCell(tr, e.by ?? '(account gone)');
+      rows.appendChild(tr);
+    }
+  }
+
   $('signIn').onclick = signIn;
   $('pass').addEventListener('keydown', e => { if (e.key === 'Enter') signIn(); });
   $('signOut').onclick = () => signOut();
@@ -1546,6 +1724,13 @@
   $('tabNotices').onclick = () => view('notices');
   $('tabSignIn').onclick = () => view('signin');
   $('tabCampaign').onclick = () => view('campaign');
+  $('tabSignatures').onclick = () => view('signatures');
+  $('sigSearch').onclick = () => loadSignatures($('sigQuery').value.trim());
+  $('sigQuery').addEventListener('keydown', e => { if (e.key === 'Enter') loadSignatures($('sigQuery').value.trim()); });
+  $('sigRecent').onclick = () => { $('sigQuery').value = ''; loadSignatures(''); };
+  $('sigConfirm').onclick = removeSignature;
+  $('sigCancel').onclick = () => { $('sigRemove').hidden = true; sigTarget = null; };
+  $('sigHistoryReload').onclick = loadModerationHistory;
   $('cSave').onclick = saveCampaign;
   $('cReload').onclick = loadCampaign;
   $('cAddChapter').onclick = () => {
