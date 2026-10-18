@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Promuse Backend API
-  version: 1.0.0-draft.19
+  version: 1.0.0-draft.20
   summary: Authentication and player state for the Promuse mobile rhythm game.
   description: |
     **Phase 1** authentication, **Phase 2** player state, **Phase 3** the economy -
@@ -209,6 +209,10 @@ paths:
         The password is hashed with Argon2id server-side and is never stored, logged or
         returned. `409` when the username is taken - the case
         `PlayerManager.Register` threw an exception for.
+
+        The username signs in and is shown to no one. The new player has no name in the
+        game yet (`displayName` and `tag` are null): the game opens the name screen next,
+        and `PUT /v1/players/me/name` sets it.
       security: []
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -560,7 +564,56 @@ paths:
         '409':
           description: |
             `SIGNATURE_LOCKED` - a moderator has locked the line. The detail says until
-            when.
+            when. `NAME_REQUIRED` - the player has not chosen a name yet.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/players/me/name:
+    put:
+      tags: [players]
+      operationId: setDisplayName
+      summary: Choose the name in the game, once.
+      description: |
+        The name screen after signing up. 2 to 8 English letters and digits - no spaces,
+        no symbols, no accents. The server draws the tag from the numbers that name has
+        not used yet, so two players may share a name but never a name and a tag.
+
+        Set once and kept for good: once the player has a name - every guest has one
+        from the start - this is refused with `NAME_ALREADY_SET`. Until then a run, a
+        signature and a report are refused with `NAME_REQUIRED`, and the player has no
+        profile card.
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DisplayNameRequest'
+      responses:
+        '200':
+          description: Named. `displayName` and `tag` are in the state.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlayerState'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: '`NAME_ALREADY_SET` - the player has a name, and it is never changed.'
           content:
             application/problem+json:
               schema:
@@ -608,7 +661,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Problem'
         '409':
-          description: '`ALREADY_REPORTED`.'
+          description: '`ALREADY_REPORTED`; `NAME_REQUIRED` while the reporter has no name.'
           content:
             application/problem+json:
               schema:
@@ -673,8 +726,9 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           description: |
-            `PLAYER_NOT_FOUND` - no player has that id, or the account is banned. A
-            banned player's own card still opens for them.
+            `PLAYER_NOT_FOUND` - no player has that id, the account is banned, or the
+            player has not chosen a name yet. A banned player's own card still opens for
+            them.
           content:
             application/problem+json:
               schema:
@@ -919,7 +973,8 @@ paths:
           description: |
             `INSUFFICIENT_STAMINA`, `CHARACTER_NOT_OWNED`, `STATE_CONFLICT` when two
             starts raced for the last of the bar; for an event stage `EVENT_CLOSED` or
-            `STAGE_LOCKED`.
+            `STAGE_LOCKED`; `NAME_REQUIRED` before the player has chosen a name, since a
+            run can put them on a leaderboard.
           content:
             application/problem+json:
               schema:
@@ -2950,9 +3005,15 @@ components:
           type: string
           format: uuid
         displayName:
-          type: string
+          type: [string, 'null']
+          description: |
+            The name in the game, which everyone else sees - never the username. Null from
+            signing up until the name screen (`PUT /v1/players/me/name`).
         tag:
-          $ref: '#/components/schemas/PlayerTag'
+          description: Null exactly when `displayName` is.
+          oneOf:
+            - $ref: '#/components/schemas/PlayerTag'
+            - type: 'null'
         level:
           type: integer
           minimum: 1
@@ -3092,6 +3153,17 @@ components:
           description: At most 60 characters. Null or blank clears it.
           examples: ['Music every day']
 
+    DisplayNameRequest:
+      type: object
+      required: [displayName]
+      properties:
+        displayName:
+          type: string
+          minLength: 2
+          maxLength: 8
+          pattern: '^[A-Za-z0-9]{2,8}$'
+          examples: ['Edd']
+
     LevelUpRequest:
       type: object
       required: [records]
@@ -3163,8 +3235,9 @@ components:
       maximum: 9999
       description: |
         The four digits after the name, drawn as `#0420`. Names repeat - every guest is
-        "Doctor" and a number - but a name and its tag never do. Drawn at random when
-        the player is created and never changed.
+        "Doctor" and a number - but a name and its tag never do. Drawn at random with the
+        name - when a guest is created, or on the name screen after signing up - and
+        never changed.
 
     PlayerProfile:
       type: object
