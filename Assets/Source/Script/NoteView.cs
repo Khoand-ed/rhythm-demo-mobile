@@ -3,6 +3,9 @@ using UnityEngine;
 // A pooled note. Its position is recomputed from song time every frame rather
 // than integrated, so a frame hitch cannot push it out of sync with the audio.
 //
+// 只负责画 / Drawing only. Whether it was hit, missed, held or dropped is RunJudge's to decide;
+// GameManager tells the view afterwards, by its lane and Index.
+//
 // One class serves every note prefab. The Hold prefab additionally wires a
 // body and a tail; on Tap and Twin prefabs those stay empty.
 public class NoteView : MonoBehaviour
@@ -34,7 +37,6 @@ public class NoteView : MonoBehaviour
     // jumping to where it would have been.
     private float headTime;
     private bool holding;
-    private float ticksCountedUntil;
 
     private SpriteRenderer[] renderers;
     private Color[] baseColors;
@@ -47,6 +49,9 @@ public class NoteView : MonoBehaviour
     {
         get { return data; }
     }
+
+    /// <summary>Its place in its lane's queue (RunJudge.SplitByLane) - how the judge names it.</summary>
+    public int Index { get; set; }
 
     public bool Judged
     {
@@ -86,7 +91,6 @@ public class NoteView : MonoBehaviour
         retired = false;
         holding = false;
         headTime = data.hitTime;
-        ticksCountedUntil = data.hitTime;
 
         SetDimmed(false);
 
@@ -179,11 +183,10 @@ public class NoteView : MonoBehaviour
     }
 
     // Hold head was hit: the note stays up and the body drains into the button.
-    public void BeginHold(float songTime)
+    public void BeginHold()
     {
         judged = true;
         holding = true;
-        ticksCountedUntil = Mathf.Max(songTime, data.hitTime);
     }
 
     // Let go too early: the rest of the hold scrolls away, faded.
@@ -199,19 +202,6 @@ public class NoteView : MonoBehaviour
     {
         judged = true;
         if (IsHold) SetDimmed(true);
-    }
-
-    // How many body ticks of `interval` seconds have been held since the last
-    // call. Counted on song time, so pausing mid-hold cannot award extra.
-    public int ConsumeHoldTicks(float songTime, float interval)
-    {
-        if (!holding || interval <= 0f) return 0;
-
-        float until = Mathf.Min(songTime, EndTime);
-        int ticks = Mathf.FloorToInt((until - ticksCountedUntil) / interval);
-
-        if (ticks > 0) ticksCountedUntil += ticks * interval;
-        return Mathf.Max(0, ticks);
     }
 
     public bool IsFinished(float songTime)
