@@ -346,6 +346,30 @@ folder. No code changes: `CharMeta` asks the local registry first and falls back
 `Assets/Arknights/Resources/Prefab/UI/`. Bundles are only needed for the audio
 above and for device builds.
 
+### Testing on a phone
+
+1. **Build:** `Arknights/Build/Android Development APK` builds the Android bundles, then a
+   Development APK into `../builds/Promuse-<version>-dev.apk`, next to the project folder and outside
+   the repository. With the Editor closed, the same from a shell:
+   `Unity -batchmode -quit -projectPath . -buildTarget Android -executeMethod AndroidBuild.BatchDevelopmentApk`.
+2. **Run the dev API** on the PC (port 5199), as in First run.
+3. **Install and connect**, with the phone on USB and USB debugging on. `adb` ships with Unity, in
+   `Editor/Data/PlaybackEngines/AndroidPlayer/SDK/platform-tools/`:
+   ```
+   adb install -r ../builds/Promuse-1.1-dev.apk
+   adb reverse tcp:5199 tcp:5199
+   ```
+   The game calls `http://127.0.0.1:5199`; `adb reverse` makes that the PC. Plain HTTP is allowed
+   only in Development builds and only to 127.0.0.1 / localhost
+   (`Assets/Plugins/Android/PromuseNetwork.androidlib`). Run `adb reverse` again after reconnecting
+   the cable.
+4. **The first launch** copies the music bundles out of the APK into the app's storage
+   (`BundleInstaller`), so it shows nothing for a moment. Later launches start at once.
+
+**The version.** The server refuses a build older than remote config's minimum client version, and
+1.1 is the first build that judges through `RunJudge`. Raise `bundleVersion` (and the Android version
+code) for a build that changes how runs are judged, then the minimum on the admin page.
+
 ---
 
 ## The three editor menus
