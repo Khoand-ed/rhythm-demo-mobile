@@ -63,6 +63,10 @@ tags:
       first note loses players at the only screen they have not yet enjoyed.
   - name: players
     description: Player state - the save that `PlayerData` never had. Phase 2.
+  - name: characters
+    description: |
+      Operators: levelling with battle records and LMD. An operator's rhythm stats grow
+      with its level, so the level is a number only the server sets.
   - name: shop
     description: |
       The economy, with the server holding the prices. Phase 3.
@@ -612,6 +616,60 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/characters/{characterId}/level-up:
+    post:
+      tags: [characters]
+      operationId: levelUpCharacter
+      summary: Spend battle records and LMD to raise an operator's level.
+      description: |
+        The request names the records to spend, never the level wanted: the server adds
+        up their EXP (Basic 200, Frontline 400, Tactical 1000, Strategic 2000) and levels
+        the operator with the same `OperatorLevels` rules the game previews with.
+
+        - Levels stop at the cap for the operator's rarity and elite phase. At the cap
+          the EXP bar is empty and any overflow is lost - but a whole record that would
+          land entirely past the cap is refused (`422`).
+        - The LMD cost is a share of the EXP actually applied, rounded up: 3 in 10 at
+          elite 0. EXP lost past the cap costs nothing.
+        - Records and LMD are taken together or not at all.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - name: characterId
+          in: path
+          required: true
+          schema:
+            type: string
+          examples: [PULSE]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LevelUpRequest'
+      responses:
+        '200':
+          description: Levelled. The whole save comes back with the operator, records and LMD.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LevelUpResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: |
+            `CHARACTER_NOT_OWNED`, `LEVEL_CAPPED` (already at the cap for its elite
+            phase), or `INSUFFICIENT_FUNDS` (not enough LMD or records). Nothing is spent.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -2552,6 +2610,37 @@ components:
           type: [string, 'null']
           description: At most 60 characters. Null or blank clears it.
           examples: ['Chơi nhạc mỗi ngày']
+
+    LevelUpRequest:
+      type: object
+      required: [records]
+      properties:
+        records:
+          type: array
+          minItems: 1
+          description: |
+            Battle records by item id and count, each id once: 11 Basic (200 EXP),
+            14 Frontline (400), 15 Tactical (1000), 16 Strategic (2000).
+          items:
+            $ref: '#/components/schemas/ItemStack'
+
+    LevelUpResult:
+      type: object
+      required: [characterId, fromLevel, toLevel, expApplied, lmdSpent, player]
+      properties:
+        characterId:
+          type: string
+        fromLevel:
+          type: integer
+        toLevel:
+          type: integer
+        expApplied:
+          type: integer
+          description: The EXP that went into the operator; overflow past the cap is not counted.
+        lmdSpent:
+          type: integer
+        player:
+          $ref: '#/components/schemas/PlayerState'
 
     PlayerTag:
       type: integer

@@ -21,6 +21,7 @@ using Promuse.Api.Mailbox;
 using Promuse.Api.Notices;
 using Promuse.Api.SignIn;
 using Promuse.Api.Campaign;
+using Promuse.Api.Characters;
 using Microsoft.Extensions.Options;
 using Promuse.Persistence;
 
@@ -83,6 +84,7 @@ builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<PlayerService>();
 builder.Services.AddScoped<ProfileService>();
+builder.Services.AddScoped<CharacterService>();
 builder.Services.AddScoped<EconomyService>();
 builder.Services.AddScoped<RunService>();
 builder.Services.AddScoped<Inventory>();
@@ -257,6 +259,7 @@ app.MapGet("/", () => Results.Ok(new
 
 app.MapAuthEndpoints();
 app.MapPlayerEndpoints();
+app.MapCharacterEndpoints();
 app.MapEconomyEndpoints();
 app.MapRunEndpoints();
 app.MapMissionEndpoints();
