@@ -19,7 +19,7 @@ using UnityEngine;
 public static class HomeParallaxTunerSetup
 {
     private const string HomePrefabPath = "Assets/Arknights/Resources/Prefab/UI/HomeUI.prefab";
-    private const string LuaPath = "Assets/Arknights/LuaScripts/UI/HomeUI.lua.txt";
+    private const string LuaPath = "Assets/Arknights/Resources/LuaScripts/UI/HomeUI.lua.txt";
 
     private const string Move1 = "move1";
     private const string Move2 = "move2";

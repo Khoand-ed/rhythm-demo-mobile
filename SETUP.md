@@ -433,6 +433,6 @@ no Unity licence and no secrets.
 | | |
 |---|---|
 | Renaming the product or company in Player Settings | `persistentDataPath` is derived from them, so the deployed AssetBundles are orphaned and all audio disappears. Run `Arknights/AssetBundles/Deploy To Persistent Data Path` afterwards |
-| Editing Lua under `Assets/Arknights/LuaScripts/` | Takes effect immediately in the Editor (it reads from disk first), but a device build reads the AssetBundle — rebuild bundles before testing on a phone |
+| Editing Lua under `Assets/Arknights/Resources/LuaScripts/` | Takes effect immediately in the Editor (it reads from disk first); a device reads the copy built into the player, so rebuild the player before testing on a phone |
 | Setting `excludePlatforms` on `Arknights.asmdef` | Drops the entire front-end from the Android build. The game will not run on a device |
 | Moving a `.cs` without its `.meta` | Breaks every reference to it. Move both, or move it inside Unity |
