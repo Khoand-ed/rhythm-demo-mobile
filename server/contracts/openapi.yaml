@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Promuse Backend API
-  version: 1.0.0-draft.16
+  version: 1.0.0-draft.17
   summary: Authentication and player state for the Promuse mobile rhythm game.
   description: |
     **Phase 1** authentication, **Phase 2** player state, **Phase 3** the economy -
@@ -3217,7 +3217,7 @@ components:
 
     LeaderboardEntry:
       type: object
-      required: [rank, playerId, displayName, score, maxCombo, achievedAt]
+      required: [rank, playerId, displayName, tag, score, maxCombo, achievedAt]
       properties:
         rank:
           type: integer
@@ -3227,6 +3227,8 @@ components:
           format: uuid
         displayName:
           type: string
+        tag:
+          $ref: '#/components/schemas/PlayerTag'
         score:
           type: integer
         maxCombo:

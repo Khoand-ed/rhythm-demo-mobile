@@ -9,6 +9,7 @@ using Promuse.Contracts;
 using Promuse.Contracts.Auth;
 using Promuse.Contracts.Leaderboards;
 using Promuse.Contracts.Missions;
+using Promuse.Contracts.Players;
 using Promuse.Contracts.Runs;
 using Promuse.Persistence;
 using Promuse.Persistence.Entities;
@@ -236,6 +237,25 @@ public class ScoreEndpointTests(PromuseApiFactory factory)
         Assert.NotEqual(me.PlayerId, board.Entries[0].PlayerId);
         Assert.Equal(me.PlayerId, board.Me!.PlayerId);
         Assert.True(board.Me.Rank > 1);
+    }
+
+    [Fact]
+    public async Task Every_line_carries_the_tag_that_tells_two_players_of_one_name_apart()
+    {
+        AuthSession session = await SignInAsync();
+        await PlayWinAsync(session, 157_500);
+
+        PlayerState state = (await (await _client.SendAsync(Send(HttpMethod.Get, "/v1/players/me", session)))
+            .Content.ReadFromJsonAsync<PlayerState>(Json))!;
+
+        LeaderboardPage board = await BoardAsync(session);
+
+        // On the page, and on the caller's own line, which is built by a separate query.
+        Assert.Equal(state.Tag, board.Entries.Single(e => e.PlayerId == session.PlayerId).Tag);
+        Assert.Equal((state.DisplayName, state.Tag), (board.Me!.DisplayName, board.Me.Tag));
+
+        LeaderboardPage offPage = await BoardAsync(session, limit: 1);
+        if (offPage.Entries[0].PlayerId != session.PlayerId) Assert.Equal(state.Tag, offPage.Me!.Tag);
     }
 
     // ----------------------------------------------------------------- rejected

@@ -107,12 +107,13 @@ public sealed class LeaderboardService(PromuseDbContext db, MissionPeriod period
                 e.CharacterId,
                 e.AchievedAt,
                 e.Player!.DisplayName,
+                e.Player.Tag,
             })
             .ToListAsync(ct);
 
         List<LeaderboardEntry> entries = rows
             .Select((r, i) => new LeaderboardEntry(
-                i + 1, r.AccountId, r.DisplayName, r.Score, r.MaxCombo, r.CharacterId, r.AchievedAt))
+                i + 1, r.AccountId, r.DisplayName, r.Tag, r.Score, r.MaxCombo, r.CharacterId, r.AchievedAt))
             .ToList();
 
         // 我自己 / The caller's own line, from the page when they made it, otherwise looked up
@@ -124,13 +125,13 @@ public sealed class LeaderboardService(PromuseDbContext db, MissionPeriod period
             var mine = await db.LeaderboardScores
                 .AsNoTracking()
                 .Where(e => e.StageId == stageId && e.PeriodKey == key && e.AccountId == accountId)
-                .Select(e => new { Row = e, e.Player!.DisplayName })
+                .Select(e => new { Row = e, e.Player!.DisplayName, e.Player.Tag })
                 .FirstOrDefaultAsync(ct);
 
             if (mine is not null)
             {
                 int rank = await AheadOfAsync(mine.Row, ct) + 1;
-                me = new LeaderboardEntry(rank, accountId, mine.DisplayName, mine.Row.Score,
+                me = new LeaderboardEntry(rank, accountId, mine.DisplayName, mine.Tag, mine.Row.Score,
                                           mine.Row.MaxCombo, mine.Row.CharacterId, mine.Row.AchievedAt);
             }
         }
