@@ -89,6 +89,23 @@ namespace Promuse.Contracts.Players
     public sealed record SignatureRequest(string? Signature);
 
     /// <summary>
+    /// 助理 / The operator standing on Home and on the profile card.
+    /// </summary>
+    public static class PlayerAssistant
+    {
+        /// <summary>
+        /// Who stands there until the player chooses (their desktop character is null). Every
+        /// account created since AMIYA became the starting operator owns her; an older one may not,
+        /// and she stands there all the same - she is the face of the game, not a claim on the roster.
+        /// </summary>
+        public const string Default = "AMIYA";
+
+        /// <summary>The assistant for a desktop character that may not be set.</summary>
+        public static string Of(string? desktopCharacterId) =>
+            string.IsNullOrEmpty(desktopCharacterId) ? Default : desktopCharacterId!;
+    }
+
+    /// <summary>
     /// 两边共用的上限 / Bounds both sides know, so the game's input stops where the server would
     /// refuse instead of finding out after the request.
     /// </summary>
@@ -108,9 +125,8 @@ namespace Promuse.Contracts.Players
     /// Everything in it is public: a field a stranger should not read does not belong here.
     /// </summary>
     /// <param name="AssistantId">
-    /// The operator standing on the card: the desktop character when one is set, otherwise the
-    /// first of the squad, otherwise the operator raised furthest. Null only for a player who
-    /// owns nobody.
+    /// The operator standing on the card - the one the player chose as their assistant, or
+    /// <see cref="PlayerAssistant.Default"/> until they choose. Home shows the same one.
     /// </param>
     /// <param name="CampaignProgress">
     /// The code of the furthest main-campaign stage cleared, such as "1-4"; null before the first.

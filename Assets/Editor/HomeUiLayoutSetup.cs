@@ -61,10 +61,10 @@ public static class HomeUiLayoutSetup
         "PublicRecruitTile", "HeadhuntTile", "MissionsTile", "ManufactureTile", "DepotTile"
     };
 
-    // 左边一块 / LeftPanel: the news panel, and the profile button beside it (placed by
-    // Arknights/Home/Build Profile UI). Anything put in here inherits the panel's tilt rather than
-    // needing its own. The news panel stays first: LeftPanel is built around it.
-    private static readonly string[] LeftGroup = { "NewsPanel", ProfileUISetup.ButtonName };
+    // 左边一块 / LeftPanel: the news panel, and the profile and assistant buttons beside it (placed by
+    // Arknights/Home/Build Profile UI and Build Assistant UI). Anything put in here inherits the panel's
+    // tilt rather than needing its own. The news panel stays first: LeftPanel is built around it.
+    private static readonly string[] LeftGroup = { "NewsPanel", ProfileUISetup.ButtonName, AssistantUISetup.ButtonName };
 
     private static readonly string[] NearGroup = Concat(RightGroup, LeftGroup);
 

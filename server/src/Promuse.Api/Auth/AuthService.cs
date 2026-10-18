@@ -3,6 +3,7 @@ using Promuse.Api.Infrastructure;
 using Promuse.Api.Players;
 using Promuse.Contracts;
 using Promuse.Contracts.Auth;
+using Promuse.Contracts.Players;
 using Promuse.Persistence;
 using Promuse.Persistence.Entities;
 
@@ -327,13 +328,14 @@ public sealed class AuthService(
     /// <summary>
     /// The starting roster and bag.
     ///
-    /// 只送 PULSE / One 3-star operator, so the song list is playable from the first minute
-    /// and the other three are what headhunting is for. Every operator used to be handed out
-    /// here, which left every pull a duplicate. Accounts created before the change keep what
-    /// they were given. The character select screen draws whatever the server says is owned,
-    /// so it needs nothing else to agree with this.
+    /// 只送 AMIYA / One operator, so the song list is playable from the first minute and the
+    /// other three are what headhunting is for: AMIYA, the face of the game, who also stands on
+    /// Home until the player chooses an assistant (PlayerAssistant.Default). PULSE, the starter
+    /// before her, is in the headhunting pool. Accounts created before either change keep what they
+    /// were given. The character select screen draws whatever the server says is owned, so it needs
+    /// nothing else to agree with this.
     /// </summary>
-    private static readonly string[] StartingRoster = ["PULSE"];
+    private static readonly string[] StartingRoster = [PlayerAssistant.Default];
 
     private static readonly (int Id, int Amount)[] StartingItems = [(0, 5), (1, 500), (2, 1000)];
 

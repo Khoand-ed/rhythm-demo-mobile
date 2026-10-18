@@ -16,7 +16,7 @@ namespace Promuse.Api.Tests;
 internal static class Played
 {
     public const string Stage = "stage_001";
-    public const string Operator = "PULSE";
+    public const string Operator = "AMIYA";
 
     public static GameData Data(PromuseApiFactory factory) => factory.Services.GetRequiredService<GameData>();
 

@@ -1,5 +1,6 @@
 using Promuse.Api.Campaign;
 using Promuse.Api.Players;
+using Promuse.Contracts.Players;
 using Promuse.Persistence;
 
 namespace Promuse.Api.Tests;
@@ -85,32 +86,13 @@ public class PlayerProfileRulesTests
 
     // ----------------------------------------------------------- the assistant
 
-    private static readonly PlayerProfiles.Owned[] Roster =
-    [
-        new("PULSE", 0, 40, 0),
-        new("NOVA", 1, 10, 0),
-        new("ECHO", 1, 10, 50),
-    ];
-
     [Fact]
-    public void The_desktop_character_wins_then_the_squad_leader_then_the_furthest_raised()
+    public void The_assistant_is_the_one_chosen_and_amiya_until_one_is()
     {
-        Assert.Equal("PULSE", PlayerProfiles.AssistantOf("PULSE", ["NOVA", null, null, null], Roster));
-        Assert.Equal("NOVA", PlayerProfiles.AssistantOf(null, [null, null, "NOVA", "ECHO"], Roster));
-
-        // Elite before level, trust before the id.
-        Assert.Equal("ECHO", PlayerProfiles.AssistantOf(null, [null, null, null, null], Roster));
-
-        Assert.Null(PlayerProfiles.AssistantOf(null, [null, null, null, null], []));
-    }
-
-    [Fact]
-    public void Two_operators_raised_alike_always_resolve_to_the_same_one()
-    {
-        PlayerProfiles.Owned[] twins = [new("NOVA", 0, 1, 0), new("AMIYA", 0, 1, 0)];
-
-        Assert.Equal("AMIYA", PlayerProfiles.AssistantOf(null, [], twins));
-        Assert.Equal("AMIYA", PlayerProfiles.AssistantOf(null, [], twins.Reverse()));
+        Assert.Equal("ECHO", PlayerAssistant.Of("ECHO"));
+        Assert.Equal("AMIYA", PlayerAssistant.Of(null));
+        Assert.Equal("AMIYA", PlayerAssistant.Of(""));
+        Assert.Equal("AMIYA", PlayerAssistant.Default);
     }
 
     // ------------------------------------------------------------ the campaign

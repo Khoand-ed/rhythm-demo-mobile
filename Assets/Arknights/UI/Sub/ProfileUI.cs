@@ -76,6 +76,24 @@ namespace UI.Sub {
             backButton.onClick.AddListener(() => UIManager.Inst().Hide(UIName, true));
             signatureField.onEndEdit.AddListener(SaveSignature);
             signatureField.characterLimit = PlayerProfileLimits.SignatureMaxLength;
+
+            // 点助理换人 / On the player's own card, pressing the assistant opens the assistant screen.
+            // Made pressable here: the frame's own Image is clear, which still takes a raycast.
+            assistantArt.raycastTarget = true;
+            Button change = assistantArt.gameObject.GetComponent<Button>();
+            if (change == null) change = assistantArt.gameObject.AddComponent<Button>();
+            change.transition = Selectable.Transition.None;
+            change.onClick.AddListener(() => {
+                if (profile != null && profile.IsSelf) AssistantUI.Open();
+            });
+        }
+
+        /// <summary>
+        /// 换了助理就重读 / Reads the player's own card again - called after the assistant is changed
+        /// (UIManager.Update). Someone else's card, or one still loading, is left alone.
+        /// </summary>
+        public override void UpdateView() {
+            if (profile != null && profile.IsSelf) Load();
         }
 
         public override void Show() {
@@ -156,7 +174,8 @@ namespace UI.Sub {
 
             CharMeta meta = Meta(profile.AssistantId);
             SplashFrame.Show(assistantArt, meta);
-            assistantName.text = meta != null ? meta.GetEnglishName() : Nothing;
+            assistantName.text = (meta != null ? meta.GetEnglishName() : Nothing) +
+                                  (profile.IsSelf ? "  <size=55%><alpha=#99>TAP TO CHANGE</size>" : "");
 
             progressText.text = profile.CampaignProgress ?? Nothing;
             operatorsText.text = profile.Operators.ToString(CultureInfo.InvariantCulture);

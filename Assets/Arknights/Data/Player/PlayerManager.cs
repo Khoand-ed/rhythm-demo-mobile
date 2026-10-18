@@ -171,6 +171,29 @@ namespace Data.Player {
             return ApiResult<PlayerData>.Ok(playerData);
         }
 
+        /// <summary>
+        /// 选助理 / Chooses the assistant - the operator on Home and on the profile card - or, with null,
+        /// clears the choice so AMIYA stands there again. A preference like the signature, written over
+        /// whatever the save holds, so the same one retry on a version conflict is safe.
+        /// </summary>
+        public async Task<ApiResult<PlayerData>> SetAssistantAsync(string characterId) {
+            ApiResult<PlayerState> result = await api.SetDesktopCharacterAsync(characterId);
+
+            if (result.Is(ErrorCodes.StateConflict) || result.Is(ErrorCodes.PreconditionRequired)) {
+                ApiResult<PlayerData> reread = await LoadStateAsync();
+                if (!reread.IsSuccess) return reread;
+
+                result = await api.SetDesktopCharacterAsync(characterId);
+            }
+
+            if (!result.IsSuccess) return ApiResult<PlayerData>.Fail(result.Problem);
+
+            if (playerData == null) playerData = ScriptableObject.CreateInstance<PlayerData>();
+            playerData.ApplyServerState(result.Value);
+
+            return ApiResult<PlayerData>.Ok(playerData);
+        }
+
         private static string Compose(string text) {
             if (string.IsNullOrEmpty(text)) return text;
 

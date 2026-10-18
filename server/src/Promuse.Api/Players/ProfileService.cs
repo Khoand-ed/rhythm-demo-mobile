@@ -35,10 +35,7 @@ public sealed class ProfileService(PromuseDbContext db, CampaignService campaign
                 p.Signature,
                 p.DesktopCharacterId,
                 p.CreatedAt,
-                Squad = p.Squad.OrderBy(s => s.Slot).Select(s => s.CharacterId).ToList(),
-                Owned = p.Characters
-                    .Select(c => new PlayerProfiles.Owned(c.CharacterId, c.Elite, c.Level, c.Trust))
-                    .ToList(),
+                Operators = p.Characters.Count,
             })
             .FirstOrDefaultAsync(ct);
 
@@ -50,10 +47,11 @@ public sealed class ProfileService(PromuseDbContext db, CampaignService campaign
             Tag: row.Tag,
             Level: row.Level,
             Signature: row.Signature,
-            AssistantId: PlayerProfiles.AssistantOf(row.DesktopCharacterId, row.Squad, row.Owned),
+            // 没选就是 AMIYA / AMIYA until the player chooses, the same as Home shows.
+            AssistantId: PlayerAssistant.Of(row.DesktopCharacterId),
             RegisteredAt: row.CreatedAt,
             CampaignProgress: await campaign.FurthestClearedAsync(playerId, ct),
-            Operators: row.Owned.Count,
+            Operators: row.Operators,
             Rhythm: await RhythmAsync(playerId, ct),
             IsSelf: playerId == viewerId));
     }

@@ -113,8 +113,8 @@ public class ProfileEndpointTests(PromuseApiFactory factory)
         Assert.True(card.IsSelf);
         Assert.InRange(card.RegisteredAt, DateTimeOffset.UtcNow.AddMinutes(-5), DateTimeOffset.UtcNow.AddMinutes(1));
 
-        // PULSE alone, with no squad and no desktop character: PULSE stands on the card.
-        Assert.Equal("PULSE", card.AssistantId);
+        // No assistant chosen: AMIYA stands on the card, as she does on Home.
+        Assert.Equal("AMIYA", card.AssistantId);
         Assert.Equal(1, card.Operators);
 
         Assert.Null(card.CampaignProgress);
@@ -162,30 +162,32 @@ public class ProfileEndpointTests(PromuseApiFactory factory)
     }
 
     [Fact]
-    public async Task The_squad_leader_stands_on_the_card_until_a_desktop_character_is_chosen()
+    public async Task The_chosen_assistant_stands_on_the_card_and_amiya_until_one_is_chosen()
     {
         AuthSession session = await SignInAsync();
         await GiveAsync(session, "NOVA");
         await GiveAsync(session, "ECHO", elite: 1, level: 30);
 
-        // Nobody chosen anywhere: the operator raised furthest.
-        Assert.Equal("ECHO", (await ProfileAsync(session)).AssistantId);
-
+        // The squad and the operators raised have no say: only the choice does.
         (_, string etag) = await StateAsync(session);
         HttpResponseMessage squad = await _client.SendAsync(Send(HttpMethod.Put, "/v1/players/me/squad", session,
-            new SquadRequest([null, "NOVA", "PULSE", null]), etag));
+            new SquadRequest([null, "NOVA", "AMIYA", null]), etag));
         squad.EnsureSuccessStatusCode();
-
-        // The first filled slot leads, not slot 0.
-        Assert.Equal("NOVA", (await ProfileAsync(session)).AssistantId);
+        Assert.Equal("AMIYA", (await ProfileAsync(session)).AssistantId);
 
         HttpResponseMessage desktop = await _client.SendAsync(Send(HttpMethod.Put, "/v1/players/me/desktop-character",
-            session, new DesktopCharacterRequest("PULSE"), squad.Headers.ETag!.ToString()));
+            session, new DesktopCharacterRequest("ECHO"), squad.Headers.ETag!.ToString()));
         desktop.EnsureSuccessStatusCode();
 
         PlayerProfile card = await ProfileAsync(session);
-        Assert.Equal("PULSE", card.AssistantId);
+        Assert.Equal("ECHO", card.AssistantId);
         Assert.Equal(3, card.Operators);
+
+        // Cleared, AMIYA again.
+        HttpResponseMessage cleared = await _client.SendAsync(Send(HttpMethod.Put, "/v1/players/me/desktop-character",
+            session, new DesktopCharacterRequest(null), desktop.Headers.ETag!.ToString()));
+        cleared.EnsureSuccessStatusCode();
+        Assert.Equal("AMIYA", (await ProfileAsync(session)).AssistantId);
     }
 
     // --------------------------------------------------------- the signature
