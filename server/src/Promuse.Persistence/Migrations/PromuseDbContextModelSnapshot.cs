@@ -1311,6 +1311,14 @@ namespace Promuse.Persistence.Migrations
                         .HasColumnType("character varying(256)")
                         .HasColumnName("signature");
 
+                    b.Property<DateTimeOffset?>("SignatureLockedUntil")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("signature_locked_until");
+
+                    b.Property<DateTimeOffset?>("SignatureUpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("signature_updated_at");
+
                     b.Property<int>("Stamina")
                         .HasColumnType("integer")
                         .HasColumnName("stamina");
@@ -1334,6 +1342,10 @@ namespace Promuse.Persistence.Migrations
 
                     b.HasKey("AccountId")
                         .HasName("pk_players");
+
+                    b.HasIndex("SignatureUpdatedAt")
+                        .HasDatabaseName("ix_players_signature_updated_at")
+                        .HasFilter("signature IS NOT NULL");
 
                     b.HasIndex("DisplayName", "Tag")
                         .IsUnique()
@@ -1940,6 +1952,69 @@ namespace Promuse.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Promuse.Persistence.Entities.SignatureModeration", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("Id"));
+
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("account_id");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("action");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("LockedUntil")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("locked_until");
+
+                    b.Property<Guid?>("MailId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("mail_id");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("reason");
+
+                    b.Property<string>("RemovedSignature")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("removed_signature");
+
+                    b.HasKey("Id")
+                        .HasName("pk_signature_moderations");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("ix_signature_moderations_created_at");
+
+                    b.HasIndex("CreatedBy")
+                        .HasDatabaseName("ix_signature_moderations_created_by");
+
+                    b.HasIndex("MailId")
+                        .HasDatabaseName("ix_signature_moderations_mail_id");
+
+                    b.HasIndex("AccountId", "CreatedAt")
+                        .HasDatabaseName("ix_signature_moderations_account_id_created_at");
+
+                    b.ToTable("signature_moderations", (string)null);
+                });
+
             modelBuilder.Entity("Promuse.Persistence.Entities.SquadSlot", b =>
                 {
                     b.Property<Guid>("AccountId")
@@ -2414,6 +2489,28 @@ namespace Promuse.Persistence.Migrations
                         .HasForeignKey("UpdatedBy")
                         .OnDelete(DeleteBehavior.SetNull)
                         .HasConstraintName("fk_sign_in_tables_accounts_updated_by");
+                });
+
+            modelBuilder.Entity("Promuse.Persistence.Entities.SignatureModeration", b =>
+                {
+                    b.HasOne("Promuse.Persistence.Entities.Player", null)
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_signature_moderations_players_account_id");
+
+                    b.HasOne("Promuse.Persistence.Entities.Account", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_signature_moderations_accounts_created_by");
+
+                    b.HasOne("Promuse.Persistence.Entities.MailMessage", null)
+                        .WithMany()
+                        .HasForeignKey("MailId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_signature_moderations_mails_mail_id");
                 });
 
             modelBuilder.Entity("Promuse.Persistence.Entities.SquadSlot", b =>

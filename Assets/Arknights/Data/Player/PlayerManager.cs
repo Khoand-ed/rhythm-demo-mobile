@@ -147,6 +147,9 @@ namespace Data.Player {
         /// without ICU, where composing is not available - and a Vietnamese letter typed as a base and
         /// two marks would otherwise be stored, and drawn by TMP, as three separate pieces.
         ///
+        /// 被锁 / A moderator's lock refuses it with SIGNATURE_LOCKED; the save is read again then, so it
+        /// carries the lock.
+        ///
         /// 版本冲突就重读一次 / The write carries the save's version. When another write has moved it
         /// since - a result sent in the background, another device - the state is read again and the
         /// line sent once more. It is a whole value the player has just typed, so sending it over the
@@ -162,6 +165,10 @@ namespace Data.Player {
 
                 result = await api.SetSignatureAsync(text);
             }
+
+            // 被锁了就把锁读回来 / Locked by a moderator: read the save again so it carries the lock,
+            // and the card can say until when instead of offering a field that will be refused.
+            if (result.Is(ErrorCodes.SignatureLocked)) await LoadStateAsync();
 
             if (!result.IsSuccess) return ApiResult<PlayerData>.Fail(result.Problem);
 

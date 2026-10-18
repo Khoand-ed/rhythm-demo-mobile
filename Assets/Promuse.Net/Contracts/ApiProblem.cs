@@ -154,6 +154,12 @@ namespace Promuse.Contracts
         public const string PlayerNotFound = "PLAYER_NOT_FOUND";
 
         /// <summary>
+        /// A moderator has locked this player's profile line. The detail says until when; the
+        /// player state carries it as signatureLockedUntil.
+        /// </summary>
+        public const string SignatureLocked = "SIGNATURE_LOCKED";
+
+        /// <summary>
         /// The operator is already at its level cap for its elite phase. More EXP would go nowhere;
         /// promotion raises the cap.
         /// </summary>

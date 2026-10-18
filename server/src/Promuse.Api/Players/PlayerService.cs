@@ -114,6 +114,14 @@ public sealed class PlayerService(
 
         if (Guard(player, ifMatch) is { } refused) return refused;
 
+        // 被管理员锁了 / Locked by a moderator: refused whatever is written, clearing included -
+        // a moderated line is already gone, and the lock is about writing a new one.
+        DateTimeOffset now = clock.GetUtcNow();
+        if (player.SignatureLockedUntil is { } until && until > now)
+        {
+            return Outcome<PlayerState>.Fail(ApiProblems.SignatureLocked(until));
+        }
+
         (string? value, string? error) = PlayerProfiles.NormalizeSignature(signature);
 
         if (error is not null)
@@ -122,6 +130,9 @@ public sealed class PlayerService(
                 new Dictionary<string, string[]> { ["signature"] = [error] }));
         }
 
+        // 换了才算新写 / Only a change counts as newly written, which is what orders the
+        // moderators' list of recent lines.
+        if (value != player.Signature) player.SignatureUpdatedAt = now;
         player.Signature = value;
 
         return await CommitAsync(player, ct);
@@ -248,6 +259,8 @@ public sealed class PlayerService(
             Squad: squad,
             DesktopCharacterId: player.DesktopCharacterId,
             Signature: player.Signature,
+            // 过期的锁不算 / A lock whose day has passed is no lock; nothing has to clear it.
+            SignatureLockedUntil: player.SignatureLockedUntil > now ? player.SignatureLockedUntil : null,
             Inventory: [.. player.Items
                 .OrderBy(i => i.ItemId)
                 .Select(i => new ItemStack(i.ItemId, i.Amount))],

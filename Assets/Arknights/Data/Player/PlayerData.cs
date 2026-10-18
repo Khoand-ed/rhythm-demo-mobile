@@ -50,6 +50,10 @@ namespace Data.Player {
         [SerializeField]
         private string signature;
 
+        // 被管理员锁住到何时 / Until when a moderator has locked the line, or null. Not serialized:
+        // it comes with every server state, and a stale copy on disk could only be wrong.
+        private System.DateTimeOffset? signatureLockedUntil;
+
         // 物品数据
         [SerializeField]
         private List<ItemStack> items;
@@ -77,6 +81,7 @@ namespace Data.Player {
         public string GetDesktopChar() => desktopChar;
         public int GetTag() => tag;
         public string GetSignature() => signature;
+        public System.DateTimeOffset? GetSignatureLockedUntil() => signatureLockedUntil;
         public List<ItemStack> GetItems() => items;
         public List<string> GetPermissions() => permissions;
         
@@ -143,6 +148,7 @@ namespace Data.Player {
             desktopChar = state.DesktopCharacterId;
             tag = state.Tag;
             signature = state.Signature;
+            signatureLockedUntil = state.SignatureLockedUntil;
 
             items = new List<ItemStack>();
             foreach (Promuse.Contracts.Players.ItemStack stack in state.Inventory) {
