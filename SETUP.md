@@ -212,14 +212,27 @@ a song's leaderboard opens that player's card, read-only.
 
 - **The tag** is four digits after the name, unique per name, drawn when the player is created.
   Names repeat - every guest is `Doctor` and a number - a name and its tag never do.
-- **The operator on the card** is the desktop character once a screen sets it. Until then it is the
-  squad leader, and failing that the operator raised furthest.
+- **The operator on the card** is the player's assistant - the same one standing on Home (below).
 - **The line** is edited on the card itself, 60 characters at most. The server keeps it as one line
   with nothing invisible in it, and the field shows what was kept.
 
 Built by `Arknights/Home/Build Profile UI`, which also places the button inside Home's `LeftPanel`
 so it leans with the news panel. `Reset Profile UI To Default` rebuilds the screen and puts the
 button back where it started.
+
+### The assistant
+
+The operator standing on Home and on the profile card is the player's **assistant**. The
+**ASSISTANT** button beside PROFILE - or pressing the operator on your own profile card - opens a grid
+of square portraits of the operators you own; pressing one chooses it, and Home changes at once.
+Until the player chooses, **AMIYA** stands there (`PlayerAssistant.Default` in the shared contracts).
+She is also every new account's starting operator; PULSE, the starter before her, is in the
+headhunting pool. An older account that does not own AMIYA gets a DEFAULT tile, which clears the
+choice.
+
+An operator with a Home rig (local art) stands animated; without one - every operator, on a clone
+without the local art - it stands as its splash. Built by `Arknights/Home/Build Assistant UI`, which
+also places the button; `Reset Assistant UI To Default` rebuilds both.
 
 ### Operator levels
 
@@ -307,7 +320,7 @@ above and for device builds.
 
 | Menu | What lives there |
 |---|---|
-| **`Arknights/`** | Content pipeline — AssetBundles, placeholder art, audio import, local character art, the Home / Depot / event / campaign / mail, notice and calendar / profile / level-up / promotion screen builders, and the story tools |
+| **`Arknights/`** | Content pipeline — AssetBundles, placeholder art, audio import, local character art, the Home / Depot / event / campaign / mail, notice and calendar / profile / assistant / level-up / promotion screen builders, and the story tools |
 | **`Beatmap/`** | Charting — `Beatmap Studio...` and `Timeline Editor...` author charts; `Import All Beatmaps` turns the JSON under `Assets/Beatmaps/` into `SongChart` assets |
 | **`Tools/Rhythm/`** | Gameplay scene setup — note system, HUD, hit feedback, character stage, skip button, song-select wiring, loading screen |
 
