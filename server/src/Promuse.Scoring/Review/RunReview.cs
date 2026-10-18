@@ -10,8 +10,7 @@ namespace Promuse.Scoring.Review;
 
 /// <summary>
 /// Everything a review looks at. Plain values, no database: the review is a pure function so
-/// each rule can be tested on its own, and so the replay that follows can be added beside the
-/// checks here without touching how a run is stored.
+/// each rule, and the replay, can be tested on its own.
 /// </summary>
 public sealed record ReviewInput
 {
@@ -37,6 +36,9 @@ public sealed record ReviewInput
     /// <summary>The raw trace, already decompressed. Null when none was sent.</summary>
     public byte[]? Trace { get; init; }
 
+    /// <summary>The seed the server issued when the run opened - what the passives rolled from.</summary>
+    public required long Seed { get; init; }
+
     /// <summary>Server time from opening the run to closing it.</summary>
     public required TimeSpan Elapsed { get; init; }
 }
@@ -44,6 +46,7 @@ public sealed record ReviewInput
 /// <param name="Reasons">Rejection codes from <see cref="ScoreReviewCodes"/>. Sent to the client.</param>
 /// <param name="Flags">Statistical signals from <see cref="ReviewFlags"/>. Kept on the server.</param>
 /// <param name="Ceiling">The bound the score was held to, kept so a rejection can be audited.</param>
+/// <param name="Replay">What the server's own judging of the trace scored; null when it could not run.</param>
 public sealed record ReviewResult(
     ScoreVerdict Verdict,
     IReadOnlyList<string> Reasons,
@@ -51,7 +54,8 @@ public sealed record ReviewResult(
     int? Ceiling,
     TimingStats? Timing,
     int TraceFrames,
-    int Presses);
+    int Presses,
+    ReplayResult? Replay = null);
 
 /// <summary>
 /// How the presses in a trace lined up with the notes they hit.
@@ -88,6 +92,14 @@ public static class ReviewFlags
 
     /// <summary>The run's operator is missing from the server's ruleset, so no ceiling exists.</summary>
     public const string Unverifiable = "UNVERIFIABLE";
+
+    /// <summary>
+    /// The trace, judged again on the server with the same code, does not come to the result that
+    /// was sent with it. An honest device cannot produce this; a forged result consistent with
+    /// itself and under the ceiling can. Held off the board for a person to look at, as the owner
+    /// chose: the clear stands, the ranking waits.
+    /// </summary>
+    public const string ReplayMismatch = "REPLAY_MISMATCH";
 }
 
 /// <summary>
@@ -101,10 +113,10 @@ public static class ReviewFlags
 ///   - Signals: timing that looks scripted, input that looks like mashing. Statistics can be
 ///     wrong about a person, so these only hold the run off the leaderboard; the clear stands.
 ///
-/// 这不是重放 / This is not a replay. A cheat that forges a result consistent with itself and
-/// under the ceiling passes every check here. What closes that gap is running the trace back
-/// through the judging with the run's seed - which is why the trace is required and kept even
-/// though nothing here reads it note by note.
+/// 重放 / Last, the trace is judged again with RunJudge - the device's own judging - and the run's
+/// seed (RunReplay). The checks above catch results that could never be true; the replay catches
+/// one that is consistent with itself and under the ceiling but is not what the input scored. A
+/// difference is a signal like the others, held for a person: REPLAY_MISMATCH.
 /// </summary>
 public static class RunReview
 {
@@ -181,6 +193,7 @@ public static class RunReview
         // -------------------------------------------------------------- the trace
 
         TimingStats? timing = null;
+        ReplayResult? replay = null;
         int frames = 0;
         int presses = 0;
 
@@ -232,14 +245,38 @@ public static class RunReview
             {
                 flags.Add(ReviewFlags.InputSpam);
             }
+
+            // 重放 / Judge the input again. Only with the operator known: its modifiers and passive
+            // are half of what the judging does.
+            if (input.Operator is not null)
+            {
+                replay = RunReplay.Play(chart, input.Rules, input.Operator, input.Seed, trace);
+
+                if (!Matches(input, replay)) flags.Add(ReviewFlags.ReplayMismatch);
+            }
         }
 
         ScoreVerdict verdict = reasons.Count > 0 ? ScoreVerdict.Rejected
                              : flags.Count > 0 ? ScoreVerdict.Flagged
                              : ScoreVerdict.Accepted;
 
-        return new ReviewResult(verdict, reasons, flags, ceiling, timing, frames, presses);
+        return new ReviewResult(verdict, reasons, flags, ceiling, timing, frames, presses, replay);
     }
+
+    /// <summary>
+    /// Every number the result states, against what the replay counted: the score, the combo, the
+    /// four judgement counts, the full combo, and whether the run was won - a win is a run whose
+    /// HP never ran out.
+    /// </summary>
+    public static bool Matches(ReviewInput input, ReplayResult replay) =>
+        input.Score == replay.Score
+        && input.MaxCombo == replay.MaxCombo
+        && input.Perfect == replay.Perfect
+        && input.Great == replay.Great
+        && input.Hit == replay.Hit
+        && input.Miss == replay.Miss
+        && input.FullCombo == replay.FullCombo
+        && input.Won == !replay.Failed;
 
     private static int CountPresses(InputTrace trace)
     {
@@ -252,8 +289,8 @@ public static class RunReview
     }
 
     /// <summary>
-    /// Pairs each note with the press that would have taken it, lane by lane, the way
-    /// NoteSpawner.PeekJudgeable does: the earliest press still inside the note's window.
+    /// Pairs each note with the press that would have taken it, lane by lane, the way RunJudge
+    /// does: the earliest press still inside the note's window.
     ///
     /// 只为统计 / For statistics only. It reads offsets, not judgements, and never decides a
     /// score - the replay does that, with the real judging.

@@ -243,12 +243,13 @@ public class ProfileEndpointTests(PromuseApiFactory factory)
     {
         AuthSession session = await SignInAsync();
 
-        await PlayAsync(session, new CompleteRunRequest(true, Played.Win(factory, 1200)));
-        await PlayAsync(session, new CompleteRunRequest(true, Played.Win(factory, 900)));
+        RunResult clean = Played.Win(factory);
+        await PlayAsync(session, new CompleteRunRequest(true, clean));
+        await PlayAsync(session, new CompleteRunRequest(true, Played.Win(factory, misses: 3)));
         await PlayAsync(session, new CompleteRunRequest(false, null));
 
-        // Three finished, one chart cleared - with a full combo - and the higher score is the best.
-        Assert.Equal(new RhythmRecord(3, 1, 1, 1200), (await ProfileAsync(session)).Rhythm);
+        // Three finished, one chart cleared - with a full combo - and the clean run is the best.
+        Assert.Equal(new RhythmRecord(3, 1, 1, clean.Score), (await ProfileAsync(session)).Rhythm);
 
         // 按关卡顺序, 不按时间 / Furthest in play order, not the latest cleared.
         await SqlAsync($"""

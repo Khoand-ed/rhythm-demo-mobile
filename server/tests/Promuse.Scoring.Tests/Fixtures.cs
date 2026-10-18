@@ -1,3 +1,4 @@
+using Promuse.Scoring.Review;
 using Promuse.Scoring.Rules;
 
 namespace Promuse.Scoring.Tests;
@@ -130,7 +131,8 @@ internal static class Fixtures
     /// <summary>
     /// A trace of someone playing the chart: frames at <paramref name="fps"/> covering the whole
     /// chart, and one press per note on the frame nearest its time plus a normally-distributed
-    /// error of <paramref name="jitterMs"/>.
+    /// error of <paramref name="jitterMs"/>. A finger stays down from a hold's press until the
+    /// first frame at or past its end, and for the frame of every other press.
     ///
     /// 0 毫秒就是脚本 / Zero jitter is a script: every press on the frame nearest its note.
     /// </summary>
@@ -145,9 +147,10 @@ internal static class Fixtures
         int frames = (int)Math.Ceiling((last - first) / dt) + 1;
         var times = new float[frames];
         var pressed = new byte[frames];
+        var held = new byte[frames];
         for (int i = 0; i < frames; i++) times[i] = first + i * dt;
 
-        void Press(int lane, float at)
+        int Press(int lane, float at)
         {
             int frame = (int)Math.Round((at - first) / dt);
             frame = Math.Clamp(frame, 0, frames - 1);
@@ -155,6 +158,8 @@ internal static class Fixtures
             // One press per lane per frame is all a frame can carry; slide to a free one.
             while (frame < frames - 1 && (pressed[frame] & (1 << lane)) != 0) frame++;
             pressed[frame] |= (byte)(1 << lane);
+            held[frame] |= (byte)(1 << lane);
+            return frame;
         }
 
         foreach (NoteData note in chart.Notes)
@@ -164,16 +169,37 @@ internal static class Fixtures
 
             foreach (int lane in lanes)
             {
-                Press(lane, note.hitTime + (float)error);
+                int down = Press(lane, note.hitTime + (float)error);
+
+                if (note.type == NoteType.Hold && note.duration > 0f)
+                {
+                    float release = note.hitTime + note.duration;
+                    for (int f = down; f < frames; f++)
+                    {
+                        held[f] |= (byte)(1 << lane);
+                        if (times[f] >= release) break;
+                    }
+                }
+
                 for (int k = 0; k < extraPressesPerNote; k++) Press(lane, note.hitTime + (k + 1) * 0.03f);
             }
         }
 
         var writer = new InputTraceWriter();
         writer.Begin(2);
-        for (int i = 0; i < frames; i++) writer.Record(times[i], pressed[i], 0);
+        for (int i = 0; i < frames; i++) writer.Record(times[i], pressed[i], held[i]);
         return writer.ToArray();
     }
+
+    /// <summary>What the server's replay of <paramref name="trace"/> scores - what an honest device sends with it.</summary>
+    public static ReplayResult Replay(ScoringChart chart, Ruleset rules, OperatorRules op, byte[] trace, long seed = Seed)
+    {
+        Assert.True(InputTrace.TryRead(trace, InputTraceWriter.MaxFrames, out InputTrace? parsed, out string? error), error);
+        return RunReplay.Play(chart, rules, op, seed, parsed!);
+    }
+
+    /// <summary>The seed the fixtures' runs are opened with.</summary>
+    public const long Seed = 20261018;
 
     private static double Gaussian(Random random)
     {

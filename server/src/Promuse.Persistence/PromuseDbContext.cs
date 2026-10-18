@@ -837,6 +837,7 @@ public class PromuseDbContext(DbContextOptions<PromuseDbContext> options) : DbCo
             // 存名字 / Stored by name, like every other enum here: a verdict read in psql
             // should say what it is.
             entity.Property(s => s.Verdict).HasConversion<string>().HasMaxLength(16);
+            entity.Property(s => s.Replay).HasColumnType("jsonb");
 
             entity.HasIndex(s => new { s.AccountId, s.SubmittedAt });
 

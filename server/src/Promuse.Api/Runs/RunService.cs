@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Promuse.Api.Infrastructure;
@@ -350,7 +351,7 @@ public sealed class RunService(
         // server's gap, not the player's, so the clear stands and only the ranking is withheld.
         if (chart is null)
         {
-            return new ReviewResult(ScoreVerdict.Flagged, [], [ReviewFlags.Unverifiable], null, null, 0, 0);
+            return new ReviewResult(ScoreVerdict.Flagged, [], [ReviewFlags.Unverifiable], null, null, 0, 0, null);
         }
 
         RunResult result = submission.Result;
@@ -371,9 +372,14 @@ public sealed class RunService(
             FullCombo = result.FullCombo,
             Fingerprint = result.RulesetFingerprint,
             Trace = submission.RawTrace,
+            // 用服务端发的种子 / The seed the server issued, never one the device names.
+            Seed = run.Seed,
             Elapsed = now - run.StartedAt,
         });
     }
+
+    /// <summary>camelCase, so the stored replay reads like the API's own JSON beside it.</summary>
+    private static readonly JsonSerializerOptions ReplayJson = new(JsonSerializerDefaults.Web);
 
     private static RunScore ToRecord(Run run, bool claimedWon, Submission submission, ReviewResult review, DateTimeOffset now)
     {
@@ -400,6 +406,7 @@ public sealed class RunService(
             Trace = submission.CompressedTrace,
             TraceFrames = review.TraceFrames,
             Presses = review.Presses,
+            Replay = review.Replay is null ? null : JsonSerializer.Serialize(review.Replay, ReplayJson),
             TimingSamples = review.Timing?.Samples,
             TimingMeanMs = review.Timing?.MeanMs,
             TimingStdDevMs = review.Timing?.StdDevMs,

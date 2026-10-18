@@ -81,6 +81,10 @@ public static class RulesetLoader
             if (fever.maxFever <= 0f) problems.Add("fever.maxFever must be positive");
             if (fever.feverDuration < 0f) problems.Add("fever.feverDuration is negative");
             if (fever.feverScoreMultiplier < 1) problems.Add("fever.feverScoreMultiplier must be at least 1");
+
+            // 手动狂热无法重放 / Fever opened by hand is a key press the input trace does not
+            // record, so the server could not replay a single run under such rules.
+            if (!fever.autoActivate) problems.Add("fever.autoActivate must be true: fever opened by hand cannot be replayed");
         }
 
         if (rules.operators is null || rules.operators.Count == 0) problems.Add("no operators");
