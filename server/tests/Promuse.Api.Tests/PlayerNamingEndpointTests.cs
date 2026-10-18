@@ -2,13 +2,16 @@ using System.Net;
 using System.Net.Http.Json;
 using Promuse.Contracts;
 using Promuse.Contracts.Auth;
+using Promuse.Contracts.Moderation;
 using Promuse.Contracts.Players;
+using Promuse.Contracts.Runs;
 
 namespace Promuse.Api.Tests;
 
 /// <summary>
 /// 起名 / Signing up gives a username, which signs in and is shown to no one, and no name. The
-/// name screen sets the name once and the server draws its tag.
+/// name screen sets the name once and the server draws its tag; until then nothing that shows the
+/// player to others is allowed.
 /// </summary>
 [Collection(ApiCollection.Name)]
 public class PlayerNamingEndpointTests(PromuseApiFactory factory)
@@ -205,5 +208,54 @@ public class PlayerNamingEndpointTests(PromuseApiFactory factory)
         }
 
         Assert.Equal(tags.Count, tags.Distinct().Count());
+    }
+
+    // ------------------------------------------------- before there is a name
+
+    [Fact]
+    public async Task An_unnamed_player_cannot_be_shown_to_anyone_until_named()
+    {
+        (AuthSession unnamed, _) = await SignUpAsync();
+        AuthSession other = await GuestAsync();
+
+        // A run could put them on a board.
+        HttpResponseMessage run = await _client.SendAsync(Send(HttpMethod.Post, "/v1/runs", unnamed,
+            new StartRunRequest(Played.Stage, Played.Operator)));
+        Assert.Equal(HttpStatusCode.Conflict, run.StatusCode);
+        Assert.Equal(ErrorCodes.NameRequired, await CodeOf(run));
+
+        // A signature is read on their card.
+        (_, string etag) = await ReadAsync(unnamed);
+        HttpResponseMessage signature = await _client.SendAsync(Send(HttpMethod.Put, "/v1/players/me/signature",
+            unnamed, new SignatureRequest("hello"), etag));
+        Assert.Equal(HttpStatusCode.Conflict, signature.StatusCode);
+        Assert.Equal(ErrorCodes.NameRequired, await CodeOf(signature));
+
+        // There is no card to open.
+        HttpResponseMessage card = await _client.SendAsync(
+            Send(HttpMethod.Get, $"/v1/players/{unnamed.PlayerId}/profile", other));
+        Assert.Equal(HttpStatusCode.NotFound, card.StatusCode);
+        Assert.Equal(ErrorCodes.PlayerNotFound, await CodeOf(card));
+
+        // A report names who sent it.
+        (_, string otherEtag) = await ReadAsync(other);
+        (await _client.SendAsync(Send(HttpMethod.Put, "/v1/players/me/signature", other,
+            new SignatureRequest("a line to report"), otherEtag))).EnsureSuccessStatusCode();
+        HttpResponseMessage report = await _client.SendAsync(Send(HttpMethod.Post,
+            $"/v1/players/{other.PlayerId}/signature/report", unnamed,
+            new SignatureReportRequest(SignatureReportReason.Spam, null)));
+        Assert.Equal(HttpStatusCode.Conflict, report.StatusCode);
+        Assert.Equal(ErrorCodes.NameRequired, await CodeOf(report));
+
+        // Named, all of it opens.
+        (await NameAsync(unnamed, FreshName())).EnsureSuccessStatusCode();
+
+        HttpResponseMessage runAfter = await _client.SendAsync(Send(HttpMethod.Post, "/v1/runs", unnamed,
+            new StartRunRequest(Played.Stage, Played.Operator)));
+        Assert.Equal(HttpStatusCode.Created, runAfter.StatusCode);
+
+        HttpResponseMessage cardAfter = await _client.SendAsync(
+            Send(HttpMethod.Get, $"/v1/players/{unnamed.PlayerId}/profile", other));
+        Assert.Equal(HttpStatusCode.OK, cardAfter.StatusCode);
     }
 }

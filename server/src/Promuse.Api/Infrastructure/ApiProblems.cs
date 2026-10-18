@@ -187,6 +187,10 @@ public static class ApiProblems
     public static ApiProblem PlayerNotFound() =>
         Create(404, ErrorCodes.PlayerNotFound, "No such player", "There is no player with that id.");
 
+    public static ApiProblem NameRequired() =>
+        Create(409, ErrorCodes.NameRequired, "Choose a name first",
+            "Choose your name in the game before playing with others.");
+
     public static ApiProblem NameAlreadySet() =>
         Create(409, ErrorCodes.NameAlreadySet, "Name already chosen",
             "Your name has already been chosen, and it cannot be changed.");

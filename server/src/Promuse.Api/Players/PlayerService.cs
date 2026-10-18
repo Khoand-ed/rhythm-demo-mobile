@@ -115,6 +115,9 @@ public sealed class PlayerService(
 
         if (Guard(player, ifMatch) is { } refused) return refused;
 
+        // 名片要先有名字 / A card is read by others, so it needs a name on it first.
+        if (player.DisplayName is null) return Outcome<PlayerState>.Fail(ApiProblems.NameRequired());
+
         // 被管理员锁了 / Locked by a moderator: refused whatever is written, clearing included -
         // a moderated line is already gone, and the lock is about writing a new one.
         DateTimeOffset now = clock.GetUtcNow();
