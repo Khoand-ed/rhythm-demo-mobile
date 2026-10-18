@@ -25,11 +25,16 @@ namespace Promuse.Contracts.Leaderboards
     /// 1-based. Ties go to whoever set the score first: matching a score is not the same as
     /// having held it.
     /// </param>
+    /// <param name="Tag">
+    /// The four digits after the name (see PlayerState.Tag), so two players of one name can be
+    /// told apart on the board.
+    /// </param>
     /// <param name="CharacterId">The operator the score was set with.</param>
     public sealed record LeaderboardEntry(
         int Rank,
         Guid PlayerId,
         string DisplayName,
+        int Tag,
         int Score,
         int MaxCombo,
         string? CharacterId,
