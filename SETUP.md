@@ -221,6 +221,12 @@ a song's leaderboard opens that player's card, read-only.
   the player out of writing another for 1-30 days or until lifted, and can mail the player why.
   While locked, the card says until when and the server refuses the line (`SIGNATURE_LOCKED`).
   Every removal and unlock is kept in the tab's history, with the line that was taken down.
+- **Reports:** someone else's card with a line has a red flag at the end of it. It opens a form -
+  spam, offensive or other, and an optional note - that goes to the **Reports** list at the top of
+  the Signatures tab, gathered by player. A player reports a line once (a changed line can be
+  reported again) and at most 10 a day. Removing the line, or dismissing the reports, closes them
+  and thanks every reporter by mail. Built by `Arknights/Home/Build Signature Report UI`, which also
+  puts the flag on the profile card; `Reset Signature Report UI To Default` rebuilds both.
 
 Built by `Arknights/Home/Build Profile UI`, which also places the button inside Home's `LeftPanel`
 so it leans with the news panel. `Reset Profile UI To Default` rebuilds the screen and puts the
@@ -278,6 +284,11 @@ game itself plays with (`Assets/Source/Script/Core/RunJudge.cs`, linked into the
 of Rhythm.Core), with the run's rules, operator level and seed. A result the replay does not come to
 is a clear, but is held off the leaderboard as `REPLAY_MISMATCH` (shown to the player as under
 review); what the replay scored is kept in `run_scores.replay` to compare.
+
+Flagged clears wait on the admin page's **Runs** tab, each showing the claim beside the replay, the
+flags and the timing. **Approve** ranks the run - on the all-time board and its week's - at the score
+the replay came to, never the claim; **Reject** keeps it off for good and mails the player the reason
+written. The clear and its rewards stand either way, and the decision is kept with the run.
 
 `server/tests/golden/replay_stage_AIW_hard.trace` is replayed by both the server tests and the Unity
 EditMode tests and pinned to the same numbers, so the two runtimes cannot drift apart unnoticed.
