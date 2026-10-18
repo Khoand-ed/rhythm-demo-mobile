@@ -60,9 +60,9 @@ public class PlayerProfileRulesTests
     [Fact]
     public void A_letter_typed_with_combining_marks_is_kept_whole_and_counted_once()
     {
-        // "ệ" as some keyboards send it: e, a dot below, a circumflex - three code points, one letter.
-        const string letter = "ệ";
-        Assert.Equal("Vi" + letter + "t", PlayerProfiles.NormalizeSignature("Vi" + letter + "t").Value);
+        // An s with a dot below and a dot above, sent as it is typed: three code points, one letter.
+        const string letter = "s\u0323\u0307";
+        Assert.Equal("Ra" + letter + "a", PlayerProfiles.NormalizeSignature("Ra" + letter + "a").Value);
 
         string sixty = string.Concat(Enumerable.Repeat(letter, PlayerProfiles.SignatureMaxLength));
         Assert.Equal(sixty, PlayerProfiles.NormalizeSignature(sixty).Value);
@@ -72,7 +72,7 @@ public class PlayerProfileRulesTests
     [Fact]
     public void Length_is_counted_in_characters_as_read_and_too_long_is_refused_not_cut()
     {
-        string sixty = new('ệ', PlayerProfiles.SignatureMaxLength);
+        string sixty = new('ñ', PlayerProfiles.SignatureMaxLength);
         Assert.Equal(sixty, PlayerProfiles.NormalizeSignature(sixty).Value);
 
         // Sixty emoji are sixty characters, though each is two UTF-16 units.
