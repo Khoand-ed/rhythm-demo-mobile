@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Promuse Backend API
-  version: 1.0.0-draft.15
+  version: 1.0.0-draft.16
   summary: Authentication and player state for the Promuse mobile rhythm game.
   description: |
     **Phase 1** authentication, **Phase 2** player state, **Phase 3** the economy -
@@ -487,7 +487,10 @@ paths:
     put:
       tags: [players]
       operationId: setDesktopCharacter
-      summary: Set the character shown on the Home screen.
+      summary: Choose the assistant - the operator shown on Home and on the profile card.
+      description: |
+        Must be an operator the player owns; null clears the choice, and AMIYA stands
+        there again.
       parameters:
         - $ref: '#/components/parameters/IfMatch'
       requestBody:
@@ -2747,6 +2750,7 @@ components:
         - displayName
         - tag
         - level
+        - assistantId
         - registeredAt
         - operators
         - rhythm
@@ -2766,11 +2770,11 @@ components:
           type: [string, 'null']
           description: The line the player wrote on their card. Null when there is none.
         assistantId:
-          type: [string, 'null']
+          type: string
           description: |
-            The operator standing on the card: the desktop character when one is set,
-            otherwise the first of the squad, otherwise the operator raised furthest
-            (elite phase, then level, then trust). Null only for a player who owns nobody.
+            The operator standing on the card: the assistant the player chose
+            (`desktopCharacterId`), or `AMIYA` until they choose - the same one Home
+            shows. AMIYA is every new account's starting operator.
         registeredAt:
           type: string
           format: date-time

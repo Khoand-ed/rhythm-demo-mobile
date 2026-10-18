@@ -30,6 +30,12 @@ public class OperatorLevelEndpointTests(PromuseApiFactory factory)
 
     private static string Unique => Guid.NewGuid().ToString("N");
 
+    /// <summary>
+    /// 用 PULSE 测 / The operator these tests level, promote and play: a 3-star, whose cap of 40 and
+    /// single promotion the numbers below are written in. New players start with AMIYA, so it is given.
+    /// </summary>
+    private const string Pulse = "PULSE";
+
     // --------------------------------------------------------------- helpers
 
     private async Task<AuthSession> SignInAsync()
@@ -43,7 +49,13 @@ public class OperatorLevelEndpointTests(PromuseApiFactory factory)
         HttpResponseMessage response = await _client.SendAsync(request);
         response.EnsureSuccessStatusCode();
 
-        return (await response.Content.ReadFromJsonAsync<AuthSession>(Json))!;
+        AuthSession session = (await response.Content.ReadFromJsonAsync<AuthSession>(Json))!;
+        await SqlAsync($"""
+            INSERT INTO player_characters (account_id, character_id, elite, level, exp, trust)
+            VALUES ({session.PlayerId}, {Pulse}, 0, 1, 0, 0)
+            ON CONFLICT DO NOTHING
+            """);
+        return session;
     }
 
     private static HttpRequestMessage Send(HttpMethod method, string url, AuthSession session, object? body = null,
@@ -77,10 +89,10 @@ public class OperatorLevelEndpointTests(PromuseApiFactory factory)
     private static int Amount(PlayerState state, int itemId) =>
         state.Inventory.FirstOrDefault(i => i.ItemId == itemId)?.Amount ?? 0;
 
-    private static CharacterState Character(PlayerState state, string id = Played.Operator) =>
+    private static CharacterState Character(PlayerState state, string id = Pulse) =>
         state.Characters.Single(c => c.CharacterId == id);
 
-    private Task<HttpResponseMessage> PromoteAsync(AuthSession session, int toElite, string characterId = Played.Operator,
+    private Task<HttpResponseMessage> PromoteAsync(AuthSession session, int toElite, string characterId = Pulse,
                                                    string? key = null) =>
         _client.SendAsync(Send(HttpMethod.Post, $"/v1/characters/{characterId}/promote", session,
             new PromoteRequest(toElite), key));
@@ -104,13 +116,13 @@ public class OperatorLevelEndpointTests(PromuseApiFactory factory)
         await db.Database.ExecuteSqlInterpolatedAsync(sql);
     }
 
-    private Task SetLevelAsync(AuthSession session, int level, string characterId = Played.Operator) =>
+    private Task SetLevelAsync(AuthSession session, int level, string characterId = Pulse) =>
         SqlAsync($"UPDATE player_characters SET level = {level} WHERE account_id = {session.PlayerId} AND character_id = {characterId}");
 
     private async Task<RunTicket> StartAsync(AuthSession session)
     {
         HttpResponseMessage response = await _client.SendAsync(Send(HttpMethod.Post, "/v1/runs", session,
-            new StartRunRequest(Played.Stage, Played.Operator)));
+            new StartRunRequest(Played.Stage, Pulse)));
         response.EnsureSuccessStatusCode();
 
         RunTicket ticket = (await response.Content.ReadFromJsonAsync<RunTicket>(Json))!;
@@ -137,7 +149,7 @@ public class OperatorLevelEndpointTests(PromuseApiFactory factory)
         await GiveAsync(session, 16, 1);
         await GiveAsync(session, OperatorLevels.LmdItemId, 5000);
 
-        HttpResponseMessage response = await LevelUpAsync(session, Played.Operator, null, (16, 1), (11, 1));
+        HttpResponseMessage response = await LevelUpAsync(session, Pulse, null, (16, 1), (11, 1));
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         LevelUpResult result = (await response.Content.ReadFromJsonAsync<LevelUpResult>(Json))!;
 
@@ -159,7 +171,7 @@ public class OperatorLevelEndpointTests(PromuseApiFactory factory)
         await SetLevelAsync(session, 40);
         await GiveAsync(session, 11, 1);
 
-        HttpResponseMessage response = await LevelUpAsync(session, Played.Operator, null, (11, 1));
+        HttpResponseMessage response = await LevelUpAsync(session, Pulse, null, (11, 1));
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         Assert.Equal(ErrorCodes.LevelCapped, await CodeOf(response));
@@ -176,11 +188,11 @@ public class OperatorLevelEndpointTests(PromuseApiFactory factory)
         await GiveAsync(session, OperatorLevels.LmdItemId, 5000);
 
         // 2000 + 200 EXP for the 880 level 39 needs: the 200 lands entirely past the cap.
-        HttpResponseMessage both = await LevelUpAsync(session, Played.Operator, null, (16, 1), (11, 1));
+        HttpResponseMessage both = await LevelUpAsync(session, Pulse, null, (16, 1), (11, 1));
         Assert.Equal(HttpStatusCode.UnprocessableEntity, both.StatusCode);
 
         // The 2000 alone reaches it: 1120 is lost, and only the 880 applied is paid for.
-        HttpResponseMessage one = await LevelUpAsync(session, Played.Operator, null, (16, 1));
+        HttpResponseMessage one = await LevelUpAsync(session, Pulse, null, (16, 1));
         Assert.Equal(HttpStatusCode.OK, one.StatusCode);
         LevelUpResult result = (await one.Content.ReadFromJsonAsync<LevelUpResult>(Json))!;
         Assert.Equal((40, 880, OperatorLevels.LmdFor(0, 880)), (result.ToLevel, result.ExpApplied, result.LmdSpent));
@@ -194,12 +206,12 @@ public class OperatorLevelEndpointTests(PromuseApiFactory factory)
         await GiveAsync(session, 16, 1);
         await GiveAsync(session, OperatorLevels.LmdItemId, 10);
 
-        HttpResponseMessage poor = await LevelUpAsync(session, Played.Operator, null, (16, 1));
+        HttpResponseMessage poor = await LevelUpAsync(session, Pulse, null, (16, 1));
         Assert.Equal(HttpStatusCode.Conflict, poor.StatusCode);
         Assert.Equal(ErrorCodes.InsufficientFunds, await CodeOf(poor));
 
         await GiveAsync(session, OperatorLevels.LmdItemId, 5000);
-        HttpResponseMessage tooFew = await LevelUpAsync(session, Played.Operator, null, (16, 2));
+        HttpResponseMessage tooFew = await LevelUpAsync(session, Pulse, null, (16, 2));
         Assert.Equal(HttpStatusCode.Conflict, tooFew.StatusCode);
 
         PlayerState state = await StateAsync(session);
@@ -213,15 +225,15 @@ public class OperatorLevelEndpointTests(PromuseApiFactory factory)
     {
         AuthSession session = await SignInAsync();
 
-        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await LevelUpAsync(session, Played.Operator, null)).StatusCode);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await LevelUpAsync(session, Pulse, null)).StatusCode);
         Assert.Equal(HttpStatusCode.UnprocessableEntity,
-            (await LevelUpAsync(session, Played.Operator, null, (OperatorLevels.LmdItemId, 100))).StatusCode);
+            (await LevelUpAsync(session, Pulse, null, (OperatorLevels.LmdItemId, 100))).StatusCode);
         Assert.Equal(HttpStatusCode.UnprocessableEntity,
-            (await LevelUpAsync(session, Played.Operator, null, (11, 1), (11, 1))).StatusCode);
+            (await LevelUpAsync(session, Pulse, null, (11, 1), (11, 1))).StatusCode);
         Assert.Equal(HttpStatusCode.UnprocessableEntity,
-            (await LevelUpAsync(session, Played.Operator, null, (11, 0))).StatusCode);
+            (await LevelUpAsync(session, Pulse, null, (11, 0))).StatusCode);
 
-        HttpResponseMessage stranger = await LevelUpAsync(session, "AMIYA", null, (11, 1));
+        HttpResponseMessage stranger = await LevelUpAsync(session, "NOVA", null, (11, 1));
         Assert.Equal(HttpStatusCode.Conflict, stranger.StatusCode);
         Assert.Equal(ErrorCodes.CharacterNotOwned, await CodeOf(stranger));
     }
@@ -234,8 +246,8 @@ public class OperatorLevelEndpointTests(PromuseApiFactory factory)
         await GiveAsync(session, OperatorLevels.LmdItemId, 5000);
         string key = Unique;
 
-        HttpResponseMessage first = await LevelUpAsync(session, Played.Operator, key, (11, 1));
-        HttpResponseMessage again = await LevelUpAsync(session, Played.Operator, key, (11, 1));
+        HttpResponseMessage first = await LevelUpAsync(session, Pulse, key, (11, 1));
+        HttpResponseMessage again = await LevelUpAsync(session, Pulse, key, (11, 1));
 
         Assert.Equal(HttpStatusCode.OK, again.StatusCode);
         Assert.Equal(await first.Content.ReadAsStringAsync(), await again.Content.ReadAsStringAsync());
@@ -273,7 +285,7 @@ public class OperatorLevelEndpointTests(PromuseApiFactory factory)
         await GiveAsync(session, 16, 1);
         await GiveAsync(session, OperatorLevels.LmdItemId, 5000);
 
-        HttpResponseMessage response = await LevelUpAsync(session, Played.Operator, null, (16, 1));
+        HttpResponseMessage response = await LevelUpAsync(session, Pulse, null, (16, 1));
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         LevelUpResult result = (await response.Content.ReadFromJsonAsync<LevelUpResult>(Json))!;
 
@@ -365,7 +377,7 @@ public class OperatorLevelEndpointTests(PromuseApiFactory factory)
     public void A_levelled_operator_plays_under_different_rules_than_at_level_one()
     {
         // The premise of everything below: if these matched, a level would change nothing.
-        Assert.NotEqual(Played.Win(factory, level: 1).RulesetFingerprint, Played.Win(factory, level: 20).RulesetFingerprint);
+        Assert.NotEqual(Played.Win(factory, characterId: Pulse, level: 1).RulesetFingerprint, Played.Win(factory, characterId: Pulse, level: 20).RulesetFingerprint);
     }
 
     [Fact]
@@ -377,7 +389,7 @@ public class OperatorLevelEndpointTests(PromuseApiFactory factory)
         RunTicket ticket = await StartAsync(session);
         Assert.Equal(20, ticket.CharacterLevel);
 
-        ScoreReview review = await CompleteAsync(session, ticket, Played.Win(factory, 1000, level: 20));
+        ScoreReview review = await CompleteAsync(session, ticket, Played.Win(factory, 1000, characterId: Pulse, level: 20));
 
         Assert.Equal(ScoreVerdict.Accepted, review.Verdict);
     }
@@ -389,7 +401,7 @@ public class OperatorLevelEndpointTests(PromuseApiFactory factory)
         await SetLevelAsync(session, 20);
 
         RunTicket ticket = await StartAsync(session);
-        ScoreReview review = await CompleteAsync(session, ticket, Played.Win(factory, 1000, level: 1));
+        ScoreReview review = await CompleteAsync(session, ticket, Played.Win(factory, 1000, characterId: Pulse, level: 1));
 
         Assert.Equal(ScoreVerdict.Rejected, review.Verdict);
         Assert.Contains(ScoreReviewCodes.RulesetMismatch, review.Reasons);
@@ -404,7 +416,7 @@ public class OperatorLevelEndpointTests(PromuseApiFactory factory)
         RunTicket ticket = await StartAsync(session);
         await SetLevelAsync(session, 30);
 
-        ScoreReview review = await CompleteAsync(session, ticket, Played.Win(factory, 1000, level: 20));
+        ScoreReview review = await CompleteAsync(session, ticket, Played.Win(factory, 1000, characterId: Pulse, level: 20));
 
         Assert.Equal(ScoreVerdict.Accepted, review.Verdict);
     }

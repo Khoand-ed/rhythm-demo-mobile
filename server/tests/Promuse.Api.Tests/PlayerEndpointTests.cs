@@ -21,7 +21,7 @@ public class PlayerEndpointTests(PromuseApiFactory factory)
     /// A signed-in guest, which is the cheapest way to get a player.
     ///
     /// 默认给齐四个干员 / Given all four operators unless asked not to. A new account starts with
-    /// PULSE alone and earns the rest through headhunting; the squad and desktop tests below are
+    /// AMIYA alone and earns the rest through headhunting; the squad and desktop tests below are
     /// about ownership rules, not about pulling, so they start from a player who owns everyone.
     /// </summary>
     private async Task<AuthSession> SignInAsync(bool fullRoster = true)
@@ -42,7 +42,7 @@ public class PlayerEndpointTests(PromuseApiFactory factory)
             using IServiceScope scope = factory.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<PromuseDbContext>();
 
-            foreach (string id in new[] { "AMIYA", "NOVA", "ECHO" })
+            foreach (string id in new[] { "PULSE", "NOVA", "ECHO" })
             {
                 await db.Database.ExecuteSqlInterpolatedAsync($"""
                     INSERT INTO player_characters (account_id, character_id, elite, level, exp, trust)
@@ -100,8 +100,8 @@ public class PlayerEndpointTests(PromuseApiFactory factory)
         Assert.Equal(session.PlayerId, state.PlayerId);
         Assert.Equal(1, state.Level);
 
-        // PULSE alone: the other three come from headhunting.
-        Assert.Equal(["PULSE"], state.Characters.Select(c => c.CharacterId));
+        // AMIYA alone: the other three come from headhunting.
+        Assert.Equal(["AMIYA"], state.Characters.Select(c => c.CharacterId));
 
         // ItemStack(0, 5), ItemStack(1, 500), ItemStack(2, 1000).
         Assert.Equal([(0, 5), (1, 500), (2, 1000)],

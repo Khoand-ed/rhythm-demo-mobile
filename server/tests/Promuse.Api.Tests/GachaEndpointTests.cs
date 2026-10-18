@@ -299,7 +299,10 @@ public class GachaEndpointTests(PromuseApiFactory factory)
         GachaPullOutcome card = Assert.Single(result.Pulls);
         Assert.Equal(("AMIYA", 5), (card.CharacterId, card.Rarity));
         Assert.True(card.Guaranteed);
-        Assert.True(card.IsNew);
+
+        // Every new player starts with AMIYA, so even the guaranteed one is a copy, converted.
+        Assert.False(card.IsNew);
+        Assert.NotNull(card.Converted);
         Assert.Equal(0, result.PullsSinceFiveStar);
 
         // 每个卡池分开数 / Each banner keeps its own count: the event banner never moved.
