@@ -187,6 +187,10 @@ public static class ApiProblems
     public static ApiProblem PlayerNotFound() =>
         Create(404, ErrorCodes.PlayerNotFound, "No such player", "There is no player with that id.");
 
+    public static ApiProblem NameAlreadySet() =>
+        Create(409, ErrorCodes.NameAlreadySet, "Name already chosen",
+            "Your name has already been chosen, and it cannot be changed.");
+
     public static ApiProblem AlreadyReported() =>
         Create(409, ErrorCodes.AlreadyReported, "Already reported",
             "You have already reported this signature. A moderator will look at it.");

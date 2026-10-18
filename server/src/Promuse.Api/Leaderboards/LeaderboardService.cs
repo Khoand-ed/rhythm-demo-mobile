@@ -111,9 +111,10 @@ public sealed class LeaderboardService(PromuseDbContext db, MissionPeriod period
             })
             .ToListAsync(ct);
 
+        // 上榜的都有名字 / Everyone on a board has a name: a run cannot start without one.
         List<LeaderboardEntry> entries = rows
             .Select((r, i) => new LeaderboardEntry(
-                i + 1, r.AccountId, r.DisplayName, r.Tag, r.Score, r.MaxCombo, r.CharacterId, r.AchievedAt))
+                i + 1, r.AccountId, r.DisplayName!, r.Tag!.Value, r.Score, r.MaxCombo, r.CharacterId, r.AchievedAt))
             .ToList();
 
         // 我自己 / The caller's own line, from the page when they made it, otherwise looked up
@@ -131,7 +132,7 @@ public sealed class LeaderboardService(PromuseDbContext db, MissionPeriod period
             if (mine is not null)
             {
                 int rank = await AheadOfAsync(mine.Row, ct) + 1;
-                me = new LeaderboardEntry(rank, accountId, mine.DisplayName, mine.Tag, mine.Row.Score,
+                me = new LeaderboardEntry(rank, accountId, mine.DisplayName!, mine.Tag!.Value, mine.Row.Score,
                                           mine.Row.MaxCombo, mine.Row.CharacterId, mine.Row.AchievedAt);
             }
         }

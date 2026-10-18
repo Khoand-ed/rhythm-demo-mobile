@@ -57,14 +57,14 @@ public sealed class SignatureModerationService(PromuseDbContext db, TimeProvider
         }
         else if (TryParseNameAndTag(text, out string name, out int tag))
         {
-            players = players.Where(p => p.DisplayName.ToLower() == name.ToLower() && p.Tag == tag);
+            players = players.Where(p => p.DisplayName != null && p.DisplayName.ToLower() == name.ToLower() && p.Tag == tag);
         }
         else
         {
             // 字面匹配 / Matched literally: a % or _ typed into the box means itself.
             string pattern = "%" + text.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_") + "%";
             players = players
-                .Where(p => EF.Functions.ILike(p.DisplayName, pattern, "\\"))
+                .Where(p => p.DisplayName != null && EF.Functions.ILike(p.DisplayName, pattern, "\\"))
                 .OrderBy(p => p.DisplayName)
                 .ThenBy(p => p.Tag);
         }
@@ -86,8 +86,9 @@ public sealed class SignatureModerationService(PromuseDbContext db, TimeProvider
             })
             .ToListAsync(ct);
 
+        // 有签名就有名字 / A line or a name searched for: either way the player has a name.
         return Outcome<AdminSignatureList>.Ok(new AdminSignatureList([.. rows.Select(r => new AdminSignature(
-            r.AccountId, r.DisplayName, r.Tag, r.Signature, r.SignatureUpdatedAt,
+            r.AccountId, r.DisplayName!, r.Tag!.Value, r.Signature, r.SignatureUpdatedAt,
             LockOf(r.SignatureLockedUntil, now), r.Removals))]));
     }
 
@@ -118,7 +119,7 @@ public sealed class SignatureModerationService(PromuseDbContext db, TimeProvider
 
         return Outcome<SignatureModerationHistory>.Ok(new SignatureModerationHistory([.. rows.Select(r =>
             new SignatureModerationEntry(
-                r.Entry.Id, r.Entry.AccountId, r.Name ?? "", r.Tag, r.Entry.Action,
+                r.Entry.Id, r.Entry.AccountId, r.Name ?? "", r.Tag ?? 0, r.Entry.Action,
                 r.Entry.RemovedSignature, r.Entry.Reason, r.Entry.LockedUntil, r.Entry.MailId is not null,
                 r.By, r.Entry.CreatedAt))]));
     }
@@ -306,7 +307,7 @@ public sealed class SignatureModerationService(PromuseDbContext db, TimeProvider
             })
             .FirstAsync(ct);
 
-        return new AdminSignature(playerId, row.DisplayName, row.Tag, row.Signature, row.SignatureUpdatedAt,
+        return new AdminSignature(playerId, row.DisplayName ?? "", row.Tag ?? 0, row.Signature, row.SignatureUpdatedAt,
             LockOf(row.SignatureLockedUntil, now), row.Removals);
     }
 

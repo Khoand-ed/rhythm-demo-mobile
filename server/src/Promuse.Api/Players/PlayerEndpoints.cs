@@ -19,6 +19,9 @@ public static class PlayerEndpoints
         group.MapPut("/me/desktop-character", SetDesktopCharacterAsync);
         group.MapPut("/me/signature", SetSignatureAsync);
 
+        // 起名, 只一次 / The name in the game, chosen once after signing up.
+        group.MapPut("/me/name", SetNameAsync);
+
         group.MapGet("/me/profile", GetMyProfileAsync);
         group.MapGet("/{playerId:guid}/profile", GetProfileAsync);
 
@@ -103,6 +106,12 @@ public static class PlayerEndpoints
         PlayerService players, CancellationToken ct) =>
         WriteAsync(http, user, ct, (accountId, ifMatch) =>
             players.SetSignatureAsync(accountId, request.Signature, ifMatch, ct));
+
+    private static Task<IResult> SetNameAsync(
+        DisplayNameRequest request, HttpContext http, ClaimsPrincipal user,
+        PlayerService players, CancellationToken ct) =>
+        WriteAsync(http, user, ct, (accountId, ifMatch) =>
+            players.SetNameAsync(accountId, request.DisplayName, ifMatch, ct));
 
     /// <summary>
     /// The half every write shares: identify the caller, carry If-Match through,

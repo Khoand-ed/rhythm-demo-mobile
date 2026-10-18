@@ -1293,7 +1293,6 @@ namespace Promuse.Persistence.Migrations
                         .HasColumnName("desktop_character_id");
 
                     b.Property<string>("DisplayName")
-                        .IsRequired()
                         .HasMaxLength(24)
                         .HasColumnType("character varying(24)")
                         .HasColumnName("display_name");
@@ -1332,7 +1331,7 @@ namespace Promuse.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("state_version");
 
-                    b.Property<int>("Tag")
+                    b.Property<int?>("Tag")
                         .HasColumnType("integer")
                         .HasColumnName("tag");
 
@@ -1353,6 +1352,8 @@ namespace Promuse.Persistence.Migrations
 
                     b.ToTable("players", null, t =>
                         {
+                            t.HasCheckConstraint("ck_players_name_and_tag", "(display_name IS NULL) = (tag IS NULL)");
+
                             t.HasCheckConstraint("ck_players_tag_range", "tag >= 0 AND tag <= 9999");
                         });
                 });

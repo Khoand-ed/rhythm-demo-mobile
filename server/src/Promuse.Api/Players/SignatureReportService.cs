@@ -140,7 +140,7 @@ public sealed class SignatureReportService(PromuseDbContext db, TimeProvider clo
             if (!players.TryGetValue(target, out var p)) continue;
 
             queue.Add(new AdminReportedPlayer(
-                p.AccountId, p.DisplayName, p.Tag, p.Signature,
+                p.AccountId, p.DisplayName!, p.Tag!.Value, p.Signature,
                 p.SignatureLockedUntil > now ? p.SignatureLockedUntil : null,
                 p.Removals,
                 [.. open.Where(r => r.Report.TargetId == target).Select(r => new AdminSignatureReport(

@@ -79,7 +79,8 @@ public class FlaggedRunEndpointTests(PromuseApiFactory factory) : ReviewQueueTes
     public async Task A_flagged_run_waits_with_its_claim_and_its_replay_side_by_side()
     {
         (AuthSession admin, _) = await PlayerAsync(admin: true);
-        (AuthSession player, string name) = await PlayerAsync();
+        (AuthSession player, _) = await PlayerAsync();
+        string name = await NameOfAsync(player);
         (Guid runId, RunResult honest) = await PaddedAsync(player);
 
         AdminFlaggedRun waiting = Assert.Single((await ListAsync(admin)).Runs, r => r.RunId == runId);
@@ -221,7 +222,8 @@ public class SignatureReportEndpointTests(PromuseApiFactory factory) : ReviewQue
     public async Task The_queue_gathers_a_lines_reports_and_dismissing_them_thanks_every_reporter()
     {
         (AuthSession admin, _) = await PlayerAsync(admin: true);
-        (AuthSession target, string targetName) = await PlayerAsync();
+        (AuthSession target, _) = await PlayerAsync();
+        string targetName = await NameOfAsync(target);
         (AuthSession first, _) = await PlayerAsync();
         (AuthSession second, _) = await PlayerAsync();
         Assert.Equal(HttpStatusCode.OK, (await WriteLineAsync(target, "a perfectly fine line")).StatusCode);
