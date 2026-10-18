@@ -13,12 +13,15 @@ namespace Promuse.Contracts.Characters
     /// record is worth and what the LMD costs. One definition, compiled into the game and the
     /// server, so the level-up screen previews exactly what the server will do.
     ///
-    /// 只到当前上限 / Levelling stops at the current elite phase's cap. Promotion, which would raise
-    /// it, is a separate feature and not built yet.
+    /// 只到当前上限 / Levelling stops at the current elite phase's cap; promotion raises it.
     /// </summary>
     public static class OperatorLevels
     {
         public const int LmdItemId = 2;
+
+        /// <summary>The two promotion materials besides LMD.</summary>
+        public const int OrirockItemId = 6;
+        public const int SugarSubstituteItemId = 7;
 
         /// <summary>The battle records, smallest first. Each is spent whole.</summary>
         public static readonly IReadOnlyList<ExpRecord> Records = new[]
@@ -146,6 +149,46 @@ namespace Promuse.Contracts.Characters
 
             return new LevelGain(level, exp, applied, left);
         }
+
+        /// <summary>
+        /// 精英化要花的 / What promoting an operator of <paramref name="rarity"/> to
+        /// <paramref name="toElite"/> costs - LMD first, then Orirock and Sugar Substitute - or null
+        /// when that rarity never reaches that phase.
+        ///
+        /// 等级不变 / Promotion keeps the operator's level: it only raises the cap, so the stats the
+        /// operator plays with do not move when it is promoted. It may only happen at the current cap.
+        /// </summary>
+        public static IReadOnlyList<ItemStack>? PromotionCost(int rarity, int toElite)
+        {
+            if (toElite < 1 || toElite > MaxElite(rarity)) return null;
+
+            int lmd, orirock, sugar;
+            switch (rarity)
+            {
+                case 3:
+                    lmd = 10000; orirock = 8; sugar = 3;
+                    break;
+                case 4:
+                    if (toElite == 1) { lmd = 15000; orirock = 12; sugar = 4; }
+                    else { lmd = 60000; orirock = 25; sugar = 12; }
+                    break;
+                case 5:
+                    if (toElite == 1) { lmd = 20000; orirock = 15; sugar = 5; }
+                    else { lmd = 90000; orirock = 35; sugar = 18; }
+                    break;
+                default:
+                    if (toElite == 1) { lmd = 30000; orirock = 20; sugar = 8; }
+                    else { lmd = 180000; orirock = 50; sugar = 25; }
+                    break;
+            }
+
+            return new[]
+            {
+                new ItemStack(LmdItemId, lmd),
+                new ItemStack(OrirockItemId, orirock),
+                new ItemStack(SugarSubstituteItemId, sugar),
+            };
+        }
     }
 
     /// <param name="ItemId">The record's item id.</param>
@@ -176,5 +219,24 @@ namespace Promuse.Contracts.Characters
         int ToLevel,
         int ExpApplied,
         int LmdSpent,
+        PlayerState Player);
+
+    /// <param name="ToElite">
+    /// The phase the device is promoting to - always one past the operator's own. Stated so a second
+    /// promotion, sent from a screen that had not seen the first, is refused rather than taken twice.
+    /// </param>
+    public sealed record PromoteRequest(int ToElite);
+
+    /// <param name="Level">The operator's level, unchanged by promotion.</param>
+    /// <param name="MaxLevel">The new cap at <paramref name="ToElite"/>.</param>
+    /// <param name="Spent">What it cost: LMD, Orirock and Sugar Substitute.</param>
+    /// <param name="Player">The whole save after.</param>
+    public sealed record PromoteResult(
+        string CharacterId,
+        int FromElite,
+        int ToElite,
+        int Level,
+        int MaxLevel,
+        IReadOnlyList<ItemStack> Spent,
         PlayerState Player);
 }

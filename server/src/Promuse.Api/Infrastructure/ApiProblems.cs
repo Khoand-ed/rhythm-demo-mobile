@@ -175,6 +175,14 @@ public static class ApiProblems
         Create(409, ErrorCodes.LevelCapped, "Already at the level cap",
             $"The operator is at level {maxLevel}, the cap for its elite phase.");
 
+    public static ApiProblem EliteCapped(int maxElite) =>
+        Create(409, ErrorCodes.EliteCapped, "Already at the highest elite phase",
+            $"Elite {maxElite} is as far as this operator's rarity goes.");
+
+    public static ApiProblem BelowLevelCap(int level, int maxLevel) =>
+        Create(409, ErrorCodes.BelowLevelCap, "Not at the level cap yet",
+            $"The operator is level {level}; promotion needs level {maxLevel}.");
+
     public static ApiProblem PlayerNotFound() =>
         Create(404, ErrorCodes.PlayerNotFound, "No such player", "There is no player with that id.");
 

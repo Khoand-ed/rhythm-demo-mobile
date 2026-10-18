@@ -155,9 +155,15 @@ namespace Promuse.Contracts
 
         /// <summary>
         /// The operator is already at its level cap for its elite phase. More EXP would go nowhere;
-        /// promotion, which raises the cap, is not built yet.
+        /// promotion raises the cap.
         /// </summary>
         public const string LevelCapped = "LEVEL_CAPPED";
+
+        /// <summary>The operator is already at the highest elite phase its rarity reaches.</summary>
+        public const string EliteCapped = "ELITE_CAPPED";
+
+        /// <summary>Promotion needs the operator at its current level cap first.</summary>
+        public const string BelowLevelCap = "BELOW_LEVEL_CAP";
 
         /// <summary>
         /// The game is down for maintenance. Temporary by definition: a result that could not be

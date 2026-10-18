@@ -264,7 +264,9 @@ namespace UI.Sub {
             ring.fillAmount = fill;
             expBar.fillAmount = fill;
 
-            hint.text = capped ? "MAX LEVEL"
+            // 到顶了就指向精英化 / At the cap, point at promotion when there is a phase left to reach.
+            bool promotable = elite < OperatorLevels.MaxElite(meta.GetRarity());
+            hint.text = capped ? (promotable ? "MAX LEVEL\nPromote to raise it" : "MAX LEVEL")
                       : Reachable() == fromLevel ? "No battle records\nto spend"
                       : "Slide level\nto auto-select";
 

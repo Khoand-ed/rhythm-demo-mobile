@@ -234,8 +234,9 @@ namespace UI.Sub {
                 // 等级面板打开升级 / The level panel opens the level-up screen on this operator.
                 btn_add_exp.onClick.RemoveAllListeners();
                 btn_add_exp.onClick.AddListener(() => LevelUpUI.Open(charData.GetId()));
+                // 精英面板打开精英化 / The PROMOTION panel opens the promotion screen on this operator.
                 btn_add_elite.onClick.RemoveAllListeners();
-                btn_add_elite.onClick.AddListener(() => { Debug.Log("click [add_elite] to: " + meta.GetChineseName()); });
+                btn_add_elite.onClick.AddListener(() => PromotionUI.Open(charData.GetId()));
 
                 transform.GetComponent<Text>("CharInfoPanel/RightPanel/Feature/txt_feature").text = meta.GetFeature();
                 Transform talentTran = transform.Find("CharInfoPanel/RightPanel/Talent/List/img_ground");
