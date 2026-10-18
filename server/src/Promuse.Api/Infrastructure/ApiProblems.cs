@@ -171,6 +171,9 @@ public static class ApiProblems
     public static ApiProblem NoticeNotFound() =>
         Create(404, ErrorCodes.NoticeNotFound, "No such notice", "That notice is not showing.");
 
+    public static ApiProblem PlayerNotFound() =>
+        Create(404, ErrorCodes.PlayerNotFound, "No such player", "There is no player with that id.");
+
     public static ApiProblem StageLocked(string previousStageId) =>
         Create(409, ErrorCodes.StageLocked, "Stage is locked",
             $"Clear the stage before it ('{previousStageId}') to unlock this one.");

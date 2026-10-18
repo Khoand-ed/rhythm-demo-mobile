@@ -214,6 +214,24 @@ namespace Promuse.Net
         public Task<ApiResult<PlayerState>> SetDesktopCharacterAsync(string? characterId) =>
             WriteAsync("/v1/players/me/desktop-character", new DesktopCharacterRequest(characterId));
 
+        /// <summary>The line on the profile card; null or blank clears it. Answers with what was kept.</summary>
+        public Task<ApiResult<PlayerState>> SetSignatureAsync(string? signature) =>
+            WriteAsync("/v1/players/me/signature", new SignatureRequest(signature));
+
+        /// <summary>
+        /// 名片 / A profile card: the caller's own when <paramref name="playerId"/> is null, anyone
+        /// else's by the id a leaderboard row carries. Read-only, and not the save - nothing in it
+        /// moves the held ETag.
+        /// </summary>
+        public Task<ApiResult<PlayerProfile>> GetProfileAsync(Guid? playerId = null)
+        {
+            string path = playerId.HasValue
+                ? "/v1/players/" + playerId.Value.ToString("D") + "/profile"
+                : "/v1/players/me/profile";
+
+            return SendAsync<PlayerProfile>(UnityWebRequest.kHttpVerbGET, path, body: null, authenticate: true);
+        }
+
         private async Task<ApiResult<PlayerState>> WriteAsync(string path, object body)
         {
             ApiResult<PlayerState> result = await SendAsync<PlayerState>(

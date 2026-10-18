@@ -16,6 +16,32 @@ public static class PlayerEndpoints
         group.MapGet("/me", GetMeAsync);
         group.MapPut("/me/squad", SetSquadAsync);
         group.MapPut("/me/desktop-character", SetDesktopCharacterAsync);
+        group.MapPut("/me/signature", SetSignatureAsync);
+
+        group.MapGet("/me/profile", GetMyProfileAsync);
+        group.MapGet("/{playerId:guid}/profile", GetProfileAsync);
+    }
+
+    private static Task<IResult> GetMyProfileAsync(
+        ClaimsPrincipal user, ProfileService profiles, CancellationToken ct) =>
+        user.TryGetAccountId(out Guid accountId)
+            ? GetProfileAsync(accountId, user, profiles, ct)
+            : Task.FromResult(ApiProblems.Unauthorized().ToResult());
+
+    /// <summary>
+    /// 别人的名片 / Anyone's card, by the id a leaderboard row already carries. No ETag: a card
+    /// is read when it is opened, and its counts move with every run the owner finishes.
+    /// </summary>
+    private static async Task<IResult> GetProfileAsync(
+        Guid playerId, ClaimsPrincipal user, ProfileService profiles, CancellationToken ct)
+    {
+        if (!user.TryGetAccountId(out Guid accountId)) return ApiProblems.Unauthorized().ToResult();
+
+        var outcome = await profiles.GetAsync(accountId, playerId, ct);
+
+        return outcome.IsSuccess
+            ? Results.Json(outcome.Value, statusCode: StatusCodes.Status200OK)
+            : outcome.Problem!.ToResult();
     }
 
     private static async Task<IResult> GetMeAsync(
@@ -58,8 +84,14 @@ public static class PlayerEndpoints
         WriteAsync(http, user, ct, (accountId, ifMatch) =>
             players.SetDesktopCharacterAsync(accountId, request.CharacterId, ifMatch, ct));
 
+    private static Task<IResult> SetSignatureAsync(
+        SignatureRequest request, HttpContext http, ClaimsPrincipal user,
+        PlayerService players, CancellationToken ct) =>
+        WriteAsync(http, user, ct, (accountId, ifMatch) =>
+            players.SetSignatureAsync(accountId, request.Signature, ifMatch, ct));
+
     /// <summary>
-    /// The half both writes share: identify the caller, carry If-Match through,
+    /// The half every write shares: identify the caller, carry If-Match through,
     /// and answer with the whole state plus its new ETag.
     ///
     /// 写完回整个状态 / Returning the full document rather than 204 is a choice:

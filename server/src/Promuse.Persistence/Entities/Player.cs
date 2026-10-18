@@ -16,6 +16,20 @@ public class Player
 
     public string DisplayName { get; set; } = string.Empty;
 
+    /// <summary>
+    /// 名字后面的四位数 / The four digits after the name, as in <c>Amiya#0420</c>. Two players may
+    /// share a display name - every guest is "Doctor" and a number - but never a name and a tag, so
+    /// the pair is what tells them apart on a profile. Drawn when the player is created, from the
+    /// numbers that name has not used yet, and never changed after.
+    /// </summary>
+    public int Tag { get; set; }
+
+    /// <summary>
+    /// The line the player writes on their profile, which everyone who opens it reads. Null when
+    /// there is none. Stored only as <c>PlayerProfiles.NormalizeSignature</c> leaves it.
+    /// </summary>
+    public string? Signature { get; set; }
+
     public int Level { get; set; } = 1;
 
     public int Exp { get; set; }

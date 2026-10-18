@@ -42,6 +42,14 @@ namespace Data.Player {
         [SerializeField]
         private string desktopChar;
 
+        // 名字后的编号 / The four digits after the name, 0-9999.
+        [SerializeField]
+        private int tag;
+
+        // 名片上的一句话 / The line on the profile card, or null.
+        [SerializeField]
+        private string signature;
+
         // 物品数据
         [SerializeField]
         private List<ItemStack> items;
@@ -67,6 +75,8 @@ namespace Data.Player {
             return squad;
         }
         public string GetDesktopChar() => desktopChar;
+        public int GetTag() => tag;
+        public string GetSignature() => signature;
         public List<ItemStack> GetItems() => items;
         public List<string> GetPermissions() => permissions;
         
@@ -131,6 +141,8 @@ namespace Data.Player {
             }
 
             desktopChar = state.DesktopCharacterId;
+            tag = state.Tag;
+            signature = state.Signature;
 
             items = new List<ItemStack>();
             foreach (Promuse.Contracts.Players.ItemStack stack in state.Inventory) {

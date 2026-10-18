@@ -10,10 +10,10 @@ namespace Promuse.Api.Players;
 /// <summary>
 /// Reads and writes the save.
 ///
-/// 只有两个写 / Only two writes, and both are preferences the client legitimately
-/// owns: the squad and the desktop character. Anything that grants or spends
-/// belongs to Phase 3 and gets its own endpoint, because the client must not be
-/// able to state what it now holds.
+/// 只有三个写 / Only three writes, and all are preferences the client legitimately
+/// owns: the squad, the desktop character and the line on the profile card.
+/// Anything that grants or spends belongs to Phase 3 and gets its own endpoint,
+/// because the client must not be able to state what it now holds.
 /// </summary>
 public sealed class PlayerService(
     PromuseDbContext db,
@@ -97,6 +97,32 @@ public sealed class PlayerService(
         }
 
         player.DesktopCharacterId = characterId;
+
+        return await CommitAsync(player, ct);
+    }
+
+    /// <summary>
+    /// 名片上的一句话 / The line on the player's profile card. A preference like the two above, so
+    /// it rides the same version check; null or blank clears it.
+    /// </summary>
+    public async Task<Outcome<PlayerState>> SetSignatureAsync(
+        Guid accountId, string? signature, string? ifMatch, CancellationToken ct)
+    {
+        Player? player = await LoadAsync(accountId, tracking: true, ct);
+
+        if (player is null) return Outcome<PlayerState>.Fail(ApiProblems.Unauthorized());
+
+        if (Guard(player, ifMatch) is { } refused) return refused;
+
+        (string? value, string? error) = PlayerProfiles.NormalizeSignature(signature);
+
+        if (error is not null)
+        {
+            return Outcome<PlayerState>.Fail(ApiProblems.ValidationFailed(
+                new Dictionary<string, string[]> { ["signature"] = [error] }));
+        }
+
+        player.Signature = value;
 
         return await CommitAsync(player, ct);
     }
@@ -203,6 +229,7 @@ public sealed class PlayerService(
         return new PlayerState(
             PlayerId: player.AccountId,
             DisplayName: player.DisplayName,
+            Tag: player.Tag,
             Level: player.Level,
             Exp: player.Exp,
             ExpToNextLevel: PlayerProgression.MaxExp(player.Level),
@@ -220,6 +247,7 @@ public sealed class PlayerService(
                 .Select(c => new CharacterState(c.CharacterId, c.Elite, c.Level, c.Exp, c.Trust))],
             Squad: squad,
             DesktopCharacterId: player.DesktopCharacterId,
+            Signature: player.Signature,
             Inventory: [.. player.Items
                 .OrderBy(i => i.ItemId)
                 .Select(i => new ItemStack(i.ItemId, i.Amount))],
