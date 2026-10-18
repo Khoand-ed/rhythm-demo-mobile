@@ -30,6 +30,17 @@ public class RhythmSharedFormatTests
     }
 
     [Test]
+    public void Fingerprint_OfALevelledOperator_IsTheOneTheServerComputes()
+    {
+        Ruleset rules = ShippedRuleset();
+
+        // 成长是算出来的 / The growth is computed, not read, so this is where the two runtimes
+        // could round differently - and an honest levelled operator would have every run refused.
+        Assert.AreEqual("fc111d902abb142c", RulesetFingerprint.Compute(rules, rules.FindOperator("AMIYA").AtLevel(50)),
+                        "server/tests SharedDataTests.ShippedAmiyaLevel50Fingerprint pins the same value");
+    }
+
+    [Test]
     public void Rolls_FromASeed_AreTheServersBitForBit()
     {
         RunState run = new RunState { seed = 42 };

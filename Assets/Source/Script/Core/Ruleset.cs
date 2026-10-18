@@ -206,11 +206,64 @@ public class FeverRules
 [System.Serializable]
 public class OperatorRules
 {
+    /// <summary>The growth fields count in ten-thousandths: 20 is +0.002 per level.</summary>
+    public const int GrowthScale = 10000;
+
     public string id;
     public float scoreModifier;
     public float feverModifier;
     public int maxHp;
     public PassiveRules passive = new PassiveRules();
+
+    // 等级成长 / What each level past the first adds. The three values above are the operator at
+    // level 1, and a run is played - and checked - at <see cref="AtLevel"/>. rarity sets the level
+    // cap (Promuse.Contracts.Characters.OperatorLevels); it is here because the server knows an
+    // operator only through this file.
+    public int rarity;
+    public int maxHpPerLevel;
+    public int scorePerLevel;
+    public int feverPerLevel;
+
+    /// <summary>
+    /// 某一级的数值 / The operator as it plays at <paramref name="level"/>: the level-1 values plus
+    /// what every level past the first adds. Level 1 - and anything below it - is this operator
+    /// unchanged, so its fingerprint is the one it always had.
+    ///
+    /// 两边要算出同样的位 / The device and the server must arrive at the same bits, because the
+    /// fingerprint hashes them. So the growth is a whole number of ten-thousandths: an integer
+    /// product, one division into a double, one rounding to float, one float addition - every step
+    /// correctly rounded and none a multiply-add a compiler could fuse. A float multiply here could
+    /// be contracted on one platform and not the other.
+    ///
+    /// A maxHp of 0 stays 0: it means "use HealthSettings" (see RunState.MaxHp), and growing it
+    /// would turn that fallback into an operator with a handful of HP.
+    /// </summary>
+    public OperatorRules AtLevel(int level)
+    {
+        int steps = level > 1 ? level - 1 : 0;
+
+        return new OperatorRules
+        {
+            id = id,
+            scoreModifier = Grow(scoreModifier, scorePerLevel, steps),
+            feverModifier = Grow(feverModifier, feverPerLevel, steps),
+            maxHp = maxHp > 0 ? maxHp + maxHpPerLevel * steps : maxHp,
+            passive = passive,
+            rarity = rarity,
+            maxHpPerLevel = maxHpPerLevel,
+            scorePerLevel = scorePerLevel,
+            feverPerLevel = feverPerLevel,
+        };
+    }
+
+    private static float Grow(float value, int perLevel, int steps)
+    {
+        if (perLevel == 0 || steps == 0) return value;
+
+        float bonus = (float)((double)(perLevel * steps) / GrowthScale);
+        float grown = value + bonus;
+        return grown;
+    }
 }
 
 /// <summary>

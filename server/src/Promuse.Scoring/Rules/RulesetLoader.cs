@@ -103,6 +103,15 @@ public static class RulesetLoader
                     problems.Add($"operator {op.id}: modifiers are stored as the effective values and must be positive");
                 }
 
+                // 等级上限从星级来 / The level cap comes from the rarity, so an operator without one
+                // could never be levelled - or would be levelled against a cap nobody chose.
+                if (op.rarity < 1 || op.rarity > 6) problems.Add($"operator {op.id}: rarity must be 1 to 6");
+
+                if (op.maxHpPerLevel < 0 || op.scorePerLevel < 0 || op.feverPerLevel < 0)
+                {
+                    problems.Add($"operator {op.id}: growth per level must not be negative");
+                }
+
                 try
                 {
                     CreatePassive(op.passive);

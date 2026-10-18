@@ -77,6 +77,9 @@ MonoBehaviour:
   maxHp: 300
   scoreModifier: 1.2
   feverModifier: 1.2
+  maxHpPerLevel: 2
+  scorePerLevel: 20
+  feverPerLevel: 20
   passive: {fileID: 11400000, guid: ca5a2129060a04d4d92e81b5fc07ddc9, type: 2}
   image1: {fileID: 21300000, guid: e348b199fd543994fb121c681a5557fa, type: 3}
   image2: {fileID: 21300000, guid: e348b199fd543994fb121c681a5557fa, type: 3}

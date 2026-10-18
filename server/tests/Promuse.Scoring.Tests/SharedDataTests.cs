@@ -80,6 +80,8 @@ public class SharedDataTests
     [InlineData("\"version\": 1", "\"version\": 2", "version")]
     [InlineData("\"tapGreat\": 0.1", "\"tapGreat\": 0.5", "judge windows")]
     [InlineData("\"id\": \"NOVA\"", "\"id\": \"AMIYA\"", "appears twice")]
+    [InlineData("\"rarity\": 5", "\"rarity\": 0", "rarity must be 1 to 6")]
+    [InlineData("\"maxHpPerLevel\": 2", "\"maxHpPerLevel\": -2", "growth per level must not be negative")]
     public void A_ruleset_the_server_cannot_stand_behind_is_refused(string find, string replace, string expected)
     {
         string json = File.ReadAllText(Fixtures.RepoPath(Path.Combine("server", "data", "ruleset.json")));
@@ -94,6 +96,13 @@ public class SharedDataTests
     /// <summary>Pinned on the Unity side too - see the class summary.</summary>
     public const string ShippedAmiyaFingerprint = "856c377e36e8ba6f";
 
+    /// <summary>
+    /// AMIYA at level 50, her cap at Elite 0. Pinned on the Unity side too: the growth is the one
+    /// part of the rules computed rather than read, so it is the part where the two runtimes could
+    /// round differently.
+    /// </summary>
+    public const string ShippedAmiyaLevel50Fingerprint = "fc111d902abb142c";
+
     [Fact]
     public void The_fingerprint_of_the_shipped_rules_is_the_one_unity_computes()
     {
@@ -101,6 +110,44 @@ public class SharedDataTests
 
         Assert.Equal(ShippedAmiyaFingerprint,
                      RulesetFingerprint.Compute(rules, Fixtures.Operator(rules, "AMIYA")));
+    }
+
+    [Fact]
+    public void Level_one_is_the_operator_unchanged_so_its_fingerprint_is_the_one_it_always_had()
+    {
+        Ruleset rules = Fixtures.Ruleset();
+
+        foreach (OperatorRules op in rules.operators)
+        {
+            Assert.Equal(RulesetFingerprint.Compute(rules, op), RulesetFingerprint.Compute(rules, op.AtLevel(1)));
+            Assert.Equal(RulesetFingerprint.Compute(rules, op), RulesetFingerprint.Compute(rules, op.AtLevel(0)));
+        }
+    }
+
+    [Fact]
+    public void Each_level_past_the_first_adds_the_operators_growth()
+    {
+        Ruleset rules = Fixtures.Ruleset();
+        OperatorRules amiya = Fixtures.Operator(rules, "AMIYA");
+
+        OperatorRules at50 = amiya.AtLevel(50);
+
+        Assert.Equal(300 + 2 * 49, at50.maxHp);
+        Assert.Equal(1.2f + (float)(20 * 49 / 10000.0), at50.scoreModifier);
+        Assert.Equal(1.2f + (float)(20 * 49 / 10000.0), at50.feverModifier);
+        Assert.Equal("ComboShieldPassive", at50.passive.type);
+
+        // Every level is a different set of rules.
+        Assert.NotEqual(RulesetFingerprint.Compute(rules, amiya.AtLevel(2)), RulesetFingerprint.Compute(rules, amiya));
+        Assert.Equal(ShippedAmiyaLevel50Fingerprint, RulesetFingerprint.Compute(rules, at50));
+    }
+
+    [Fact]
+    public void A_max_hp_left_to_the_health_settings_does_not_grow()
+    {
+        var op = new OperatorRules { id = "X", scoreModifier = 1f, feverModifier = 1f, maxHp = 0, maxHpPerLevel = 5 };
+
+        Assert.Equal(0, op.AtLevel(30).maxHp);
     }
 
     [Fact]

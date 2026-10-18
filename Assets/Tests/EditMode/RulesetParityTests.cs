@@ -126,6 +126,12 @@ public class RulesetParityTests
             Assert.AreEqual(feverGain > 0f ? feverGain : 1f, expected.feverModifier, id + ".feverModifier");
             Assert.AreEqual(Mathf.Max(0, meta.FindProperty("maxHp").intValue), expected.maxHp, id + ".maxHp");
 
+            // 等级成长和星级 / The growth a level adds, and the rarity that caps the level.
+            Assert.AreEqual(meta.FindProperty("rarity").intValue, expected.rarity, id + ".rarity");
+            Assert.AreEqual(meta.FindProperty("maxHpPerLevel").intValue, expected.maxHpPerLevel, id + ".maxHpPerLevel");
+            Assert.AreEqual(meta.FindProperty("scorePerLevel").intValue, expected.scorePerLevel, id + ".scorePerLevel");
+            Assert.AreEqual(meta.FindProperty("feverPerLevel").intValue, expected.feverPerLevel, id + ".feverPerLevel");
+
             PassiveRules passive = PassiveRules.From((PassiveSO)meta.FindProperty("passive").objectReferenceValue);
 
             Assert.AreEqual(passive.type ?? "", expected.passive.type ?? "", id + ".passive.type");

@@ -37,6 +37,10 @@
       "scoreModifier": 1.2,
       "feverModifier": 1.2,
       "maxHp": 300,
+      "rarity": 5,
+      "maxHpPerLevel": 2,
+      "scorePerLevel": 20,
+      "feverPerLevel": 20,
       "passive": { "type": "ComboShieldPassive", "parameters": [ { "name": "charges", "value": 1 } ] }
     },
     {
@@ -44,6 +48,10 @@
       "scoreModifier": 1.1,
       "feverModifier": 1.1,
       "maxHp": 275,
+      "rarity": 4,
+      "maxHpPerLevel": 2,
+      "scorePerLevel": 20,
+      "feverPerLevel": 20,
       "passive": { "type": "JudgeUpgradePassive", "parameters": [ { "name": "chance", "value": 0.25 } ] }
     },
     {
@@ -51,6 +59,10 @@
       "scoreModifier": 1.1,
       "feverModifier": 1.1,
       "maxHp": 275,
+      "rarity": 4,
+      "maxHpPerLevel": 2,
+      "scorePerLevel": 20,
+      "feverPerLevel": 20,
       "passive": {
         "type": "FeverExtendPassive",
         "parameters": [ { "name": "comboThreshold", "value": 50 }, { "name": "extraSeconds", "value": 3 } ]
@@ -61,6 +73,10 @@
       "scoreModifier": 1,
       "feverModifier": 1,
       "maxHp": 250,
+      "rarity": 3,
+      "maxHpPerLevel": 2,
+      "scorePerLevel": 20,
+      "feverPerLevel": 20,
       "passive": {
         "type": "RegenPassive",
         "parameters": [ { "name": "interval", "value": 10 }, { "name": "amount", "value": 5 } ]
