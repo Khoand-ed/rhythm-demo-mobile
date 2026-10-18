@@ -211,10 +211,16 @@ rhythm record - runs finished, charts cleared, full combos and best ranked score
 a song's leaderboard opens that player's card, read-only.
 
 - **The tag** is four digits after the name, unique per name, drawn when the player is created.
-  Names repeat - every guest is `Doctor` and a number - a name and its tag never do.
+  Names repeat - every guest is `Doctor` and a number - a name and its tag never do. Leaderboard
+  rows show it too, dimmed, the way the card does.
 - **The operator on the card** is the player's assistant - the same one standing on Home (below).
 - **The line** is edited on the card itself, 60 characters at most. The server keeps it as one line
   with nothing invisible in it, and the field shows what was kept.
+- **Moderation** is the admin page's **Signatures** tab: the lines written most recently, newest
+  first, and a search by name or `Name#0420`. A moderator removes a line with a reason, can lock
+  the player out of writing another for 1-30 days or until lifted, and can mail the player why.
+  While locked, the card says until when and the server refuses the line (`SIGNATURE_LOCKED`).
+  Every removal and unlock is kept in the tab's history, with the line that was taken down.
 
 Built by `Arknights/Home/Build Profile UI`, which also places the button inside Home's `LeftPanel`
 so it leans with the news panel. `Reset Profile UI To Default` rebuilds the screen and puts the
