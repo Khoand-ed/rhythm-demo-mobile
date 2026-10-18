@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Promuse Backend API
-  version: 1.0.0-draft.17
+  version: 1.0.0-draft.18
   summary: Authentication and player state for the Promuse mobile rhythm game.
   description: |
     **Phase 1** authentication, **Phase 2** player state, **Phase 3** the economy -
@@ -534,6 +534,9 @@ paths:
 
         The answer carries what was kept, in `signature`. The game composes the text to
         NFC before sending; the server does not, as it runs with invariant globalization.
+
+        While a moderator has locked the line (`signatureLockedUntil` in the player state)
+        every write is refused with `SIGNATURE_LOCKED`, clearing included.
       parameters:
         - $ref: '#/components/parameters/IfMatch'
       requestBody:
@@ -554,6 +557,14 @@ paths:
                 $ref: '#/components/schemas/PlayerState'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: |
+            `SIGNATURE_LOCKED` - a moderator has locked the line. The detail says until
+            when.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
         '412':
           $ref: '#/components/responses/PreconditionFailed'
         '422':
@@ -1854,6 +1865,171 @@ paths:
               schema:
                 $ref: '#/components/schemas/Problem'
 
+  /v1/admin/signatures:
+    get:
+      tags: [admin]
+      operationId: listSignatures
+      summary: The profile lines written most recently, or the players a name finds.
+      description: |
+        With no `query`, the players who have a line, the most recently written first.
+        With one, `Name#0420` is that one player and anything else matches names
+        containing it, ignoring case - whether or not they have a line, so a locked
+        player can be found to unlock.
+      parameters:
+        - name: query
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        '200':
+          description: The players.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminSignatureList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: '`FORBIDDEN`.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /v1/admin/signatures/history:
+    get:
+      tags: [admin]
+      operationId: getSignatureModerationHistory
+      summary: Everything moderators have done to profile lines, newest first.
+      parameters:
+        - name: playerId
+          in: query
+          description: One player's history; everyone's when absent.
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        '200':
+          description: The history.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignatureModerationHistory'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: '`FORBIDDEN`.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
+  /v1/admin/signatures/{playerId}/remove:
+    post:
+      tags: [admin]
+      operationId: removeSignature
+      summary: Take a player's line down, lock it for a while if asked, and tell them by mail if asked.
+      description: |
+        One transaction: the line goes, the lock is set, the mail is sent and the history
+        is written together. A new lock never shortens one already running. A lock alone,
+        on a player with no line, is allowed; neither a line to remove nor a lock is
+        refused with 422. The player's state version moves, as it does for any write to
+        the save.
+      parameters:
+        - name: playerId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignatureRemoveRequest'
+      responses:
+        '200':
+          description: The player as the list now shows them.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminSignature'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: '`FORBIDDEN`.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '404':
+          description: '`PLAYER_NOT_FOUND`.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /v1/admin/signatures/{playerId}/unlock:
+    post:
+      tags: [admin]
+      operationId: unlockSignature
+      summary: Lift a lock before its time. A player who is not locked is refused with 422.
+      parameters:
+        - name: playerId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignatureUnlockRequest'
+      responses:
+        '200':
+          description: The player as the list now shows them.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminSignature'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: '`FORBIDDEN`.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '404':
+          description: '`PLAYER_NOT_FOUND`.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
   /v1/notices:
     get:
       tags: [notices]
@@ -2560,6 +2736,12 @@ components:
         signature:
           type: [string, 'null']
           description: The line on the player's profile card, as the server kept it.
+        signatureLockedUntil:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            While a moderator has locked the line, when the player may write it again;
+            `9999-01-01T00:00:00Z` is a lock only a moderator lifts. Null when not locked.
         inventory:
           type: array
           items:
@@ -4077,6 +4259,114 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AdminMail'
+
+    AdminSignature:
+      type: object
+      required: [playerId, displayName, tag, removals]
+      properties:
+        playerId:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        tag:
+          $ref: '#/components/schemas/PlayerTag'
+        signature:
+          type: [string, 'null']
+        signatureUpdatedAt:
+          type: [string, 'null']
+          format: date-time
+          description: When the player last changed the line; null if never.
+        lockedUntil:
+          type: [string, 'null']
+          format: date-time
+          description: Until when the player cannot write a line (`9999-01-01T00:00:00Z` is until lifted); null when not locked.
+        removals:
+          type: integer
+          description: How many times a moderator has taken this player's line down.
+
+    AdminSignatureList:
+      type: object
+      required: [players]
+      properties:
+        players:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminSignature'
+
+    SignatureRemoveRequest:
+      type: object
+      required: [reason, lockDays, lockPermanently, notifyByMail]
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Kept in the history and, when mailed, told to the player.
+        lockDays:
+          type: integer
+          minimum: 0
+          maximum: 365
+          description: Days the player cannot write a new line; 0 is no lock.
+        lockPermanently:
+          type: boolean
+          description: Locked until a moderator lifts it. Overrides lockDays.
+        notifyByMail:
+          type: boolean
+
+    SignatureUnlockRequest:
+      type: object
+      properties:
+        reason:
+          type: [string, 'null']
+          maxLength: 200
+
+    SignatureModerationAction:
+      type: string
+      enum: [Removed, Unlocked]
+
+    SignatureModerationEntry:
+      type: object
+      required: [id, playerId, displayName, tag, action, mailed, at]
+      properties:
+        id:
+          type: integer
+          format: int64
+        playerId:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        tag:
+          $ref: '#/components/schemas/PlayerTag'
+        action:
+          $ref: '#/components/schemas/SignatureModerationAction'
+        removedSignature:
+          type: [string, 'null']
+          description: The line as it stood when taken down.
+        reason:
+          type: [string, 'null']
+        lockedUntil:
+          type: [string, 'null']
+          format: date-time
+          description: The lock the action left in place.
+        mailed:
+          type: boolean
+        by:
+          type: [string, 'null']
+          description: The moderator's username; null once that account is gone.
+        at:
+          type: string
+          format: date-time
+
+    SignatureModerationHistory:
+      type: object
+      required: [entries]
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/SignatureModerationEntry'
 
     NoticeCategory:
       type: string
