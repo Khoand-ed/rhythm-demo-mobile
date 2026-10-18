@@ -168,8 +168,7 @@ namespace UI.Sub {
             }
 
             levelText.text = profile.Level.ToString(CultureInfo.InvariantCulture);
-            nameText.text = profile.DisplayName + "<color=#FFFFFF80>#" +
-                            profile.Tag.ToString("D4", CultureInfo.InvariantCulture) + "</color>";
+            nameText.text = profile.DisplayName + "<color=#FFFFFF80>" + PlayerTag.Format(profile.Tag) + "</color>";
             registeredText.text = profile.RegisteredAt.ToLocalTime().ToString("yyyy-M-d", CultureInfo.InvariantCulture);
 
             CharMeta meta = Meta(profile.AssistantId);

@@ -4,6 +4,7 @@ using Data.Player;
 using DG.Tweening;
 using Manager;
 using Promuse.Contracts.Leaderboards;
+using Promuse.Contracts.Players;
 using Promuse.Net;
 using TMPro;
 using Tools;
@@ -273,7 +274,10 @@ public sealed class LeaderboardPanel
             player = entry.PlayerId;
             button.interactable = true;
             rank.text = rankText;
-            name.text = entry.DisplayName;
+            // 同名不同人 / Names repeat across players; the dimmed tag tells two of them apart, as
+            // on the profile card. A display name is letters, digits and underscores only, so it
+            // cannot carry markup of its own.
+            name.text = entry.DisplayName + "<color=#FFFFFF80>" + PlayerTag.Format(entry.Tag) + "</color>";
             name.color = Color.white;
             score.text = entry.Score.ToString("N0", CultureInfo.InvariantCulture);
             character.text = entry.CharacterId ?? "";

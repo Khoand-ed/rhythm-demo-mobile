@@ -5,6 +5,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 
 namespace Promuse.Contracts.Players
 {
@@ -103,6 +104,16 @@ namespace Promuse.Contracts.Players
         /// <summary>The assistant for a desktop character that may not be set.</summary>
         public static string Of(string? desktopCharacterId) =>
             string.IsNullOrEmpty(desktopCharacterId) ? Default : desktopCharacterId!;
+    }
+
+    /// <summary>
+    /// 名字后面的四位数 / The tag after a name, written the one way every screen writes it - the
+    /// profile card, the leaderboard and the admin page.
+    /// </summary>
+    public static class PlayerTag
+    {
+        /// <summary>"#0420": always four digits, so "#7" and "#0007" are never two spellings of one player.</summary>
+        public static string Format(int tag) => "#" + tag.ToString("D4", CultureInfo.InvariantCulture);
     }
 
     /// <summary>
