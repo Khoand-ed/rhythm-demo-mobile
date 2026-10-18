@@ -199,6 +199,15 @@ namespace Data.Player {
             return result;
         }
 
+        /// <summary>精英化 / Promotes an operator one phase and takes the save the server answers with.</summary>
+        public async Task<ApiResult<Promuse.Contracts.Characters.PromoteResult>> PromoteAsync(string characterId, int toElite) {
+            ApiResult<Promuse.Contracts.Characters.PromoteResult> result = await api.PromoteAsync(characterId, toElite);
+
+            if (result.IsSuccess && playerData != null) playerData.ApplyServerState(result.Value.Player);
+
+            return result;
+        }
+
         // -------------------------------------------------------------- sign-out
 
         /// <summary>

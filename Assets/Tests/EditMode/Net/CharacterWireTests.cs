@@ -34,6 +34,30 @@ public class CharacterWireTests
         Assert.AreEqual(12, ticket.CharacterLevel);
     }
 
+    private const string Promoted =
+        @"{""characterId"":""PULSE"",""fromElite"":0,""toElite"":1,""level"":40,""maxLevel"":55,""spent"":[{""itemId"":2,""amount"":10000},{""itemId"":6,""amount"":8},{""itemId"":7,""amount"":3}],""player"":{""playerId"":""6f1c2b8e-3d4a-4f5b-9c6d-7e8f9a0b1c2d"",""displayName"":""Doctor42"",""tag"":7,""level"":1,""exp"":0,""expToNextLevel"":500,""stamina"":{""current"":82,""max"":82,""nextPointAt"":null,""fullAt"":null},""characters"":[{""characterId"":""PULSE"",""elite"":1,""level"":40,""exp"":0,""trust"":0}],""squad"":[null,null,null,null],""desktopCharacterId"":null,""signature"":null,""inventory"":[],""stateVersion"":6,""serverTime"":""2026-10-18T08:00:00+00:00""}}";
+
+    [Test]
+    public void APromotion_ReadsThePhaseTheCapAndWhatItCost()
+    {
+        PromoteResult result = PromuseApi.TryParse<PromoteResult>(Promoted);
+
+        Assert.IsNotNull(result);
+        Assert.AreEqual((0, 1, 40, 55), (result.FromElite, result.ToElite, result.Level, result.MaxLevel));
+        Assert.AreEqual(3, result.Spent.Count);
+        Assert.AreEqual(1, result.Player.Characters[0].Elite);
+    }
+
+    [Test]
+    public void ThePromotionTable_IsTheOneTheServerCharges()
+    {
+        // The same rows OperatorLevelRulesTests checks on .NET.
+        Assert.IsNull(OperatorLevels.PromotionCost(3, 2), "a 3-star stops at Elite 1");
+        Assert.AreEqual(10000, OperatorLevels.PromotionCost(3, 1)[0].Amount);
+        Assert.AreEqual(180000, OperatorLevels.PromotionCost(6, 2)[0].Amount);
+        Assert.AreEqual(55, OperatorLevels.MaxLevel(3, 1));
+    }
+
     [Test]
     public void TheSharedLevellingRules_AgreeWithTheServersTests()
     {

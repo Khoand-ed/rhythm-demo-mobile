@@ -251,6 +251,24 @@ namespace Promuse.Net
             return result;
         }
 
+        /// <summary>
+        /// 精英化 / Promotes an operator to <paramref name="toElite"/> - the phase after its own -
+        /// for the LMD and materials OperatorLevels.PromotionCost names. Idempotent, because it spends.
+        /// </summary>
+        public async Task<ApiResult<PromoteResult>> PromoteAsync(string characterId, int toElite)
+        {
+            ApiResult<PromoteResult> result = await SendAsync<PromoteResult>(
+                UnityWebRequest.kHttpVerbPOST,
+                "/v1/characters/" + Uri.EscapeDataString(characterId) + "/promote",
+                new PromoteRequest(toElite),
+                authenticate: true,
+                idempotencyKey: Guid.NewGuid().ToString());
+
+            if (result.IsSuccess) _playerETag = ETagFor(result.Value!.Player);
+
+            return result;
+        }
+
         private async Task<ApiResult<PlayerState>> WriteAsync(string path, object body)
         {
             ApiResult<PlayerState> result = await SendAsync<PlayerState>(
