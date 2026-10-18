@@ -221,6 +221,13 @@ namespace Promuse.Net
             WriteAsync("/v1/players/me/signature", new SignatureRequest(signature));
 
         /// <summary>
+        /// 起名 / The name in the game, chosen once on the name screen. Answers with the state, which
+        /// carries the name and the tag the server drew for it.
+        /// </summary>
+        public Task<ApiResult<PlayerState>> SetNameAsync(string displayName) =>
+            WriteAsync("/v1/players/me/name", new DisplayNameRequest(displayName));
+
+        /// <summary>
         /// 名片 / A profile card: the caller's own when <paramref name="playerId"/> is null, anyone
         /// else's by the id a leaderboard row carries. Read-only, and not the save - nothing in it
         /// moves the held ETag.

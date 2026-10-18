@@ -138,6 +138,34 @@ namespace Data.Player {
             return LoadStateAsync();
         }
 
+        /// <summary>
+        /// 起名 / Chooses the name in the game - once, on the name screen after signing up. The
+        /// server draws the tag; the save that comes back carries both.
+        ///
+        /// 回答丢了也不重名 / The write carries the save's version, like every preference. When it is
+        /// refused as stale the save is read again: if that save already has a name, an earlier try
+        /// landed and only its answer was lost, so that name is the result - it is never sent twice.
+        /// NAME_ALREADY_SET means the same thing.
+        /// </summary>
+        public async Task<ApiResult<PlayerData>> SetNameAsync(string name) {
+            ApiResult<PlayerState> result = await api.SetNameAsync(name);
+
+            if (result.Is(ErrorCodes.StateConflict) || result.Is(ErrorCodes.PreconditionRequired)
+                || result.Is(ErrorCodes.NameAlreadySet)) {
+                ApiResult<PlayerData> reread = await LoadStateAsync();
+                if (!reread.IsSuccess || reread.Value.HasName()) return reread;
+
+                result = await api.SetNameAsync(name);
+            }
+
+            if (!result.IsSuccess) return ApiResult<PlayerData>.Fail(result.Problem);
+
+            if (playerData == null) playerData = ScriptableObject.CreateInstance<PlayerData>();
+            playerData.ApplyServerState(result.Value);
+
+            return ApiResult<PlayerData>.Ok(playerData);
+        }
+
         // -------------------------------------------------------------- profile
 
         /// <summary>
