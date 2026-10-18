@@ -42,11 +42,33 @@ namespace Arknights.EditorTools {
             }
 
             RenameManifestBundle(platformName);
+            WriteBundleList();
             AssetDatabase.Refresh();
             Debug.Log($"[BuildAssetBundles] Built {bundles.Length} bundle(s) into {OutputFolder}/ " +
                       $"with manifest bundle '{platformName}'.");
 
             if (UsesPersistentDataPath(target)) DeployToPersistentDataPath(platformName);
+        }
+
+        /// <summary>
+        /// 打包清单 / Writes BundleInstaller's list beside the bundles: a stamp, then every bundle file
+        /// a device must copy out of the build into persistentDataPath. The stamp changes on every
+        /// build, so a phone updated to a new build copies again even when no file name changed.
+        /// </summary>
+        private static void WriteBundleList() {
+            var lines = new List<string> { "# built " + System.DateTime.UtcNow.ToString("o") };
+
+            foreach (string file in Directory.GetFiles(OutputFolder, "*", SearchOption.AllDirectories)) {
+                if (file.EndsWith(".meta") || file.EndsWith(".manifest")) continue;
+
+                string relative = file.Substring(OutputFolder.Length).TrimStart('/', '\\').Replace('\\', '/');
+                if (relative == Manager.BundleInstaller.ListFile) continue;
+                lines.Add(relative);
+            }
+
+            File.WriteAllText(Path.Combine(OutputFolder, Manager.BundleInstaller.ListFile), string.Join("\n", lines) + "\n");
+            Debug.Log($"[BuildAssetBundles] Listed {lines.Count - 1} file(s) in {Manager.BundleInstaller.ListFile} " +
+                      "for a device to install on its first launch.");
         }
 
         /// <summary>

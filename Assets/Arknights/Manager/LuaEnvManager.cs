@@ -28,15 +28,16 @@ namespace Manager {
         }
 
         /// <summary>
-        /// Lua脚本在磁盘上的位置 / Where a Lua module lives on disk.
+        /// Lua脚本在磁盘上的位置 / Where a Lua module lives on disk: under Assets/Arknights/Resources/,
+        /// so the Editor reads the file as it is saved.
         ///
-        /// Application.dataPath is Assets/, but the scripts live under Assets/Arknights/.
-        /// Without the extra segment every require missed and fell through to AssetLoader.
-        /// luaScriptsFolder stays relative so the AssetBundle names used by LoadLuaText and
-        /// AssetLoader are unaffected.
+        /// 设备上读 Resources / On a device there is no such file, and the scripts are in no
+        /// AssetBundle: AssetLoader's Asset.Load falls back to Resources.Load("LuaScripts/UI/HomeUI.lua"),
+        /// which is this same file built into the player. That is why the folder is under Resources -
+        /// outside it, a phone had no Lua at all and the front-end never started.
         /// </summary>
         private static string ScriptDiskPath(string module) {
-            return Path.Combine(Application.dataPath, "Arknights",
+            return Path.Combine(Application.dataPath, "Arknights", "Resources",
                 luaScriptsFolder + module.Replace(".", "/") + ".lua.txt");
         }
 

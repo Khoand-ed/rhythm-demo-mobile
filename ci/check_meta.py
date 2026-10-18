@@ -15,6 +15,9 @@ file that exists locally but was never committed cannot mask a problem:
   3. every tracked <name>.meta has a tracked <name> file or <name>/ directory
   4. no two tracked .meta files share a guid
 
+A *.androidlib folder counts as one asset: Unity imports it as a single plug-in
+and gives the files inside no .meta, so the folder must have one and they need not.
+
 Scoped to Assets/ deliberately. Packages/manifest.json correctly has no .meta, so
 widening the scope produces immediate false positives.
 
@@ -61,6 +64,23 @@ def unity_ignores(path):
     return path.lower().endswith(".tmp")
 
 
+def android_library(path):
+    """The Android library folder <path> is inside, or None.
+
+    Unity imports a *.androidlib folder as one plug-in asset and hands its files
+    to Gradle untouched: the folder has a .meta, the files inside never get one.
+    So a file in there stands for its folder, which is what must have the .meta.
+    (Other plug-in folders are not this simple - xlua.bundle ships a .meta for
+    every file inside - so only .androidlib is treated this way.)
+    """
+    parts = path.split("/")
+    for i, segment in enumerate(parts[:-1]):
+        if segment.lower().endswith(".androidlib"):
+            return "/".join(parts[: i + 1])
+
+    return None
+
+
 def main():
     paths = [p for p in tracked_paths() if p.startswith(ASSETS) and not unity_ignores(p)]
 
@@ -68,7 +88,10 @@ def main():
     metas = set()
 
     for path in paths:
-        if path.endswith(".meta"):
+        library = android_library(path)
+        if library is not None:
+            assets.add(library)
+        elif path.endswith(".meta"):
             metas.add(path[: -len(".meta")])
         else:
             assets.add(path)

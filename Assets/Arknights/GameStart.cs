@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using Manager;
 using Scripts.Game;
 using Tools;
@@ -8,6 +9,18 @@ using UnityEngine;
 namespace Scripts {
     public class GameStart : MonoBehaviour {
         private void Awake() {
+            // 手机首次启动先装AB包 / A phone's first launch installs the shipped bundles before anything
+            // reads them. Everywhere else - and on every later boot - this starts at once, as it always did.
+            if (BundleInstaller.NeedsChecking) StartCoroutine(InstallThenBoot());
+            else Boot();
+        }
+
+        private IEnumerator InstallThenBoot() {
+            yield return BundleInstaller.EnsureInstalled();
+            Boot();
+        }
+
+        private void Boot() {
             GameManager.Inst();
             LuaEnvManager.Inst();
 
