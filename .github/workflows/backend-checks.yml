@@ -38,6 +38,9 @@ on:
       # server as surely as the two above.
       - 'Assets/Beatmaps/**'
 
+      # The image the server ships in, and the script that proves it starts.
+      - 'deploy/docker/**'
+
       - '.github/workflows/backend-checks.yml'
 
   pull_request:
@@ -235,3 +238,25 @@ jobs:
           dotnet dotnet-ef database update
           -p src/Promuse.Persistence
           -s src/Promuse.Api
+
+  container:
+    name: Image builds, migrates and starts
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # 部署用的就是这个镜像 / The image a deploy runs, built and started the way a deploy starts it:
+    # --migrate on an empty database, then the API, then /health/ready. The two jobs above test
+    # the code; this one tests what ships - the Dockerfile, its build context (the server compiles
+    # files from Assets/, which the context must carry), the user it runs as and the JSON logs.
+    # A deploy that would fail on the server fails here, in the pull request.
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+          fetch-depth: 1
+
+      - name: Build the image
+        run: docker build --file deploy/docker/api.Dockerfile --tag promuse-api:ci .
+
+      - name: Smoke test
+        run: deploy/docker/smoke-test.sh promuse-api:ci
