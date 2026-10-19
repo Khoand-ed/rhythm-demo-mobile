@@ -162,6 +162,12 @@ InitTestScene*.unity*
 /server/**/App_Data/
 /server/**/secrets.json
 
+# Environment files hold the passwords and keys a database or a deploy runs with.
+# server/env.example is the tracked template; the .env made from it never is, and
+# neither is any .env a deploy writes under deploy/.
+/server/.env
+/deploy/**/.env
+
 # Python bytecode cache from the ci/ checks. Regenerated on every run.
 __pycache__/
 *.pyc
