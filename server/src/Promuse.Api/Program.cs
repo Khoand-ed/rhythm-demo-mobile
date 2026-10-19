@@ -211,6 +211,26 @@ builder.Services.AddHealthChecks()
 
 var app = builder.Build();
 
+// 部署时迁移 / `--migrate`: bring the database up to this build's schema and exit. A deploy runs
+// it once, before the new version takes traffic - the API itself never migrates as it starts,
+// because two instances starting together would both try to alter the same tables. Needs only
+// the connection string: nothing below runs, so neither the signing key nor the game data does.
+if (args.Contains("--migrate"))
+{
+    using IServiceScope scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<PromuseDbContext>();
+
+    List<string> pending = [.. await db.Database.GetPendingMigrationsAsync()];
+    app.Logger.LogInformation("Applying {Count} migration(s): {Migrations}",
+        pending.Count, pending.Count == 0 ? "none" : string.Join(", ", pending));
+
+    await db.Database.MigrateAsync();
+
+    app.Logger.LogInformation("The database is at {Migration}.",
+        (await db.Database.GetAppliedMigrationsAsync()).LastOrDefault() ?? "no migration");
+    return;
+}
+
 // 现在就读 / Now, not on the first submitted run: an unreadable ruleset or chart is a reason not
 // to start at all.
 app.Services.GetRequiredService<GameData>();
