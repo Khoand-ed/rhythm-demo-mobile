@@ -63,6 +63,12 @@ namespace Data.Player {
         private List<string> permissions;
 
         public string GetName() => name;
+
+        /// <summary>
+        /// 起过名了 / False from signing up until the name screen: the username only signs in, and
+        /// the name in the game - with its tag - is chosen there. Home never opens before.
+        /// </summary>
+        public bool HasName() => !string.IsNullOrEmpty(name);
         public string GetPassword() => password;
         public int GetLevel() => level;
         public int GetExp() => exp;
@@ -146,7 +152,8 @@ namespace Data.Player {
             }
 
             desktopChar = state.DesktopCharacterId;
-            tag = state.Tag;
+            // 起名前没有编号 / No tag before the name screen; HasName says which.
+            tag = state.Tag ?? 0;
             signature = state.Signature;
             signatureLockedUntil = state.SignatureLockedUntil;
 

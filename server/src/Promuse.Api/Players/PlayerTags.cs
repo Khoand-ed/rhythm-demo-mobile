@@ -23,7 +23,7 @@ public static class PlayerTags
     {
         HashSet<int> used = [.. await db.Players.AsNoTracking()
             .Where(p => p.DisplayName == displayName)
-            .Select(p => p.Tag)
+            .Select(p => p.Tag!.Value)
             .ToListAsync(ct)];
 
         if (used.Count >= Count) return null;

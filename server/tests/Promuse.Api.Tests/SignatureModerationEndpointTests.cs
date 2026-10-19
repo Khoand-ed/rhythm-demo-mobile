@@ -71,8 +71,9 @@ public class SignatureModerationEndpointTests(PromuseApiFactory factory) : HomeC
     public async Task The_newest_lines_come_first_and_a_name_with_its_tag_finds_one_player()
     {
         (AuthSession admin, _) = await PlayerAsync(admin: true);
-        (AuthSession first, string firstName) = await PlayerAsync();
+        (AuthSession first, _) = await PlayerAsync();
         (AuthSession second, _) = await PlayerAsync();
+        string firstName = await NameOfAsync(first);
 
         Assert.Equal(HttpStatusCode.OK, (await WriteAsync(first, "first line")).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await WriteAsync(second, "second line")).StatusCode);
@@ -83,7 +84,7 @@ public class SignatureModerationEndpointTests(PromuseApiFactory factory) : HomeC
         Assert.Equal([second.PlayerId, first.PlayerId], order);
 
         PlayerState state = (await StateAsync(first)).State;
-        AdminSignature found = Assert.Single((await ListAsync(admin, firstName + PlayerTag.Format(state.Tag))).Players);
+        AdminSignature found = Assert.Single((await ListAsync(admin, firstName + PlayerTag.Format(state.Tag!.Value))).Players);
         Assert.Equal((first.PlayerId, "first line", 0), (found.PlayerId, found.Signature, found.Removals));
         Assert.NotNull(found.SignatureUpdatedAt);
 

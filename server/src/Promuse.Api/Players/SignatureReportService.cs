@@ -41,6 +41,12 @@ public sealed class SignatureReportService(PromuseDbContext db, TimeProvider clo
         if (reporterId == targetId) errors["playerId"] = ["You cannot report your own signature."];
         if (errors.Count > 0) return Outcome<bool>.Fail(ApiProblems.ValidationFailed(errors));
 
+        // 举报人的名字给管理员看 / The moderators' queue names who reported, so a reporter needs a name.
+        if (!await db.Players.AnyAsync(p => p.AccountId == reporterId && p.DisplayName != null, ct))
+        {
+            return Outcome<bool>.Fail(ApiProblems.NameRequired());
+        }
+
         // 封号的人不给看, 也就不给报 / A banned player's card is not shown to others, so it cannot be reported either.
         var target = await db.Players.AsNoTracking()
             .Where(p => p.AccountId == targetId && p.Account!.BannedAt == null)
@@ -140,7 +146,7 @@ public sealed class SignatureReportService(PromuseDbContext db, TimeProvider clo
             if (!players.TryGetValue(target, out var p)) continue;
 
             queue.Add(new AdminReportedPlayer(
-                p.AccountId, p.DisplayName, p.Tag, p.Signature,
+                p.AccountId, p.DisplayName!, p.Tag!.Value, p.Signature,
                 p.SignatureLockedUntil > now ? p.SignatureLockedUntil : null,
                 p.Removals,
                 [.. open.Where(r => r.Report.TargetId == target).Select(r => new AdminSignatureReport(

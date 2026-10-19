@@ -10,8 +10,9 @@ namespace Promuse.Api.Players;
 /// <summary>
 /// Reads and writes the save.
 ///
-/// 只有三个写 / Only three writes, and all are preferences the client legitimately
-/// owns: the squad, the desktop character and the line on the profile card.
+/// 只有四个写 / Only four writes, and all are things the client legitimately
+/// chooses: the squad, the desktop character, the line on the profile card and,
+/// once, the name in the game.
 /// Anything that grants or spends belongs to Phase 3 and gets its own endpoint,
 /// because the client must not be able to state what it now holds.
 /// </summary>
@@ -114,6 +115,9 @@ public sealed class PlayerService(
 
         if (Guard(player, ifMatch) is { } refused) return refused;
 
+        // 名片要先有名字 / A card is read by others, so it needs a name on it first.
+        if (player.DisplayName is null) return Outcome<PlayerState>.Fail(ApiProblems.NameRequired());
+
         // 被管理员锁了 / Locked by a moderator: refused whatever is written, clearing included -
         // a moderated line is already gone, and the lock is about writing a new one.
         DateTimeOffset now = clock.GetUtcNow();
@@ -136,6 +140,58 @@ public sealed class PlayerService(
         player.Signature = value;
 
         return await CommitAsync(player, ct);
+    }
+
+    /// <summary>
+    /// 起名 / The name in the game, chosen once on the name screen after signing up. The tag is
+    /// drawn here, from the numbers that name has not used, and the pair is kept for good: a
+    /// second call is refused, never a rename.
+    /// </summary>
+    public async Task<Outcome<PlayerState>> SetNameAsync(
+        Guid accountId, string? name, string? ifMatch, CancellationToken ct)
+    {
+        for (int attempt = 1; ; attempt++)
+        {
+            Player? player = await LoadAsync(accountId, tracking: true, ct);
+
+            if (player is null) return Outcome<PlayerState>.Fail(ApiProblems.Unauthorized());
+
+            if (Guard(player, ifMatch) is { } refused) return refused;
+
+            if (player.DisplayName is not null) return Outcome<PlayerState>.Fail(ApiProblems.NameAlreadySet());
+
+            if (!PlayerNameRules.IsValid(name))
+            {
+                return Outcome<PlayerState>.Fail(ApiProblems.ValidationFailed(
+                    new Dictionary<string, string[]> { ["displayName"] = [PlayerNameRules.Description] }));
+            }
+
+            int? tag = await PlayerTags.DrawAsync(db, name!, ct);
+
+            if (tag is null)
+            {
+                return Outcome<PlayerState>.Fail(ApiProblems.ValidationFailed(
+                    new Dictionary<string, string[]>
+                    {
+                        ["displayName"] = ["Every tag of that name is taken. Please choose another name."],
+                    }));
+            }
+
+            player.DisplayName = name;
+            player.Tag = tag;
+
+            try
+            {
+                return await CommitAsync(player, ct);
+            }
+            catch (DbUpdateException) when (attempt < 3)
+            {
+                // 撞号 / Someone else of the same name drew the same tag between the draw and the
+                // save, and the unique index refused this one. Read again and draw again. (A
+                // concurrency conflict does not land here: CommitAsync answers that itself.)
+                db.ChangeTracker.Clear();
+            }
+        }
     }
 
     // ------------------------------------------------------------ internals

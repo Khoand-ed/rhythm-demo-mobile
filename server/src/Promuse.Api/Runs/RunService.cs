@@ -88,6 +88,9 @@ public sealed class RunService(
 
         if (player is null) return Outcome<RunTicket>.Fail(ApiProblems.Unauthorized());
 
+        // 没名字不上榜 / A run can put the player on a leaderboard, where everyone reads the name.
+        if (player.DisplayName is null) return Outcome<RunTicket>.Fail(ApiProblems.NameRequired());
+
         DateTimeOffset now = clock.GetUtcNow();
 
         // 先结算再扣 / The bar has to be brought up to date before anything is

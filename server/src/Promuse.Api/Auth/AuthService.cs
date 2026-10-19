@@ -95,7 +95,10 @@ public sealed class AuthService(
         account.DeviceId = string.IsNullOrWhiteSpace(request.DeviceId) ? null : request.DeviceId;
 
         db.Accounts.Add(account);
-        db.Players.Add(NewPlayer(account, request.Username, await TagForAsync(request.Username, ct), now));
+
+        // 用户名只用来登录 / The username signs in and nothing else: no one else ever sees it. The
+        // player has no name until the name screen, which the game opens straight after this.
+        db.Players.Add(NewPlayer(account, displayName: null, tag: null, now));
 
         try
         {
@@ -340,15 +343,14 @@ public sealed class AuthService(
     private static readonly (int Id, int Amount)[] StartingItems = [(0, 5), (1, 500), (2, 1000)];
 
     /// <summary>
-    /// 一个名字用完一万个编号 / Only fails once a single name has all ten thousand tags, which no
-    /// name here can reach: a username is unique among accounts, and a guest name is one of a
-    /// hundred thousand.
+    /// 一个名字用完一万个编号 / Only fails once a single name has all ten thousand tags, which a
+    /// guest name - one of a hundred thousand - cannot reach.
     /// </summary>
     private async Task<int> TagForAsync(string displayName, CancellationToken ct) =>
         await PlayerTags.DrawAsync(db, displayName, ct)
         ?? throw new InvalidOperationException($"Every tag of the name '{displayName}' is taken.");
 
-    private static Player NewPlayer(Account account, string displayName, int tag, DateTimeOffset now)
+    private static Player NewPlayer(Account account, string? displayName, int? tag, DateTimeOffset now)
     {
         var player = new Player
         {

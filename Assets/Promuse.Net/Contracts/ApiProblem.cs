@@ -154,6 +154,15 @@ namespace Promuse.Contracts
         public const string PlayerNotFound = "PLAYER_NOT_FOUND";
 
         /// <summary>
+        /// The player has not chosen a name yet, and this would show them to other players: a run
+        /// on a leaderboard, a signature, a report. The name screen comes first.
+        /// </summary>
+        public const string NameRequired = "NAME_REQUIRED";
+
+        /// <summary>The player already has a name and its tag. A name is chosen once and kept.</summary>
+        public const string NameAlreadySet = "NAME_ALREADY_SET";
+
+        /// <summary>
         /// A moderator has locked this player's profile line. The detail says until when; the
         /// player state carries it as signatureLockedUntil.
         /// </summary>

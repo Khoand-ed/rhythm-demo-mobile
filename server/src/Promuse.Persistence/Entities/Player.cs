@@ -14,15 +14,22 @@ public class Player
 
     public Account? Account { get; set; }
 
-    public string DisplayName { get; set; } = string.Empty;
+    /// <summary>
+    /// 游戏里的名字 / The name everyone else sees, never the username - that one is for signing
+    /// in. Null from signing up until the player chooses it on the name screen
+    /// (<c>PlayerService.SetNameAsync</c>), and kept for good after. A guest is named at once,
+    /// "Doctor" and a number. Nothing that shows a player to others - a leaderboard line, a
+    /// signature, a report - can be made without it, so only the owner ever sees it null.
+    /// </summary>
+    public string? DisplayName { get; set; }
 
     /// <summary>
     /// 名字后面的四位数 / The four digits after the name, as in <c>Amiya#0420</c>. Two players may
     /// share a display name - every guest is "Doctor" and a number - but never a name and a tag, so
-    /// the pair is what tells them apart on a profile. Drawn when the player is created, from the
-    /// numbers that name has not used yet, and never changed after.
+    /// the pair is what tells them apart on a profile. Drawn with the name, from the numbers that
+    /// name has not used yet, and never changed after. Null exactly when the name is.
     /// </summary>
-    public int Tag { get; set; }
+    public int? Tag { get; set; }
 
     /// <summary>
     /// The line the player writes on their profile, which everyone who opens it reads. Null when

@@ -27,6 +27,29 @@ public class PlayerProfileRulesTests
         Assert.Throws<ArgumentOutOfRangeException>(() => PlayerTags.FreeAt(used, 1));
     }
 
+    // ---------------------------------------------------------------- the name
+
+    [Theory]
+    [InlineData("Ed")]
+    [InlineData("Edd")]
+    [InlineData("Doctor42")]
+    [InlineData("12345678")]
+    public void A_name_is_two_to_eight_english_letters_and_digits(string name) =>
+        Assert.True(PlayerNameRules.IsValid(name));
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("E")]
+    [InlineData("Doctor123")]
+    [InlineData("Ed d")]
+    [InlineData("Ed_d")]
+    [InlineData("Ed!")]
+    [InlineData("Đức")]
+    [InlineData("Ｅｄｄ")]
+    public void A_name_with_anything_else_or_of_another_length_is_not(string? name) =>
+        Assert.False(PlayerNameRules.IsValid(name));
+
     // ----------------------------------------------------------- the signature
 
     [Theory]

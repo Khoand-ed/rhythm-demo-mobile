@@ -21,9 +21,14 @@ namespace Promuse.Contracts.Players
     /// as well as the header so a conflict can be explained to the player rather
     /// than only handled by the transport.
     /// </param>
+    /// <param name="DisplayName">
+    /// The name in the game, which everyone else sees. Null on an account that has just signed
+    /// up: the player chooses it once, on the name screen (<c>PUT /v1/players/me/name</c>), before
+    /// Home opens. The username is for signing in and is shown to no one.
+    /// </param>
     /// <param name="Tag">
     /// The four digits after the name, 0 to 9999, drawn as <c>#0420</c>. Names repeat; a name
-    /// and its tag never do.
+    /// and its tag never do. Null exactly when <paramref name="DisplayName"/> is.
     /// </param>
     /// <param name="Signature">The line on the player's profile card, or null.</param>
     /// <param name="SignatureLockedUntil">
@@ -32,8 +37,8 @@ namespace Promuse.Contracts.Players
     /// </param>
     public sealed record PlayerState(
         Guid PlayerId,
-        string DisplayName,
-        int Tag,
+        string? DisplayName,
+        int? Tag,
         int Level,
         int Exp,
         int ExpToNextLevel,
@@ -93,6 +98,39 @@ namespace Promuse.Contracts.Players
     /// kept.
     /// </param>
     public sealed record SignatureRequest(string? Signature);
+
+    /// <param name="DisplayName">
+    /// The name the player chose, as <see cref="PlayerNameRules"/> allows. Set once: the server
+    /// draws its tag and the pair never changes after.
+    /// </param>
+    public sealed record DisplayNameRequest(string DisplayName);
+
+    /// <summary>
+    /// 游戏里的名字 / What a name in the game may be: 2 to 8 letters and digits, English letters
+    /// only, no spaces and no symbols. Shared so the name screen refuses exactly what the server
+    /// would, and the game's font has every character a name can hold.
+    /// </summary>
+    public static class PlayerNameRules
+    {
+        public const int MinLength = 2;
+        public const int MaxLength = 8;
+
+        /// <summary>The rule in words, for the screen and for the server's refusal.</summary>
+        public const string Description = "Your name must be 2-8 letters or numbers, with no spaces or special characters.";
+
+        public static bool IsValid(string? name)
+        {
+            if (name == null || name.Length < MinLength || name.Length > MaxLength) return false;
+
+            foreach (char c in name)
+            {
+                bool letter = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
+                if (!letter && (c < '0' || c > '9')) return false;
+            }
+
+            return true;
+        }
+    }
 
     /// <summary>
     /// 助理 / The operator standing on Home and on the profile card.

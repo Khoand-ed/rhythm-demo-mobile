@@ -30,6 +30,10 @@ public abstract class HomeContentTestBase(PromuseApiFactory factory)
 
     protected static string Unique => Guid.NewGuid().ToString("N");
 
+    /// <summary>
+    /// A signed-up player, past the name screen. The second value is the username, which signs in
+    /// and addresses mail; the name everyone else sees is <see cref="NameOfAsync"/>.
+    /// </summary>
     protected async Task<(AuthSession Session, string Username)> PlayerAsync(bool admin = false)
     {
         string username = (admin ? "hcadmin_" : "hcplayer_") + Unique[..10];
@@ -44,7 +48,23 @@ public abstract class HomeContentTestBase(PromuseApiFactory factory)
 
         HttpResponseMessage login = await Client.PostAsJsonAsync("/v1/auth/login", new LoginRequest(username, "correct horse battery"));
         login.EnsureSuccessStatusCode();
-        return ((await login.Content.ReadFromJsonAsync<AuthSession>(Json))!, username);
+        AuthSession session = (await login.Content.ReadFromJsonAsync<AuthSession>(Json))!;
+
+        // 起名 / The name screen, which every player in the game has been through.
+        HttpResponseMessage me = await Client.SendAsync(Send(HttpMethod.Get, "/v1/players/me", session));
+        me.EnsureSuccessStatusCode();
+        (await Client.SendAsync(Send(HttpMethod.Put, "/v1/players/me/name", session,
+            new DisplayNameRequest("P" + Unique[..7]), me.Headers.ETag!.ToString()))).EnsureSuccessStatusCode();
+
+        return (session, username);
+    }
+
+    /// <summary>The name the player chose on the name screen, as others see it.</summary>
+    protected async Task<string> NameOfAsync(AuthSession session)
+    {
+        HttpResponseMessage me = await Client.SendAsync(Send(HttpMethod.Get, "/v1/players/me", session));
+        me.EnsureSuccessStatusCode();
+        return (await ReadAsync<PlayerState>(me)).DisplayName!;
     }
 
     protected async Task SqlAsync(FormattableString sql)

@@ -211,7 +211,7 @@ public class PromuseDbContext(DbContextOptions<PromuseDbContext> options) : DbCo
                   .HasForeignKey<Player>(p => p.AccountId)
                   .OnDelete(DeleteBehavior.Cascade);
 
-            entity.Property(p => p.DisplayName).HasMaxLength(24).IsRequired();
+            entity.Property(p => p.DisplayName).HasMaxLength(24);
             entity.Property(p => p.DesktopCharacterId).HasMaxLength(32);
 
             // 上限在服务里按字算 / The real limit is counted in characters as a reader sees them
@@ -223,6 +223,11 @@ public class PromuseDbContext(DbContextOptions<PromuseDbContext> options) : DbCo
             // The index is what makes that true, not the drawing in PlayerTags.
             entity.HasIndex(p => new { p.DisplayName, p.Tag }).IsUnique();
             entity.ToTable(t => t.HasCheckConstraint("ck_players_tag_range", "tag >= 0 AND tag <= 9999"));
+
+            // 名字和编号同时有 / Unnamed until the name screen, and then both at once: a name with no
+            // tag, or a tag with no name, is neither state. Two unnamed players do not collide on
+            // the index above, since Postgres keeps every NULL distinct.
+            entity.ToTable(t => t.HasCheckConstraint("ck_players_name_and_tag", "(display_name IS NULL) = (tag IS NULL)"));
 
             // 审核看最近写的 / The moderators' list is the lines written most recently. Only rows
             // that have a line are on it, so only they are in the index.

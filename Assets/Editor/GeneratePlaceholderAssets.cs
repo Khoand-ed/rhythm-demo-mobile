@@ -415,6 +415,9 @@ namespace Arknights.EditorTools {
             Label(loading, "Status", "Attempting to establish a neural link with the Pigeon Server",
                 20, new Color(0.72f, 0.72f, 0.75f), new Vector2(0, -330));
 
+            // ---- 起名: 注册之后, 主界面之前 / the name screen, after signing up and before Home
+            NameEntrySetup.BuildInto(ui);
+
             // ---- 上下黑条压在所有面板之上 / the bars overlay every panel, as in the reference
             GameObject topBar = Rect(root, "TopBar", r => {
                 r.anchorMin = new Vector2(0, 1);

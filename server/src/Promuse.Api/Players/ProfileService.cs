@@ -23,9 +23,11 @@ public sealed class ProfileService(PromuseDbContext db, CampaignService campaign
     public async Task<Outcome<PlayerProfile>> GetAsync(Guid viewerId, Guid playerId, CancellationToken ct)
     {
         // 封号的人不给看 / A banned player's card is not shown to others - it is reported as not
-        // there, the same as an id that never existed. Their own still opens for them.
+        // there, the same as an id that never existed. Their own still opens for them. A player who
+        // has not chosen a name yet has no card at all.
         var row = await db.Players.AsNoTracking()
             .Where(p => p.AccountId == playerId && (p.Account!.BannedAt == null || p.AccountId == viewerId))
+            .Where(p => p.DisplayName != null)
             .Select(p => new
             {
                 p.AccountId,
@@ -43,8 +45,8 @@ public sealed class ProfileService(PromuseDbContext db, CampaignService campaign
 
         return Outcome<PlayerProfile>.Ok(new PlayerProfile(
             PlayerId: row.AccountId,
-            DisplayName: row.DisplayName,
-            Tag: row.Tag,
+            DisplayName: row.DisplayName!,
+            Tag: row.Tag!.Value,
             Level: row.Level,
             Signature: row.Signature,
             // 没选就是 AMIYA / AMIYA until the player chooses, the same as Home shows.
