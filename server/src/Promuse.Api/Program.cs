@@ -179,7 +179,10 @@ builder.Services.AddRateLimiter(options =>
     options.AddPolicy(RateLimitPolicies.Auth, http =>
         RateLimitPartition.GetFixedWindowLimiter(
             // Per caller, not global: one abusive address must not be able to
-            // lock every player out of signing in.
+            // lock every player out of signing in. Deployed behind the reverse
+            // proxy, ASPNETCORE_FORWARDEDHEADERS_ENABLED makes this the client's
+            // address from X-Forwarded-For rather than the proxy's own
+            // (ForwardedHeadersTests).
             partitionKey: http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
             factory: _ => new FixedWindowRateLimiterOptions
             {
