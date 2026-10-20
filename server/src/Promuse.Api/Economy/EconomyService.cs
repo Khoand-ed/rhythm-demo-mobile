@@ -24,7 +24,8 @@ public sealed class EconomyService(
     PlayerService players,
     Inventory inventory,
     MissionService missions,
-    Events.EventProgress events)
+    Events.EventProgress events,
+    PromuseMetrics metrics)
 {
     /// <summary>Matches the client's own cap on a single checkout.</summary>
     public const int MaxQuantity = 99;
@@ -107,6 +108,8 @@ public sealed class EconomyService(
         await events.OnShopCheckoutAsync(accountId, now, ct);
 
         await transaction.CommitAsync(ct);
+
+        metrics.Purchased(offer.PriceItemId, priceTotal);
 
         Outcome<PlayerState> state = await players.GetStateAsync(accountId, ct);
 

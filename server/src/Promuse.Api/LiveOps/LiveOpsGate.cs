@@ -24,7 +24,7 @@ namespace Promuse.Api.LiveOps;
 /// </summary>
 public sealed class LiveOpsGate(RequestDelegate next)
 {
-    public async Task InvokeAsync(HttpContext http, RemoteConfigStore store, PromuseDbContext db)
+    public async Task InvokeAsync(HttpContext http, RemoteConfigStore store, PromuseDbContext db, PromuseMetrics metrics)
     {
         PathString path = http.Request.Path;
 
@@ -40,6 +40,7 @@ public sealed class LiveOpsGate(RequestDelegate next)
         string? client = http.Request.Headers[ClientVersion.Header];
         if (ClientVersion.IsOutdated(client, config.Document.MinClientVersion))
         {
+            metrics.LiveOpsRefused("client_outdated");
             await ApiProblems.ClientOutdated(config.Document.MinClientVersion).ToResult().ExecuteAsync(http);
             return;
         }
@@ -55,6 +56,7 @@ public sealed class LiveOpsGate(RequestDelegate next)
                     ((int)Math.Ceiling((end - DateTimeOffset.UtcNow).TotalSeconds)).ToString();
             }
 
+            metrics.LiveOpsRefused("maintenance");
             await ApiProblems.Maintenance(maintenance.Message, maintenance.EndsAt).ToResult().ExecuteAsync(http);
             return;
         }

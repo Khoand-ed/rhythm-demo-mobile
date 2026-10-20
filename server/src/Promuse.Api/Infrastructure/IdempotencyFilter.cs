@@ -90,7 +90,7 @@ public sealed class IdempotencyFilter<TRequest> : IEndpointFilter
             .AsNoTracking()
             .FirstOrDefaultAsync(r => r.Key == key && r.Endpoint == endpoint, ct);
 
-        if (existing is not null) return Replay(existing, requestHash);
+        if (existing is not null) return Replay(http, existing, requestHash);
 
         object? result = await next(context);
 
@@ -129,7 +129,7 @@ public sealed class IdempotencyFilter<TRequest> : IEndpointFilter
                     .AsNoTracking()
                     .FirstOrDefaultAsync(r => r.Key == key && r.Endpoint == endpoint, ct);
 
-                if (winner is not null) return Replay(winner, requestHash);
+                if (winner is not null) return Replay(http, winner, requestHash);
 
                 throw;
             }
@@ -150,9 +150,16 @@ public sealed class IdempotencyFilter<TRequest> : IEndpointFilter
     private static string Subject(HttpContext http) =>
         http.User.TryGetAccountId(out Guid accountId) ? accountId.ToString() : "anon";
 
-    private static IResult Replay(IdempotencyRecord record, string requestHash)
+    private static IResult Replay(HttpContext http, IdempotencyRecord record, string requestHash)
     {
-        if (record.RequestHash != requestHash) return ApiProblems.IdempotencyKeyConflict().ToResult();
+        bool conflict = record.RequestHash != requestHash;
+
+        // 按路由模板计 / By the route's pattern, never its path: a path carries a run id, and every
+        // distinct tag value is a series of its own.
+        string route = (http.GetEndpoint() as RouteEndpoint)?.RoutePattern.RawText ?? "unknown";
+        http.RequestServices.GetRequiredService<PromuseMetrics>().Replayed(route, conflict);
+
+        if (conflict) return ApiProblems.IdempotencyKeyConflict().ToResult();
 
         return Results.Text(record.ResponseBody, "application/json", Encoding.UTF8, record.StatusCode);
     }

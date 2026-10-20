@@ -26,7 +26,8 @@ public sealed class GachaService(
     Inventory inventory,
     IGachaDice dice,
     Events.EventProgress events,
-    ILogger<GachaService> log)
+    ILogger<GachaService> log,
+    PromuseMetrics metrics)
 {
     public const int MaxHistoryPage = 50;
     public const int DefaultHistoryPage = 10;
@@ -172,6 +173,8 @@ public sealed class GachaService(
         await events.OnHeadhuntAsync(accountId, times, now, ct);
 
         await transaction.CommitAsync(ct);
+
+        foreach (GachaPullOutcome pulled in outcomes) metrics.GachaPulled(bannerId, pulled.Rarity);
 
         Outcome<PlayerState> state = await players.GetStateAsync(accountId, ct);
         if (!state.IsSuccess) return Outcome<GachaPullResult>.Fail(state.Problem!);
