@@ -406,6 +406,32 @@ deploy/docker/smoke-test.sh promuse-api
   touches the server or `deploy/docker/`: an empty database, `--migrate` twice, `/health/ready`, a
   real request, and no log line that is not JSON.
 
+### Metrics
+
+The API exports metrics over OTLP when `OTEL_EXPORTER_OTLP_ENDPOINT` is set - the deploy points it at
+the collector. With it unset, as in development and the tests, nothing leaves the process. The
+standard `OTEL_*` variables apply: `OTEL_RESOURCE_ATTRIBUTES=deployment.environment.name=staging`
+names the environment, `OTEL_METRIC_EXPORT_INTERVAL` (milliseconds) how often it sends.
+
+- **From the framework**, by name in `Program.cs`: request duration by route and status
+  (`http.server.request.duration`), Kestrel connections, the rate limiter, outgoing HTTP, the GC and
+  thread pool (`dotnet.*`), and Npgsql's pool and query timings (`db.client.*`).
+- **The game's own** (`PromuseMetrics`, meter `Promuse.Api`):
+
+  | Counter | Tags |
+  |---|---|
+  | `promuse.auth.sign_ins` | `method` (login, register, guest, link, refresh), `outcome`, `error` |
+  | `promuse.runs.started` | `kind` (song, event, campaign) |
+  | `promuse.runs.completed` | `verdict` (accepted, flagged, rejected, none), `won` |
+  | `promuse.runs.review_findings` | `kind` (rejection, flag), `code` |
+  | `promuse.gacha.pulls` | `banner`, `rarity` |
+  | `promuse.shop.purchases`, `promuse.shop.spent` | `currency` |
+  | `promuse.idempotency.replays` | `route` (the pattern), `outcome` (replayed, conflict) |
+  | `promuse.liveops.refusals` | `reason` (maintenance, client_outdated) |
+
+To watch them locally, run any OTLP collector on port 4317 with a debug exporter, and start the API
+with `OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4317`; the collector's log prints every data point.
+
 ---
 
 ## The three editor menus
