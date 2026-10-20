@@ -1,0 +1,27 @@
+# Read by BuildKit for api.Dockerfile only, in place of a .dockerignore at the repository root.
+#
+# 先全部排除 / Everything is left out, then the four places the server is built from are let back
+# in. Without this the whole Unity project - Library/ included, gigabytes - would be sent to the
+# builder on every build.
+*
+
+!server/
+!Assets/Promuse.Net/Contracts/
+!Assets/Source/Script/Core/
+
+# The charts only: the audio beside them is the game's, not the server's.
+!Assets/Beatmaps/**/*.json
+
+# What a developer's machine adds under server/ and the image must not carry.
+server/**/bin/
+server/**/obj/
+server/**/App_Data/
+server/**/appsettings.*.Local.json
+server/**/secrets.json
+server/.env
+server/artifacts/
+server/tests/
+
+# The development settings carry the laptop's connection string and a signing key that is not a
+# secret; an image runs on configuration from its environment instead.
+server/**/appsettings.Development.json

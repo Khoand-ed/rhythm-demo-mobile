@@ -174,3 +174,7 @@ LightingData.asset     binary
 
 # Recorded input traces the replay tests read (server/tests/golden) - bytes, never text
 *.trace                binary
+
+# Shell scripts run on Linux - CI and the server. Checked out with CRLF, as a Windows clone
+# would, bash fails on the first line ending ("$'\r': command not found").
+*.sh                   text eol=lf

@@ -179,7 +179,10 @@ builder.Services.AddRateLimiter(options =>
     options.AddPolicy(RateLimitPolicies.Auth, http =>
         RateLimitPartition.GetFixedWindowLimiter(
             // Per caller, not global: one abusive address must not be able to
-            // lock every player out of signing in.
+            // lock every player out of signing in. Deployed behind the reverse
+            // proxy, ASPNETCORE_FORWARDEDHEADERS_ENABLED makes this the client's
+            // address from X-Forwarded-For rather than the proxy's own
+            // (ForwardedHeadersTests).
             partitionKey: http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
             factory: _ => new FixedWindowRateLimiterOptions
             {
@@ -210,6 +213,26 @@ builder.Services.AddHealthChecks()
     .AddDbContextCheck<PromuseDbContext>("database", tags: ["ready"]);
 
 var app = builder.Build();
+
+// 部署时迁移 / `--migrate`: bring the database up to this build's schema and exit. A deploy runs
+// it once, before the new version takes traffic - the API itself never migrates as it starts,
+// because two instances starting together would both try to alter the same tables. Needs only
+// the connection string: nothing below runs, so neither the signing key nor the game data does.
+if (args.Contains("--migrate"))
+{
+    using IServiceScope scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<PromuseDbContext>();
+
+    List<string> pending = [.. await db.Database.GetPendingMigrationsAsync()];
+    app.Logger.LogInformation("Applying {Count} migration(s): {Migrations}",
+        pending.Count, pending.Count == 0 ? "none" : string.Join(", ", pending));
+
+    await db.Database.MigrateAsync();
+
+    app.Logger.LogInformation("The database is at {Migration}.",
+        (await db.Database.GetAppliedMigrationsAsync()).LastOrDefault() ?? "no migration");
+    return;
+}
 
 // 现在就读 / Now, not on the first submitted run: an unreadable ruleset or chart is a reason not
 // to start at all.

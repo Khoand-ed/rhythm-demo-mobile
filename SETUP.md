@@ -381,6 +381,31 @@ above and for device builds.
 1.1 is the first build that judges through `RunJudge`. Raise `bundleVersion` (and the Android version
 code) for a build that changes how runs are judged, then the minimum on the admin page.
 
+### The API in a container
+
+What a deploy runs. Day-to-day development stays on `dotnet run`; the image is for checking what
+ships.
+
+```bash
+docker build -f deploy/docker/api.Dockerfile -t promuse-api .
+deploy/docker/smoke-test.sh promuse-api
+```
+
+- **The build context is the repository root.** The server compiles `Assets/Promuse.Net/Contracts`
+  and `Assets/Source/Script/Core` and loads the charts in `Assets/Beatmaps`;
+  `deploy/docker/api.Dockerfile.dockerignore` lets in only those and `server/`.
+- **`--migrate`** applies pending migrations and exits (`docker run ... promuse-api --migrate`). A
+  deploy runs it once before starting the new version; the API never migrates by itself.
+- **Configuration comes from the environment:** `ConnectionStrings__Promuse`, `Jwt__SigningKey`
+  (32+ characters), `Notices__BannerDirectory` (mount a volume there), and
+  `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true` behind the reverse proxy, so the sign-in limit counts
+  each caller rather than the proxy. That last one trusts `X-Forwarded-For` from anyone: set it only
+  where the proxy is the one way in.
+- **It logs JSON**, one object a line, and runs as the image's unprivileged user on port 8080.
+- **CI** (`backend-checks`) builds the image and runs the smoke test on every pull request that
+  touches the server or `deploy/docker/`: an empty database, `--migrate` twice, `/health/ready`, a
+  real request, and no log line that is not JSON.
+
 ---
 
 ## The three editor menus
