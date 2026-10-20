@@ -12,6 +12,14 @@
     <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" Version="10.0.12" />
 
     <!--
+      Metrics out of the process, to the collector the deploy runs. Only these two: ASP.NET Core,
+      HttpClient, the runtime and Npgsql already publish their metrics as .NET meters, so the
+      SDK only has to listen to them by name (Program.cs) - no instrumentation package each.
+    -->
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.20.1" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.20.1" />
+
+    <!--
       Required by `dotnet ef`, which builds the STARTUP project to discover the
       DbContext through its DI registration. PrivateAssets keeps it a build-time
       tool only, so nothing design-time ships in the published output.
