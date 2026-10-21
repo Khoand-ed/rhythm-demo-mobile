@@ -1,0 +1,75 @@
+name: deploy-checks
+
+# Checks what the VM runs - the scripts, the compose files and the configuration of every service in
+# them - with each tool's own validator, so a broken file fails here, in the pull request, rather
+# than on the VM when Caddy or Loki will not start. No secrets: the rehearsal's throwaway values
+# (deploy/local/*.env) stand in for the real ones.
+#
+# The image itself is backend-checks' job (its `container` job builds and starts it).
+
+on:
+  push:
+    branches: [main]
+    paths: &deploy-paths
+      - 'deploy/**'
+      - '.github/workflows/deploy-checks.yml'
+
+  pull_request:
+    paths: *deploy-paths
+
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  configs:
+    name: Scripts and configuration
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+          fetch-depth: 1
+
+      # shellcheck ships with GitHub's Ubuntu runners. -x follows the `source lib.sh` lines.
+      - name: Shell scripts
+        run: shellcheck -x -P deploy/scripts -S warning deploy/scripts/*.sh deploy/local/*.sh deploy/docker/*.sh
+
+      - name: Compose files
+        run: |
+          docker compose -f deploy/compose/edge.compose.yml --env-file deploy/local/edge.env config --quiet
+          set -a; . deploy/local/staging.env; set +a
+          PROMUSE_ENV=staging API_IMAGE=promuse-api:ci MONITOR_DB_PASSWORD=ci \
+            docker compose -f deploy/compose/app.compose.yml config --quiet
+
+      # The image tags are the ones the compose files pin, so a check passes only for the version
+      # that will run it.
+      - name: Caddyfile
+        run: >-
+          docker run --rm -v "$PWD/deploy/caddy:/c:ro"
+          -e STAGING_HOST=staging.example.org -e PRODUCTION_HOST=example.org
+          -e GRAFANA_HOST=grafana.example.org -e ACME_EMAIL=ci@example.org
+          caddy:2.11.7 caddy validate --config /c/Caddyfile --adapter caddyfile
+
+      - name: Alloy
+        run: docker run --rm -v "$PWD/deploy/monitoring/alloy:/c:ro" grafana/alloy:v1.21.0 fmt /c/config.alloy > /dev/null
+
+      - name: Prometheus
+        run: >-
+          docker run --rm --entrypoint promtool -v "$PWD/deploy/monitoring/prometheus:/c:ro"
+          prom/prometheus:v3.15.0 check config /c/prometheus.yml
+
+      - name: Loki
+        run: >-
+          docker run --rm -v "$PWD/deploy/monitoring/loki:/c:ro"
+          grafana/loki:3.7.9 -config.file=/c/loki.yaml -verify-config
+
+      - name: Grafana dashboards
+        run: for f in deploy/monitoring/grafana/dashboards/*.json; do python3 -m json.tool "$f" > /dev/null || exit 1; done

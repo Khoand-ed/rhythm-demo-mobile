@@ -31,6 +31,11 @@ service - both databases included - is reachable only from inside that network.
 | `scripts/` | everything run on the VM - see below |
 | `local/` | the same stack on Docker Desktop, for rehearsing a change before it reaches the VM |
 
+Every pull request that touches this folder runs `deploy-checks`: shellcheck on the scripts, `docker
+compose config` on both compose files, and each service's own validator on its configuration -
+`caddy validate`, `alloy fmt`, `promtool check config`, `loki -verify-config` - at the versions the
+compose files pin.
+
 On the VM, `/srv/promuse` holds what is not in the repository:
 
 | Path | What |
