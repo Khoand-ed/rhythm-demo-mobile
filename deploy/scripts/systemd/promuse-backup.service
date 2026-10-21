@@ -1,0 +1,10 @@
+# Installed by deploy/scripts/setup-vm.sh. Backs up every running environment (backup.sh).
+[Unit]
+Description=Promuse nightly backup
+Wants=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+User=deploy
+ExecStart=/srv/promuse/deploy/scripts/backup.sh

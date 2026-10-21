@@ -1,0 +1,10 @@
+# Installed by deploy/scripts/setup-vm.sh. Soon after boot - the public address may be new - then every five minutes.
+[Unit]
+Description=Promuse DuckDNS update
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=5min
+
+[Install]
+WantedBy=timers.target
