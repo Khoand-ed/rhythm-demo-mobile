@@ -56,12 +56,53 @@ public sealed class PromuseMetrics
             "Requests refused before reaching the game: maintenance, or a build older than the minimum.");
     }
 
+    /// <summary>
+    /// 从零开始 / Every series the dashboards always draw is reported at 0 from the start. A
+    /// counter's series first appears when it is first added to, and Prometheus' increase() cannot
+    /// see an increase into a series' first sample: without this, the first run of each verdict after
+    /// every deploy - the only run, in a quiet game - never shows. Program.cs calls this once the host
+    /// has started - not sooner: before then the exporter is not listening, and a zero recorded to no
+    /// one is lost - so the zeros go out before the first player arrives. Only the fixed sets: an
+    /// error code, a banner or a route is known when it happens.
+    /// </summary>
+    public void StartAtZero()
+    {
+        foreach (string kind in new[] { "song", "event", "campaign" })
+        {
+            _runsStarted.Add(0, new KeyValuePair<string, object?>("kind", kind));
+        }
+
+        foreach (string verdict in new[] { "accepted", "flagged", "rejected", "none" })
+        {
+            foreach (bool won in new[] { true, false })
+            {
+                _runsCompleted.Add(0,
+                    new KeyValuePair<string, object?>("verdict", verdict),
+                    new KeyValuePair<string, object?>("won", won));
+            }
+        }
+
+        foreach (string method in new[] { "login", "register", "guest", "link", "refresh" })
+        {
+            SignIn(method, problem: null, by: 0);
+        }
+
+        SignIn("login", ApiProblems.InvalidCredentials(), by: 0);
+
+        foreach (string reason in new[] { "maintenance", "client_outdated" })
+        {
+            _liveOpsRefusals.Add(0, new KeyValuePair<string, object?>("reason", reason));
+        }
+    }
+
     // ----------------------------------------------------------------- sign-in
 
     /// <param name="method">login, register, guest, link or refresh.</param>
     /// <param name="problem">Null for a success; the refusal otherwise, whose code is tagged.</param>
-    public void SignIn(string method, ApiProblem? problem) =>
-        _signIns.Add(1,
+    public void SignIn(string method, ApiProblem? problem) => SignIn(method, problem, by: 1);
+
+    private void SignIn(string method, ApiProblem? problem, int by) =>
+        _signIns.Add(by,
             new KeyValuePair<string, object?>("method", method),
             new KeyValuePair<string, object?>("outcome", problem is null ? "success" : "failure"),
             new KeyValuePair<string, object?>("error", problem?.Code ?? "none"));

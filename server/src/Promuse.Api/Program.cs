@@ -270,6 +270,10 @@ if (args.Contains("--migrate"))
 // to start at all.
 app.Services.GetRequiredService<GameData>();
 
+// 指标从零开始 / The counters' fixed series reported at zero once the host - and with it the exporter -
+// has started, before the first request (PromuseMetrics.StartAtZero).
+app.Lifetime.ApplicationStarted.Register(app.Services.GetRequiredService<PromuseMetrics>().StartAtZero);
+
 // 所有失败一个形状 / Every failure leaves as the same problem+json shape,
 // including the ones nobody planned for. The trace id is the only part of a 500
 // that is safe to show and the only part worth asking a player to quote.
