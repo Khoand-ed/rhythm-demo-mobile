@@ -470,6 +470,12 @@ scripts that set the VM up, deploy - rolling back by themselves when a new versi
 - back up, restore and grant admin. `deploy/local/rehearse.sh up` runs the same stack on Docker
 Desktop first.
 
+Deploys go through `.github/workflows/deploy.yml`: every merge into main is checked, built into an
+image and deployed to staging; a tag `vX.Y.Z` deploys that same image to production once approved;
+*Actions → deploy → Run workflow* redeploys or rolls back. The secrets are set in GitHub, and only
+there (`deploy/README.md`, *First time*). Until the repository has a `VM_HOST` variable, the
+workflow builds images and deploys nothing.
+
 ---
 
 ## The three editor menus

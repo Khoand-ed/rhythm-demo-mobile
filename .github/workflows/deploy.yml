@@ -1,0 +1,189 @@
+name: deploy
+
+# 发布流程 / How the server reaches the VM (deploy/README.md, "Deploying"):
+#
+#   a push to main    the backend checks, then the image sha-<commit> is built, started and pushed to
+#                     GHCR, then staging runs it
+#   a tag vX.Y.Z      the image main built for that commit is tagged vX.Y.Z - the same image, never
+#                     rebuilt - and production runs it once a reviewer approves (the `production`
+#                     environment's rule)
+#   by hand           Actions > deploy > Run workflow: any image tag already in GHCR to either
+#                     environment - a redeploy, or a rollback to a version that worked
+#
+# The deploy itself is deploy-environment.yml, the same for all three. Until the repository has a
+# VM_HOST variable there is no VM to deploy to: images are still built and tagged, and each run
+# says it deployed nothing.
+
+on:
+  push:
+    branches: [main]
+    tags: ['v[0-9]+.[0-9]+.[0-9]+*']
+
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Where to deploy
+        type: choice
+        options: [staging, production]
+        required: true
+      tag:
+        description: The image tag - vX.Y.Z, or sha-<commit> from a run of this workflow
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  # -------------------------------------------------------------------------- main -> staging
+
+  checks:
+    name: Backend checks
+    if: github.event_name == 'push' && github.ref_type == 'branch'
+    uses: ./.github/workflows/backend-checks.yml
+
+  image:
+    name: Image
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      tag: ${{ steps.name.outputs.tag }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+          fetch-depth: 1
+
+      # GHCR names are lower case and the owner is not (Khoand-ed); expressions cannot lower a
+      # string, bash can.
+      - name: Name
+        id: name
+        run: |
+          {
+            echo "tag=sha-$GITHUB_SHA"
+            echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/promuse-api:sha-$GITHUB_SHA"
+          } >> "$GITHUB_OUTPUT"
+
+      # The source label links the package to this repository, which is what lets the deploy job's
+      # own short-lived token pull it while the package stays private.
+      - name: Build
+        env:
+          IMAGE: ${{ steps.name.outputs.image }}
+        run: >-
+          docker build --file deploy/docker/api.Dockerfile
+          --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY"
+          --label "org.opencontainers.image.revision=$GITHUB_SHA"
+          --tag "$IMAGE" .
+
+      # 推的就是测过的 / The checks above start an image of their own; this starts the very image
+      # that is pushed next, so what reaches the registry is what was seen to migrate and start.
+      - name: Smoke test
+        run: deploy/docker/smoke-test.sh "${{ steps.name.outputs.image }}"
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push
+        run: docker push "${{ steps.name.outputs.image }}"
+
+  staging:
+    name: Staging
+    needs: image
+    permissions:
+      contents: read
+      packages: read
+    uses: ./.github/workflows/deploy-environment.yml
+    with:
+      environment: staging
+      tag: ${{ needs.image.outputs.tag }}
+    secrets: inherit
+
+  # -------------------------------------------------------------------------- vX.Y.Z -> production
+
+  release:
+    name: Release image
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      tag: ${{ github.ref_name }}
+
+    steps:
+      # The commit through the API rather than github.sha: an annotated tag is an object of its
+      # own, and this names the commit it points at either way.
+      - name: The tag's commit
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error title=Not a version::$GITHUB_REF_NAME is not vX.Y.Z or vX.Y.Z-label, so it cannot name an image"
+            exit 1
+          fi
+          commit="$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_REF_NAME" --jq .sha)"
+          base="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/promuse-api"
+          {
+            echo "commit=$commit"
+            echo "built=$base:sha-$commit"
+            echo "release=$base:$GITHUB_REF_NAME"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # 只发 main 测过的 / An image exists only for a commit main's pipeline checked and built, so a
+      # tag on anything else - a branch, a commit whose checks failed - stops here.
+      - name: Main built this commit
+        env:
+          BUILT: ${{ steps.source.outputs.built }}
+          COMMIT: ${{ steps.source.outputs.commit }}
+        run: |
+          if ! docker buildx imagetools inspect "$BUILT" > /dev/null; then
+            echo "::error title=No image for $GITHUB_REF_NAME::$COMMIT has no image $BUILT. Only a commit on main whose deploy run passed has one: tag one of those."
+            exit 1
+          fi
+
+      # The same manifest under a second name: nothing is rebuilt or copied, so production runs
+      # byte for byte what staging ran.
+      - name: Tag it
+        run: docker buildx imagetools create --tag "${{ steps.source.outputs.release }}" "${{ steps.source.outputs.built }}"
+
+  production:
+    name: Production
+    needs: release
+    permissions:
+      contents: read
+      packages: read
+    uses: ./.github/workflows/deploy-environment.yml
+    with:
+      environment: production
+      tag: ${{ needs.release.outputs.tag }}
+    secrets: inherit
+
+  # -------------------------------------------------------------------------- by hand
+
+  redeploy:
+    name: Redeploy
+    if: github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: read
+      packages: read
+    uses: ./.github/workflows/deploy-environment.yml
+    with:
+      environment: ${{ inputs.environment }}
+      tag: ${{ inputs.tag }}
+    secrets: inherit

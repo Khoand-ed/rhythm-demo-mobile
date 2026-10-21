@@ -35,7 +35,12 @@ services:
       GRAFANA_HOST: ${GRAFANA_HOST:?}
       ACME_EMAIL: ${ACME_EMAIL:?}
     volumes:
-      - ../caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # 挂目录不挂文件 / Every configuration here is mounted as its folder, never as the file alone.
+      # A bind mount holds on to what it was started with: a file replaced by a new one - git
+      # checkout, most editors - stays the old one inside the container, and `caddy reload` (edge.sh)
+      # would quietly re-read it. Within a mounted folder, the new file is what the service sees.
+      # Each image's folder holds only the file this one replaces.
+      - ../caddy:/etc/caddy:ro
       - caddy-data:/data
       - caddy-config:/config
     networks:
@@ -74,7 +79,7 @@ services:
       # Set to true only by the local rehearsal, whose certificates come from Caddy's own CA.
       PROBE_INSECURE_TLS: ${PROBE_INSECURE_TLS:-false}
     volumes:
-      - ../monitoring/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - ../monitoring/alloy:/etc/alloy:ro
       - alloy-data:/var/lib/alloy/data
       # docker.sock for the containers and their logs, and containerd's socket beside it, without
       # which cAdvisor sees no container at all - only the machine as a whole.
@@ -106,7 +111,7 @@ services:
       # Alloy writes here (/api/v1/write) rather than being scraped.
       - --web.enable-remote-write-receiver
     volumes:
-      - ../monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../monitoring/prometheus:/etc/prometheus:ro
       - prometheus-data:/prometheus
     networks:
       - edge
@@ -121,7 +126,7 @@ services:
     command:
       - -config.file=/etc/loki/loki.yaml
     volumes:
-      - ../monitoring/loki/loki.yaml:/etc/loki/loki.yaml:ro
+      - ../monitoring/loki:/etc/loki:ro
       - loki-data:/loki
     networks:
       - edge

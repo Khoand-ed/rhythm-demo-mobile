@@ -36,24 +36,32 @@ env_get() {
 # write_env FILE KEY... - writes KEY=value for each KEY, readable by its owner only. A value comes
 # from the environment when it is set there (how the pipeline passes secrets), otherwise from the
 # file as it was (a redeploy by hand needs nothing re-typed). A key with neither stops the script.
-# Any other key already in the file is kept as it was.
+# Any other key already in the file is kept as it was. A key written ?KEY is optional: written when
+# there is a value, left out quietly when there is none.
 # Values are written unquoted: they must not hold spaces, quotes or '#' - generate passwords as hex.
 write_env() {
     local file="$1"; shift
-    local dir tmp key value line
+    local dir tmp key value line written=" "
     dir="$(dirname "$file")"
     mkdir -p "$dir"
     tmp="$(mktemp "$dir/.env.XXXXXX")"
     chmod 600 "$tmp"
     for key in "$@"; do
+        local optional=false
+        if [ "${key:0:1}" = "?" ]; then optional=true; key="${key:1}"; fi
         value="${!key:-$(env_get "$file" "$key")}"
-        [ -n "$value" ] || { rm -f "$tmp"; die "$key is not set, and $file does not have it"; }
+        if [ -z "$value" ]; then
+            $optional && continue
+            rm -f "$tmp"
+            die "$key is not set, and $file does not have it"
+        fi
         printf '%s=%s\n' "$key" "$value" >> "$tmp"
+        written+="$key "
     done
     if [ -f "$file" ]; then
         while IFS= read -r line; do
             key="${line%%=*}"
-            [[ " $* " == *" $key "* ]] || printf '%s\n' "$line" >> "$tmp"
+            [[ "$written" == *" $key "* ]] || printf '%s\n' "$line" >> "$tmp"
         done < "$file"
     fi
     mv -f "$tmp" "$file"

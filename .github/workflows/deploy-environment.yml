@@ -1,0 +1,178 @@
+name: deploy-environment
+
+# One deploy of one environment: called by deploy.yml for staging, production and a deploy by hand,
+# never run on its own. Runs under the GitHub environment of the same name, so production waits
+# for its reviewer here, and DB_PASSWORD / JWT_SIGNING_KEY are that environment's own secrets.
+#
+# The work is deploy/scripts/ship.sh - the same script a deploy by hand from a laptop runs - and on
+# the VM edge.sh, then deploy.sh, which rolls back by itself if the new version does not come up.
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: staging or production
+        type: string
+        required: true
+      tag:
+        description: The image tag in GHCR - sha-<commit> or vX.Y.Z
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  # A repository variable, so it can decide whether the deploy job runs at all: an environment's
+  # own variables are only read once a job is running under it.
+  no-vm:
+    name: Not deployed - no VM yet
+    if: vars.VM_HOST == ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Nothing to deploy to
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          echo "::notice title=$ENVIRONMENT not deployed::The repository has no VM_HOST variable, so there is no VM yet. The image $TAG is in GHCR; deploy/README.md sets the VM up."
+          {
+            echo "### $ENVIRONMENT was not deployed"
+            echo
+            echo "There is no VM yet (the repository variable \`VM_HOST\` is not set). The image \`$TAG\` is in GHCR,"
+            echo "and **Actions > deploy > Run workflow** can deploy it once the VM is set up - see \`deploy/README.md\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    name: Deploy ${{ inputs.environment }}
+    if: vars.VM_HOST != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: ${{ inputs.environment }}
+      url: ${{ steps.target.outputs.url }}
+    # 一次一个 / One deploy per environment at a time, and one that has started is never cancelled:
+    # stopped between the migration and the health check it would leave the environment half done.
+    # A run that arrives meanwhile waits; of several waiting, GitHub keeps only the newest.
+    concurrency:
+      group: deploy-${{ inputs.environment }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      # 部署脚本永远取 main / The deploy/ folder always comes from main, whatever the image: the edge -
+      # Caddy and the monitoring - is one for both environments, and a production deploy of an older
+      # tag would otherwise put that tag's older edge configuration back under staging too. The image
+      # is what a deploy chooses; how it is run is main's.
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          lfs: false
+          fetch-depth: 1
+          sparse-checkout: deploy
+
+      - name: What is deployed where
+        id: target
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+          TAG: ${{ inputs.tag }}
+          STAGING_HOST: ${{ vars.STAGING_HOST }}
+          PRODUCTION_HOST: ${{ vars.PRODUCTION_HOST }}
+        run: |
+          case "$ENVIRONMENT" in
+            staging) host="$STAGING_HOST" ;;
+            production) host="$PRODUCTION_HOST" ;;
+            *) echo "::error::the environment is staging or production, not '$ENVIRONMENT'"; exit 1 ;;
+          esac
+          if ! [[ "$TAG" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
+            echo "::error title=Not an image tag::'$TAG' cannot be an image tag - it is vX.Y.Z or sha-<commit>"
+            exit 1
+          fi
+          echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/promuse-api:$TAG" >> "$GITHUB_OUTPUT"
+          if [ -n "$host" ]; then echo "url=https://$host" >> "$GITHUB_OUTPUT"; fi
+
+      # 环境必须是你建的 / GitHub creates an environment a job names if it does not exist - with no
+      # reviewer and no secrets. Requiring the secrets only a deliberately created environment has
+      # means a deploy never runs under one of those: production without its reviewer.
+      - name: The environment is set up
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          JWT_SIGNING_KEY: ${{ secrets.JWT_SIGNING_KEY }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+          VM_KNOWN_HOSTS: ${{ vars.VM_KNOWN_HOSTS }}
+        run: |
+          missing=()
+          for name in DB_PASSWORD JWT_SIGNING_KEY VM_SSH_KEY VM_KNOWN_HOSTS; do
+            [ -n "${!name}" ] || missing+=("$name")
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error title=$ENVIRONMENT is not set up::missing ${missing[*]}. Create the environment, its secrets and the repository's as deploy/README.md describes."
+            exit 1
+          fi
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Before anything on the VM changes: a mistyped tag by hand stops here, with its name.
+      - name: The image exists
+        env:
+          IMAGE: ${{ steps.target.outputs.image }}
+        run: |
+          if ! docker buildx imagetools inspect "$IMAGE" > /dev/null; then
+            echo "::error title=No such image::$IMAGE is not in GHCR. A run of the deploy workflow on main lists the sha- tags it built."
+            exit 1
+          fi
+
+      # 秘密只走 stdin / Every value reaches the VM inside the SSH session's input (ship.sh), never on
+      # a command line. The registry sign-in is this job's own token: it can read this repository's
+      # packages and nothing else, and it stops working when the job ends.
+      - name: Ship
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+          IMAGE: ${{ steps.target.outputs.image }}
+          VM_HOST: ${{ vars.VM_HOST }}
+          VM_PORT: ${{ vars.VM_PORT }}
+          VM_USER: ${{ vars.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+          VM_KNOWN_HOSTS: ${{ vars.VM_KNOWN_HOSTS }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The edge's - the same for both environments.
+          STAGING_HOST: ${{ vars.STAGING_HOST }}
+          PRODUCTION_HOST: ${{ vars.PRODUCTION_HOST }}
+          GRAFANA_HOST: ${{ vars.GRAFANA_HOST }}
+          ACME_EMAIL: ${{ vars.ACME_EMAIL }}
+          DUCKDNS_DOMAINS: ${{ vars.DUCKDNS_DOMAINS }}
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          MONITOR_DB_PASSWORD: ${{ secrets.MONITOR_DB_PASSWORD }}
+          DUCKDNS_TOKEN: ${{ secrets.DUCKDNS_TOKEN }}
+          # This environment's own.
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          JWT_SIGNING_KEY: ${{ secrets.JWT_SIGNING_KEY }}
+        run: |
+          export SSH_KEY_FILE="$RUNNER_TEMP/deploy_key" KNOWN_HOSTS_FILE="$RUNNER_TEMP/known_hosts"
+          (umask 077; printf '%s\n' "$VM_SSH_KEY" > "$SSH_KEY_FILE")
+          printf '%s\n' "$VM_KNOWN_HOSTS" > "$KNOWN_HOSTS_FILE"
+          unset VM_SSH_KEY
+          deploy/scripts/ship.sh "$ENVIRONMENT" "$IMAGE"
+
+      - name: Summary
+        if: success()
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+          IMAGE: ${{ steps.target.outputs.image }}
+          URL: ${{ steps.target.outputs.url }}
+        run: echo "### $ENVIRONMENT is running \`$IMAGE\` - $URL" >> "$GITHUB_STEP_SUMMARY"
+
+      # The runner is thrown away after the job; the key goes first anyway.
+      - name: Forget the key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/deploy_key"
