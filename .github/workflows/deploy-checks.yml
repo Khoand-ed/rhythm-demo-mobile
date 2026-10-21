@@ -12,7 +12,9 @@ on:
     branches: [main]
     paths: &deploy-paths
       - 'deploy/**'
-      - '.github/workflows/deploy-checks.yml'
+      # Every workflow, not only the deploy ones: deploy.yml calls backend-checks.yml, so a mistake
+      # in that one stops a deploy as surely as one in deploy.yml.
+      - '.github/workflows/**'
 
   pull_request:
     paths: *deploy-paths
@@ -58,6 +60,11 @@ jobs:
           -e GRAFANA_HOST=grafana.example.org -e ACME_EMAIL=ci@example.org
           caddy:2.11.7 caddy validate --config /c/Caddyfile --adapter caddyfile
 
+      # Unformatted, the file still works, but every reload on the VM (edge.sh) logs a warning
+      # about it into the deploy's log.
+      - name: Caddyfile is formatted
+        run: docker run --rm -v "$PWD/deploy/caddy:/c:ro" caddy:2.11.7 caddy fmt --diff /c/Caddyfile
+
       - name: Alloy
         run: docker run --rm -v "$PWD/deploy/monitoring/alloy:/c:ro" grafana/alloy:v1.21.0 fmt /c/config.alloy > /dev/null
 
@@ -73,3 +80,10 @@ jobs:
 
       - name: Grafana dashboards
         run: for f in deploy/monitoring/grafana/dashboards/*.json; do python3 -m json.tool "$f" > /dev/null || exit 1; done
+
+      # actionlint reads a workflow the way GitHub will - its syntax, its expressions and the
+      # contexts they read, a reusable workflow's inputs and outputs against its callers - and runs
+      # shellcheck over every run: block. A mistake there otherwise shows only once it is on main,
+      # as a deploy that does not start.
+      - name: Workflows
+        run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.12 -no-color

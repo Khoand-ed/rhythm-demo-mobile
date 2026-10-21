@@ -6,7 +6,6 @@
 # believe the header (ASPNETCORE_FORWARDEDHEADERS_ENABLED): it only ever comes from here.
 #
 # A *.localhost name, as the local rehearsal uses, gets a certificate from Caddy's own CA instead.
-
 {
 	email {$ACME_EMAIL}
 }
