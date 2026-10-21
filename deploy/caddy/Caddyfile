@@ -1,0 +1,35 @@
+# The only way into the VM. One site per hostname, each name from the environment
+# (edge.compose.yml), with a certificate from Let's Encrypt that Caddy obtains and renews itself.
+#
+# 不信任客户端的 X-Forwarded-For / Caddy ignores any X-Forwarded-* a client sends - only a
+# trusted proxy's are kept, and none is configured - and sets its own. That is what lets the API
+# believe the header (ASPNETCORE_FORWARDEDHEADERS_ENABLED): it only ever comes from here.
+#
+# A *.localhost name, as the local rehearsal uses, gets a certificate from Caddy's own CA instead.
+
+{
+	email {$ACME_EMAIL}
+}
+
+(site) {
+	encode zstd gzip
+	log {
+		output stdout
+		format json
+	}
+}
+
+{$STAGING_HOST} {
+	import site
+	reverse_proxy api-staging:8080
+}
+
+{$PRODUCTION_HOST} {
+	import site
+	reverse_proxy api-production:8080
+}
+
+{$GRAFANA_HOST} {
+	import site
+	reverse_proxy grafana:3000
+}
