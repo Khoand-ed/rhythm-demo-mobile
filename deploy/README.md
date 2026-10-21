@@ -28,19 +28,21 @@ service - both databases included - is reachable only from inside that network.
 | `compose/` | the two compose files |
 | `caddy/` | the Caddyfile |
 | `monitoring/` | Alloy's config, Prometheus, Loki, and Grafana's datasources, dashboards and alerts |
-| `scripts/` | everything run on the VM - see below |
+| `scripts/` | everything run on the VM - see below - and `ship.sh`, which sends a deploy to it |
 | `local/` | the same stack on Docker Desktop, for rehearsing a change before it reaches the VM |
 
-Every pull request that touches this folder runs `deploy-checks`: shellcheck on the scripts, `docker
-compose config` on both compose files, and each service's own validator on its configuration -
-`caddy validate`, `alloy fmt`, `promtool check config`, `loki -verify-config` - at the versions the
-compose files pin.
+Every pull request that touches this folder or a workflow runs `deploy-checks`:
+- shellcheck on the scripts;
+- `docker compose config` on both compose files;
+- each service's own validator on its configuration - `caddy validate` and `caddy fmt`, `alloy fmt`, `promtool check config`, `loki -verify-config` - at the versions the compose files pin;
+- actionlint on every workflow.
 
 On the VM, `/srv/promuse` holds what is not in the repository:
 
 | Path | What |
 |---|---|
-| `deploy/` | a copy of this folder - the scripts run from here |
+| `deploy/` | a copy of this folder - the scripts run from here. Every deploy rewrites it, in place, with main's |
+| `deploy.previous/` | the copy before that one |
 | `edge/.env`, `staging/.env`, `production/.env` | the configuration and secrets each project runs with, readable by `deploy` only |
 | `backups/<environment>/` | seven days of nightly backups |
 | `metrics/` | what the scripts tell Alloy: last backup, what is deployed |
@@ -55,11 +57,12 @@ Some steps need your accounts; the scripts do the rest.
 
 - **Azure VM.**
   - Ubuntu Server 24.04 LTS, x64, size B2s (2 vCPU, 4 GB) or larger, a 64 GB disk, a static public IP.
-  - In its network security group, allow 22 (from your own IP only), 80 and 443.
+  - In its network security group, allow 22, 80 and 443 from anywhere. SSH cannot be narrowed to your own IP: the pipeline's runners connect from GitHub's addresses, which are many and change. What guards it instead is `setup-vm.sh`: keys only, no passwords, no root, and fail2ban against guessing.
   - Add a budget alert to the subscription. The VM costs about 30-40 USD a month, so student credit lasts two to three months. *Stop (deallocate)* it when no one needs it.
 - **DuckDNS** (duckdns.org).
   - Create three subdomains: `<name>-staging`, `<name>`, `<name>-grafana`.
-  - Note the account's token.
+  - Type the VM's IP into each one's *current ip* and press *update ip*. Caddy can obtain a certificate only once the names lead to the VM, and the first deploy waits for one.
+  - Note the account's token. The VM's timer keeps the addresses current from then on.
 - **Discord.**
   - In the channel that should receive alerts: *Edit Channel → Integrations → Webhooks → New Webhook*.
   - Copy its URL.
@@ -87,48 +90,62 @@ sudo /srv/promuse/deploy/scripts/setup-vm.sh "<the line in promuse-deploy.pub>"
 
 It is safe to run again. From here on, sign in as `deploy` with the key: password logins and root logins are off.
 
-### 4. The edge
-
-Generate the two secrets the edge needs (hex: the scripts write them unquoted). Then start it once as `deploy`:
+Still in the same session, print the line the pipeline will check the VM against. It comes from inside the VM itself, so a machine pretending to be the VM later is refused:
 
 ```bash
-openssl rand -hex 24      # GRAFANA_ADMIN_PASSWORD
-openssl rand -hex 24      # MONITOR_DB_PASSWORD
-
-STAGING_HOST=<name>-staging.duckdns.org \
-PRODUCTION_HOST=<name>.duckdns.org \
-GRAFANA_HOST=<name>-grafana.duckdns.org \
-ACME_EMAIL=<your email, for Let's Encrypt> \
-GRAFANA_ADMIN_PASSWORD=<...> \
-DISCORD_WEBHOOK_URL=<...> \
-MONITOR_DB_PASSWORD=<...> \
-  /srv/promuse/deploy/scripts/edge.sh
+echo "<vm-ip> $(cut -d' ' -f1,2 /etc/ssh/ssh_host_ed25519_key.pub)"
 ```
 
-It writes them to `/srv/promuse/edge/.env`. Later runs need no variables: they reuse that file.
+### 4. GitHub
 
-DuckDNS reads the same file. Add the two lines by hand, with an editor - never with `echo`, which keeps the token in the shell's history:
+The pipeline deploys with what GitHub holds; nothing is typed on the VM again.
 
+**Two environments.** *Settings → Environments → New environment*:
+
+| Environment | Deployment protection rules | Deployment branches and tags |
+|---|---|---|
+| `staging` | none | *Selected*: branch `main` |
+| `production` | *Required reviewers*: you | *Selected*: tag `v*`, and branch `main` (a rollback is run from main) |
+
+Create both **before** the next step. A job that names an environment GitHub does not have creates it, with no reviewer - the deploy refuses to run under one that has no secrets, which is the guard against exactly that.
+
+**Variables and secrets** - from a clone of the repository, with the GitHub CLI signed in. The values are typed on your machine only:
+
+```bash
+# Repository variables: not secret.
+gh variable set VM_HOST --body "<vm-ip>"
+gh variable set VM_KNOWN_HOSTS --body "<the line printed in step 3>"
+gh variable set STAGING_HOST --body "<name>-staging.duckdns.org"
+gh variable set PRODUCTION_HOST --body "<name>.duckdns.org"
+gh variable set GRAFANA_HOST --body "<name>-grafana.duckdns.org"
+gh variable set ACME_EMAIL --body "<your email, for Let's Encrypt>"
+gh variable set DUCKDNS_DOMAINS --body "<name>-staging,<name>,<name>-grafana"
+
+# Repository secrets, shared by both environments.
+gh secret set VM_SSH_KEY < promuse-deploy           # the private half from step 2
+gh secret set DISCORD_WEBHOOK_URL                   # asks for the value: paste it
+gh secret set DUCKDNS_TOKEN                         # the same
+gh secret set GRAFANA_ADMIN_PASSWORD                # your Grafana sign-in: make one with `openssl rand -hex 24` and keep it
+gh secret set MONITOR_DB_PASSWORD --body "$(openssl rand -hex 24)"
+
+# Each environment's own.
+for env in staging production; do
+  gh secret set DB_PASSWORD --env "$env" --body "$(openssl rand -hex 24)"
+  gh secret set JWT_SIGNING_KEY --env "$env" --body "$(openssl rand -hex 32)"
+done
 ```
-DUCKDNS_DOMAINS=<name>-staging,<name>,<name>-grafana
-DUCKDNS_TOKEN=<the token>
-```
 
-Then run `scripts/duckdns-update.sh` once. Its timer repeats it every five minutes. Caddy obtains the certificates as soon as the names point at the VM.
+Hex everywhere: the scripts write values unquoted into the VM's `.env` files. `VM_PORT` and `VM_USER` are optional variables, for an SSH port other than 22 or a user other than `deploy`.
+
+The database passwords and signing keys never need to be read again: every deploy passes them on.
+
+> **Do not change `DB_PASSWORD` or `JWT_SIGNING_KEY` once an environment is running.** Postgres keeps the password it was first started with, so a new one locks the API out of the database - the deploy fails, and so does its rollback, which runs on the same `.env`. A new signing key signs every player out. *Rules* below says how to change one.
 
 ### 5. The first deploy
 
-The pipeline (next module) builds and pushes the image. Until it exists, build one on the VM from a clone of the repository:
+Merge anything into main, or run the workflow by hand: *Actions → deploy → Run workflow*, environment `staging`, tag the `sha-<commit>` of a run on main that built an image. `edge.sh` starts the edge, then `deploy.sh` staging. Production's first deploy is the first version tag (*Every day* below).
 
-```bash
-docker build -f deploy/docker/api.Dockerfile -t promuse-api:manual .
-DB_PASSWORD=$(openssl rand -hex 24) JWT_SIGNING_KEY=$(openssl rand -hex 32) \
-  /srv/promuse/deploy/scripts/deploy.sh staging promuse-api:manual
-```
-
-Each environment has its own `DB_PASSWORD` and `JWT_SIGNING_KEY`. They are written into `/srv/promuse/<environment>/.env` and reused by every later deploy.
-
-> **Do not lose them.** Postgres keeps the password it was first started with, so a new one locks the API out of the database. A new signing key signs every player out.
+If the very first deploy fails waiting for `/health/ready`, Caddy may still be fetching the certificates: *Re-run jobs* once the names lead to the VM.
 
 ### 6. The game
 
@@ -145,9 +162,25 @@ The login screen shows `STAGING · v<version>` on every build that is not produc
 
 ### Deploy, redeploy, roll back
 
-```bash
-/srv/promuse/deploy/scripts/deploy.sh staging ghcr.io/<owner>/promuse-api:sha-<commit>
-```
+Through the pipeline, `.github/workflows/deploy.yml`:
+
+| To | Do | It runs |
+|---|---|---|
+| **staging** | merge into main | the backend checks; then the image `sha-<commit>` is built, started (the same smoke test as a pull request) and pushed to GHCR; then staging deploys it |
+| **production** | `git tag v1.2.0 <commit> && git push origin v1.2.0` | the image main built for that commit is tagged `v1.2.0` - the same image, not rebuilt; production waits until you approve (*Review deployments* on the run), then deploys it |
+| **again, or back** | *Actions → deploy → Run workflow* from main: the environment and an image tag (`v1.1.0`, `sha-<commit>`) | that image, deployed as above. Production still waits for approval |
+
+A version tag on a commit main never built - a branch, or a commit whose checks failed - stops with *No image for vX.Y.Z*. Tag a commit staging has run.
+
+Each deploy is `deploy-environment.yml`, one environment at a time - a deploy that has started is never cancelled, and one that arrives meanwhile waits. Its last step is `scripts/ship.sh`, the same script a deploy from a laptop runs:
+1. It copies main's `deploy/` folder to `/srv/promuse/deploy` over SSH, keeping the one before as `deploy.previous`. It is always main's, whatever the image: the edge serves both environments, so an older tag's configuration must not come back with an older image. The copy is written over the old one in place, never swapped for it: the services hold their configuration folders open, and would keep reading a swapped-out one.
+2. On the VM, it signs Docker in to GHCR with the run's own token. That token reads this repository's packages and expires with the job; the VM signs out when the deploy ends.
+3. It runs `edge.sh`. That rewrites the edge's `.env` from GitHub's values, starts anything not running, and reloads or restarts only a service whose configuration files changed - Caddy reloads in place, without dropping a connection.
+4. It runs `deploy.sh <environment> <image>`. That rewrites the environment's `.env` the same way and deploys, as below.
+
+Every value reaches the VM inside the SSH session's input, never on a command line, where the VM's process list - or the run's log - would show it.
+
+Until the repository has a `VM_HOST` variable, every run still builds and tags images, and says it deployed nothing.
 
 `deploy.sh` takes these steps, in order:
 1. Pulls the image.
@@ -165,6 +198,16 @@ What happens next depends on how that ends:
 **Rolling back on purpose** is a deploy of the older image.
 
 The API rolls back; the database does not. A migration must therefore leave the schema usable by the version before it: add in one release, remove in a later one.
+
+**By hand**, when GitHub is not available - from a clone, with the deploy key:
+
+```bash
+VM_HOST=<vm-ip> SSH_KEY_FILE=promuse-deploy deploy/scripts/ship.sh staging ghcr.io/<owner>/promuse-api:sha-<commit>
+```
+
+The VM reuses the values its `.env` files already hold. The package is private, so the VM has to sign in to pull: also set `GHCR_USER=<your GitHub user>` and `GHCR_TOKEN=<a token with read:packages only>`. Or, signed in on the VM as `deploy`, run `/srv/promuse/deploy/scripts/deploy.sh staging <image>` on an image already there.
+
+Each merge leaves an image in GHCR (*Packages → promuse-api*). Delete old versions there now and then - only ones whose tags are all `sha-`: a released image is one version carrying both its `sha-` tag and its `v` tag, and deleting it deletes the release.
 
 ### Administrators, backups, restores
 
@@ -215,7 +258,7 @@ The API logs one JSON object a line, so `{environment="production", service="api
 | Promuse · Game | runs by verdict and the flagged share, why results were rejected or flagged, sign-ins, headhunting by rarity, the shop, LiveOps refusals |
 | Promuse · Infrastructure | CPU, memory, disk, memory and CPU by container, restarts, both databases, the probes, the last backup, what each environment runs |
 
-The dashboards, datasources and alert rules are files under `monitoring/grafana/`. Change them there and run `edge.sh` - an edit made in Grafana is not kept.
+The dashboards, datasources and alert rules are files under `monitoring/grafana/`. Change them there; the next deploy restarts Grafana with them. An edit made in Grafana is not kept.
 
 ### Alerts (to Discord)
 
@@ -261,7 +304,13 @@ State goes to `local/state/` (gitignored).
 - **Only Caddy publishes a port.** Docker's own firewall rules come before ufw, so a published port is open to the Internet whatever ufw says.
 - **On the edge network, address another project's container by its environment's name** (`api-staging`, `postgres-production`). Compose gives every container its service name on every network it joins, so `api` or `postgres` there names both environments' at once.
 - **Every container has a memory limit.** Four gigabytes is shared by nine of them.
-- **Secrets live in `/srv/promuse/*/.env` (mode 600) and, with the pipeline, in GitHub.** Never in this repository. Generate them as hex.
+- **Deploy through the pipeline.** It is the one way that runs the checks, deploys an image that was seen to start, records who approved production, and keeps one deploy per environment at a time. *By hand* above is for when GitHub is down.
+- **Secrets are set in GitHub, and only there.** Every deploy writes them into `/srv/promuse/*/.env` (mode 600), so a value edited on the VM is quietly put back by the next deploy. Never in this repository. Generate them as hex.
+- **Changing a secret that something else keeps:**
+  - `DB_PASSWORD`: change it in Postgres first - `docker compose -p promuse-<env> exec postgres psql -U promuse -d promuse`, then `\password promuse`, which asks for it rather than keeping it in the shell's history - then in GitHub, then deploy.
+  - `GRAFANA_ADMIN_PASSWORD`: Grafana reads it only the first time it starts. Change it in Grafana (*Profile → Change password*), then in GitHub: deploys use it to mark the dashboards.
+  - `JWT_SIGNING_KEY`: changes when the next deploy runs, and signs every player out.
+  - `MONITOR_DB_PASSWORD`: change it, then deploy both environments. Each deploy sets it in its own database while Alloy starts using it for both at once, so the other database's panels stay empty until its deploy runs.
 - **A migration keeps the previous version working** - see *Deploy* above.
 
 ## Sources
@@ -275,3 +324,5 @@ Each configuration follows its tool's own documentation, read for the versions p
 - Docker Engine on Ubuntu: docs.docker.com/engine/install/ubuntu/.
 - Unattended upgrades: ubuntu.com/server/docs/how-to/software/automatic-updates/.
 - DuckDNS' update API: duckdns.org/spec.jsp.
+- GitHub Actions, under docs.github.com/en/actions: reusable workflows (`workflow_call`, `secrets: inherit`, and environment secrets in a called job); deployments and environments (required reviewers, deployment branches and tags, and an environment created by naming it); concurrency (one pending run per group); the contexts available to each key (`vars` in a job's `if`, `steps` in an environment's `url`); and publishing to the Container registry with `GITHUB_TOKEN`, linked to the repository by the `org.opencontainers.image.source` label.
+- `docker buildx imagetools create`: docs.docker.com/reference/cli/docker/buildx/imagetools/create/.
