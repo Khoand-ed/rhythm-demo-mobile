@@ -45,6 +45,9 @@ namespace UI.Sub {
         public Text name_hint;
         public Button name_confirm;
 
+        // 哪个服务器 / Which server a build that is not production talks to. Built by ServerBadgeSetup.
+        public Text serverBadge;
+
         private Color black = new Color(0, 0, 0, 0);
         private Color red = new Color(0.74f, 0.36f, 0.36f, 0);
 
@@ -67,6 +70,13 @@ namespace UI.Sub {
             name_input.characterValidation = InputField.CharacterValidation.Alphanumeric;
             name_hint.text = PlayerNameRules.Description;
             name_confirm.onClick.AddListener(ConfirmName);
+
+            // 不是正式服就写出来 / A build for any server but production says which, with its version,
+            // so a tester never takes staging for the real game - or a local build for either.
+            ServerTarget target = PlayerManager.Inst().Target;
+            bool production = target.environment == ServerEnvironment.Production;
+            serverBadge.gameObject.SetActive(!production);
+            serverBadge.text = $"{target.environment.ToString().ToUpperInvariant()} · v{Application.version}";
 
             home_login.onClick.AddListener(() => {
                 homePanel.DOFade(0,0.5f).OnComplete(() => {

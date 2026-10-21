@@ -460,6 +460,9 @@ namespace Arknights.EditorTools {
             creditRect.sizeDelta = new Vector2(180, 70);
             creditRect.anchoredPosition = new Vector2(-32, 14);
 
+            // ---- 服务器标签, 在上方黑条里 / the server badge, in the top bar
+            ServerBadgeSetup.BuildInto(ui);
+
             SavePrefab(root, "LoginUI");
         }
 
