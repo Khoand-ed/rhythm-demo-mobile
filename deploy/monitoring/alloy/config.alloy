@@ -1,0 +1,239 @@
+// The collector. Everything Prometheus and Loki hold comes through here.
+//
+//   metrics  the APIs' OTLP (PromuseMetrics + ASP.NET Core, Npgsql, the runtime), the host, the
+//            containers, both Postgres, an HTTPS probe of each /health/ready, and when each
+//            environment was last backed up  ->  Prometheus
+//   logs     every container's output, JSON fields parsed  ->  Loki
+//
+// Component names and arguments follow the Alloy reference (grafana.com/docs/alloy/latest/
+// reference/components/). Configuration comes from the environment (edge.compose.yml) through
+// sys.env, so this file holds no hostname and no secret.
+
+// =========================================================================== metrics: the APIs
+
+// The APIs send here every 15 s (OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4317).
+otelcol.receiver.otlp "api" {
+  grpc {
+    endpoint = "0.0.0.0:4317"
+  }
+
+  output {
+    metrics = [otelcol.processor.transform.environment.input]
+  }
+}
+
+// 环境做成标签 / Each API names its environment as a resource attribute
+// (OTEL_RESOURCE_ATTRIBUTES=deployment.environment.name=staging). Resource attributes become
+// Prometheus' target_info, not labels on each series, so this copies that one onto every data
+// point: every dashboard and alert groups by `environment`.
+otelcol.processor.transform "environment" {
+  error_mode = "ignore"
+
+  metric_statements {
+    context    = "datapoint"
+    statements = [
+      `set(attributes["environment"], resource.attributes["deployment.environment.name"])`,
+    ]
+  }
+
+  output {
+    metrics = [otelcol.processor.batch.default.input]
+  }
+}
+
+otelcol.processor.batch "default" {
+  output {
+    metrics = [otelcol.exporter.prometheus.default.input]
+  }
+}
+
+// OTLP names become Prometheus names here: promuse.runs.completed -> promuse_runs_completed_total,
+// http.server.request.duration (s) -> http_server_request_duration_seconds_*. service.name is the
+// job label (promuse-api).
+otelcol.exporter.prometheus "default" {
+  forward_to = [prometheus.remote_write.local.receiver]
+}
+
+prometheus.remote_write "local" {
+  endpoint {
+    url = "http://prometheus:9090/api/v1/write"
+  }
+}
+
+// =========================================================================== metrics: the VM
+
+// The host, read through its /proc, /sys and / mounted read-only (edge.compose.yml). The textfile
+// directory is where backup.sh writes promuse_backup_last_success_timestamp_seconds.
+prometheus.exporter.unix "host" {
+  procfs_path = "/host/proc"
+  sysfs_path  = "/host/sys"
+  rootfs_path = "/rootfs"
+
+  textfile {
+    directory = "/textfile"
+  }
+}
+
+prometheus.scrape "host" {
+  targets    = prometheus.exporter.unix.host.targets
+  job_name   = "host"
+  forward_to = [prometheus.remote_write.local.receiver]
+}
+
+// Every container's CPU, memory and start time - a restart shows as a new start time.
+prometheus.exporter.cadvisor "containers" {
+  docker_host      = "unix:///var/run/docker.sock"
+  docker_only      = true
+  storage_duration = "5m"
+}
+
+prometheus.scrape "containers" {
+  targets    = prometheus.exporter.cadvisor.containers.targets
+  job_name   = "containers"
+  forward_to = [prometheus.remote_write.local.receiver]
+}
+
+// =========================================================================== metrics: Postgres
+
+// As promuse_monitor, a login with pg_monitor and nothing else, which deploy.sh creates in each
+// environment's database. The password is URL-encoded into the DSN.
+prometheus.exporter.postgres "staging" {
+  data_source_names = ["postgresql://promuse_monitor:" + encoding.url_encode(sys.env("MONITOR_DB_PASSWORD")) + "@postgres-staging:5432/promuse?sslmode=disable"]
+}
+
+prometheus.exporter.postgres "production" {
+  data_source_names = ["postgresql://promuse_monitor:" + encoding.url_encode(sys.env("MONITOR_DB_PASSWORD")) + "@postgres-production:5432/promuse?sslmode=disable"]
+}
+
+discovery.relabel "postgres_staging" {
+  targets = prometheus.exporter.postgres.staging.targets
+
+  rule {
+    target_label = "environment"
+    replacement  = "staging"
+  }
+}
+
+discovery.relabel "postgres_production" {
+  targets = prometheus.exporter.postgres.production.targets
+
+  rule {
+    target_label = "environment"
+    replacement  = "production"
+  }
+}
+
+prometheus.scrape "postgres" {
+  targets    = array.concat(discovery.relabel.postgres_staging.output, discovery.relabel.postgres_production.output)
+  job_name   = "postgres"
+  forward_to = [prometheus.remote_write.local.receiver]
+}
+
+// =========================================================================== metrics: probes
+
+// 从外面看 / Each environment as a player reaches it: https://<name>/health/ready through Caddy,
+// with its real certificate (probe_ssl_earliest_cert_expiry says when it runs out). The names
+// resolve to Caddy inside the network (its aliases in edge.compose.yml). Ready means 200 and the
+// body "Healthy" - the database answered too.
+prometheus.exporter.blackbox "ready" {
+  config = "{ modules: { http_ready: { prober: http, timeout: 5s, http: { preferred_ip_protocol: ip4, valid_status_codes: [200], fail_if_body_not_matches_regexp: [Healthy], tls_config: { insecure_skip_verify: " + sys.env("PROBE_INSECURE_TLS") + " } } } } }"
+
+  target {
+    name    = "ready-staging"
+    address = "https://" + sys.env("STAGING_HOST") + "/health/ready"
+    module  = "http_ready"
+    labels  = {"environment" = "staging"}
+  }
+
+  target {
+    name    = "ready-production"
+    address = "https://" + sys.env("PRODUCTION_HOST") + "/health/ready"
+    module  = "http_ready"
+    labels  = {"environment" = "production"}
+  }
+}
+
+prometheus.scrape "probes" {
+  targets         = prometheus.exporter.blackbox.ready.targets
+  job_name        = "probes"
+  scrape_interval = "30s"
+  forward_to      = [prometheus.remote_write.local.receiver]
+}
+
+// =========================================================================== logs
+
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+// Only this stack's own containers: anything else on the machine - a development database, a
+// container started by hand - is not ours to collect.
+discovery.relabel "promuse" {
+  targets = discovery.docker.containers.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    regex         = "promuse-(edge|staging|production)"
+    action        = "keep"
+  }
+}
+
+// The compose project names the environment (promuse-staging -> staging, promuse-edge -> edge)
+// and the compose service the program (api, postgres, caddy...). Both are small fixed sets, so
+// both are labels; the container name is kept for reading, not for grouping.
+discovery.relabel "logs" {
+  targets = []
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    regex         = "promuse-(.*)"
+    target_label  = "environment"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+}
+
+loki.source.docker "containers" {
+  host          = "unix:///var/run/docker.sock"
+  targets       = discovery.relabel.promuse.output
+  relabel_rules = discovery.relabel.logs.rules
+  forward_to    = [loki.process.json.receiver]
+}
+
+// The API logs one JSON object a line (LogLevel, Category, Message, Scopes with the trace id);
+// Caddy and Grafana log JSON too (level). The level becomes a label - a handful of values - and
+// everything else stays in the line, for `| json` in a query. Postgres logs plain text, which
+// this leaves as it is.
+loki.process "json" {
+  stage.json {
+    expressions = {level = "LogLevel || level"}
+  }
+
+  // One spelling for one level, so a query asks for level="error" once: .NET writes Error,
+  // Warning, Information; Caddy and Grafana write error, warn, info.
+  stage.template {
+    source   = "level"
+    template = `{{ Replace (Replace (ToLower .Value) "information" "info" -1) "warning" "warn" -1 }}`
+  }
+
+  stage.labels {
+    values = {level = ""}
+  }
+
+  forward_to = [loki.write.local.receiver]
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}
