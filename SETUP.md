@@ -357,17 +357,45 @@ folder. No code changes: `CharMeta` asks the local registry first and falls back
 `Assets/Arknights/Resources/Prefab/UI/`. Bundles are only needed for the audio
 above and for device builds.
 
+### Which server the game talks to
+
+`Arknights/Build/Server: Local | Staging | Production` - the ticked one is what Play Mode and every
+build after it talk to. It is kept in `Assets/Promuse.Net/Resources/ServerTarget.asset`, with the
+three addresses:
+
+| Server | Address | Use |
+|---|---|---|
+| Local (default) | `http://127.0.0.1:5199` | the dev API on this PC; a phone reaches it through `adb reverse` |
+| Staging | `https://<name>-staging.duckdns.org` | the VM's staging (`deploy/README.md`): every merge to main |
+| Production | `https://<name>.duckdns.org` | the VM's production: tagged releases |
+
+- **The two VM addresses** are typed into the asset's Inspector once the DuckDNS names exist.
+- **A build that cannot work is refused before it starts** (`ServerTargetBuildCheck`), with what to
+  change:
+  - a server with no address;
+  - Staging or Production over plain HTTP, which Android refuses;
+  - a release build pointed at Local, since release builds may not use plain HTTP and 127.0.0.1 on a
+    phone is the phone.
+- **Each server keeps its own session and caches on the device** - the refresh token, results
+  queued offline, the remote config, story corrections, notice pictures - so switching builds never
+  sends one server's data to another. Local keeps the names it always used: nothing already on a
+  device is lost.
+- **The login screen says which server** a build that is not production talks to: `STAGING · v1.1` at
+  the top right (`Arknights/Login/Build Server Badge`).
+- `Reset Server Target To Default` puts back Local and keeps the two VM addresses.
+
 ### Testing on a phone
 
 1. **Build:** `Arknights/Build/Android Development APK` builds the Android bundles, then a
-   Development APK into `../builds/Promuse-<version>-dev.apk`, next to the project folder and outside
-   the repository. With the Editor closed, the same from a shell:
+   Development APK into `../builds/Promuse-<version>-<server>-dev.apk` (the server chosen above), next
+   to the project folder and outside the repository. With the Editor closed, the same from a shell:
    `Unity -batchmode -quit -projectPath . -buildTarget Android -executeMethod AndroidBuild.BatchDevelopmentApk`.
-2. **Run the dev API** on the PC (port 5199), as in First run.
+2. **Run the dev API** on the PC (port 5199), as in First run - for a Local build. A Staging or
+   Production build needs nothing on the PC and works on any network: skip `adb reverse` below.
 3. **Install and connect**, with the phone on USB and USB debugging on. `adb` ships with Unity, in
    `Editor/Data/PlaybackEngines/AndroidPlayer/SDK/platform-tools/`:
    ```
-   adb install -r ../builds/Promuse-1.1-dev.apk
+   adb install -r ../builds/Promuse-1.1-local-dev.apk
    adb reverse tcp:5199 tcp:5199
    ```
    The game calls `http://127.0.0.1:5199`; `adb reverse` makes that the PC. Plain HTTP is allowed

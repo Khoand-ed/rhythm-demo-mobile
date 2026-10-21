@@ -130,6 +130,15 @@ Each environment has its own `DB_PASSWORD` and `JWT_SIGNING_KEY`. They are writt
 
 > **Do not lose them.** Postgres keeps the password it was first started with, so a new one locks the API out of the database. A new signing key signs every player out.
 
+### 6. The game
+
+Point a build at the VM:
+1. Type `https://<name>-staging.duckdns.org` and `https://<name>.duckdns.org` into `Assets/Promuse.Net/Resources/ServerTarget.asset`, and commit them.
+2. Choose *Arknights/Build/Server: Staging* (or *Production*).
+3. Build: `Promuse-<version>-staging-dev.apk` plays over the Internet, from any network.
+
+The login screen shows `STAGING · v<version>` on every build that is not production (SETUP: *Which server the game talks to*).
+
 ---
 
 ## Every day
