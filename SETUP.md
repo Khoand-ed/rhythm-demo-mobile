@@ -431,6 +431,16 @@ names the environment, `OTEL_METRIC_EXPORT_INTERVAL` (milliseconds) how often it
 
 To watch them locally, run any OTLP collector on port 4317 with a debug exporter, and start the API
 with `OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4317`; the collector's log prints every data point.
+The whole monitoring stack - Prometheus, Loki, Grafana and its dashboards - runs locally with the
+rehearsal below.
+
+### On a server
+
+`deploy/README.md` is the runbook for the VM: staging and production behind HTTPS (Caddy, DuckDNS),
+metrics, logs and alerts (Alloy, Prometheus, Loki, Grafana, Discord), nightly backups, and the
+scripts that set the VM up, deploy - rolling back by themselves when a new version does not come up
+- back up, restore and grant admin. `deploy/local/rehearse.sh up` runs the same stack on Docker
+Desktop first.
 
 ---
 
