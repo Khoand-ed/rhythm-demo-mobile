@@ -1,0 +1,10 @@
+# Installed by deploy/scripts/setup-vm.sh. Points the DuckDNS names at this VM (duckdns-update.sh).
+[Unit]
+Description=Promuse DuckDNS update
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=deploy
+ExecStart=/srv/promuse/deploy/scripts/duckdns-update.sh

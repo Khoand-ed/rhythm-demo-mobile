@@ -79,6 +79,25 @@ public class MetricsTests(PromuseApiFactory factory)
     }
 
     [Fact]
+    public void The_series_the_dashboards_always_draw_start_at_zero()
+    {
+        // A meter factory of its own, so the counters are made fresh here, after the collector
+        // is listening - the host's started at zero when it started.
+        using ServiceProvider services = new ServiceCollection().AddMetrics().BuildServiceProvider();
+        var meters = services.GetRequiredService<IMeterFactory>();
+        using var completed = new MetricCollector<long>(meters, PromuseMetrics.MeterName, "promuse.runs.completed");
+
+        new PromuseMetrics(meters).StartAtZero();
+
+        IReadOnlyList<CollectedMeasurement<long>> zeros = completed.GetMeasurementSnapshot();
+        Assert.All(zeros, m => Assert.Equal(0, m.Value));
+        Assert.Equal(
+            ["accepted False", "accepted True", "flagged False", "flagged True",
+             "none False", "none True", "rejected False", "rejected True"],
+            zeros.Select(m => $"{Tag(m, "verdict")} {Tag(m, "won")}").Order());
+    }
+
+    [Fact]
     public async Task A_wrong_password_is_counted_as_a_failed_login_with_its_code()
     {
         using MetricCollector<long> signIns = Collect("promuse.auth.sign_ins");

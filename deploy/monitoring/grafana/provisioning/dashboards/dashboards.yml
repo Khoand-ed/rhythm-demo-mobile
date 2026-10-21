@@ -1,0 +1,11 @@
+# The dashboards are files in the repository (deploy/monitoring/grafana/dashboards), mounted
+# read-only. An edit made in Grafana is not kept: change the JSON and deploy it.
+apiVersion: 1
+
+providers:
+  - name: promuse
+    folder: Promuse
+    type: file
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/dashboards

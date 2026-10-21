@@ -1,0 +1,44 @@
+# Loki as one process on the VM's disk, keeping 14 days.
+#
+# The single-binary, filesystem layout from Loki's own configuration examples, plus retention:
+# the compactor deletes what is older than retention_period, which needs the TSDB index with a
+# 24h period - the schema below.
+
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  log_format: json
+
+common:
+  path_prefix: /loki
+  replication_factor: 1
+  ring:
+    instance_addr: 127.0.0.1
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2026-10-01
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+storage_config:
+  filesystem:
+    directory: /loki/chunks
+
+compactor:
+  working_directory: /loki/compactor
+  retention_enabled: true
+  delete_request_store: filesystem
+
+limits_config:
+  retention_period: 336h
+
+analytics:
+  reporting_enabled: false

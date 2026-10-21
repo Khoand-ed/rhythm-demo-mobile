@@ -1,0 +1,246 @@
+# Alerts, and where they go: one Discord channel, the webhook from the environment
+# (DISCORD_WEBHOOK_URL, edge.compose.yml) - Grafana substitutes it here, so the file holds none.
+#
+# Every rule has the same two steps: A is a PromQL query evaluated now (one value per
+# environment, or per disk), B the threshold on it. A rule fires once B has held for `for`.
+# Thresholds are starting points for a small game on one VM; change them here, not in Grafana.
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: promuse-discord
+    receivers:
+      - uid: promuse-discord
+        type: discord
+        settings:
+          url: $DISCORD_WEBHOOK_URL
+          use_discord_username: false
+
+policies:
+  - orgId: 1
+    receiver: promuse-discord
+    group_by: ['alertname', 'environment']
+    group_wait: 30s
+    group_interval: 5m
+    repeat_interval: 4h
+
+groups:
+  - orgId: 1
+    name: promuse
+    folder: Promuse
+    interval: 1m
+    rules:
+      # ------------------------------------------------------------------ the API is down
+      # Ready means /health/ready answered "Healthy" through Caddy, database included. Only an
+      # environment that has been deployed at least once (promuse_deployment_info, written by
+      # deploy.sh) counts: production does not alert for not existing yet.
+      - uid: promuse-api-not-ready
+        title: API not ready
+        condition: B
+        for: 2m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: '{{ $labels.environment }}: /health/ready has failed for 2 minutes.'
+          description: Players cannot play. Check the api and postgres containers of this environment, then the Logs panel of the API dashboard.
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: {from: 600, to: 0}
+            model:
+              refId: A
+              instant: true
+              expr: >-
+                (1 - min by (environment) (probe_success))
+                and on (environment) max by (environment) (promuse_deployment_info)
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: gt, params: [0]}
+
+      # ------------------------------------------------------------------ server errors
+      - uid: promuse-api-5xx
+        title: API 5xx above 5%
+        condition: B
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: '{{ $labels.environment }}: more than 5% of requests failed with a 5xx.'
+          description: Every 500 is logged with its trace id - search the API logs for "Unhandled exception".
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: {from: 600, to: 0}
+            model:
+              refId: A
+              instant: true
+              expr: >-
+                sum by (environment) (rate(http_server_request_duration_seconds_count{http_response_status_code=~"5.."}[5m]))
+                / sum by (environment) (rate(http_server_request_duration_seconds_count[5m]))
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: gt, params: [0.05]}
+
+      # ------------------------------------------------------------------ slow
+      - uid: promuse-api-p95
+        title: API p95 above 1 second
+        condition: B
+        for: 10m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: '{{ $labels.environment }}: the slowest 5% of requests take more than a second.'
+          description: The API dashboard shows which route; the Infrastructure dashboard whether the VM or Postgres is short of something.
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: {from: 600, to: 0}
+            model:
+              refId: A
+              instant: true
+              expr: >-
+                histogram_quantile(0.95, sum by (environment, le)
+                (rate(http_server_request_duration_seconds_bucket[5m])))
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: gt, params: [1]}
+
+      # ------------------------------------------------------------------ the VM
+      - uid: promuse-disk-full
+        title: Disk above 85%
+        condition: B
+        for: 10m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: The VM's disk is more than 85% full.
+          description: Backups (/srv/promuse/backups), Docker images (docker image prune) and the metric and log stores are the usual growth.
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: {from: 600, to: 0}
+            model:
+              refId: A
+              instant: true
+              expr: >-
+                max(1 - node_filesystem_avail_bytes{mountpoint="/"}
+                / node_filesystem_size_bytes{mountpoint="/"})
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: gt, params: [0.85]}
+
+      - uid: promuse-memory-low
+        title: Memory below 10%
+        condition: B
+        for: 10m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: Less than 10% of the VM's memory is available.
+          description: The Infrastructure dashboard shows which container holds it. Every container has a memory limit in the compose files.
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: {from: 600, to: 0}
+            model:
+              refId: A
+              instant: true
+              expr: min(node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: lt, params: [0.1]}
+
+      # ------------------------------------------------------------------ backups
+      - uid: promuse-backup-stale
+        title: Backup older than 26 hours
+        condition: B
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: '{{ $labels.environment }}: the last successful backup is more than 26 hours old.'
+          description: The nightly backup failed or did not run - journalctl -u promuse-backup on the VM.
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: {from: 600, to: 0}
+            model:
+              refId: A
+              instant: true
+              expr: max by (environment) (time() - promuse_backup_last_success_timestamp_seconds)
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: gt, params: [93600]}
+
+      # ------------------------------------------------------------------ the game
+      # A run is rejected when its result is impossible: someone cheating, or a build that
+      # judges differently from the server. Either way, worth knowing within the quarter hour.
+      - uid: promuse-runs-rejected
+        title: Rejected runs spiking
+        condition: B
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: '{{ $labels.environment }}: more than 10 runs rejected in 15 minutes.'
+          description: The Game dashboard shows the rejection reasons; RULESET_MISMATCH across many players usually means a build on different rules.
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: {from: 900, to: 0}
+            model:
+              refId: A
+              instant: true
+              expr: sum by (environment) (increase(promuse_runs_completed_total{verdict="rejected"}[15m]))
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: gt, params: [10]}

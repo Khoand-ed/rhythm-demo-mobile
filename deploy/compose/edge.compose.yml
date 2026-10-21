@@ -1,0 +1,170 @@
+# The edge: what the VM runs once, for every environment.
+#
+#   docker compose -f deploy/compose/edge.compose.yml --env-file /srv/promuse/edge/.env up -d
+#
+#   caddy       the only way in: HTTPS (Let's Encrypt) on 80/443, routed by hostname
+#   alloy       the collector: OTLP metrics from the APIs, every container's log, the host,
+#               the containers, both Postgres and an HTTPS probe of each /health/ready
+#   prometheus  stores the metrics (15 days), written to by Alloy
+#   loki        stores the logs (14 days), written to by Alloy
+#   grafana     dashboards and the alerts sent to Discord, behind its own hostname and a login
+#
+# Each environment's API and Postgres are a compose project of their own (app.compose.yml),
+# joined to this one by the promuse-edge network. Only Caddy publishes a port.
+#
+# Variables, in /srv/promuse/edge/.env (see edge.env.example):
+#   STAGING_HOST, PRODUCTION_HOST, GRAFANA_HOST   the three DuckDNS names
+#   ACME_EMAIL                                    Let's Encrypt's contact for the certificates
+#   GRAFANA_ADMIN_PASSWORD                        Grafana's admin login
+#   DISCORD_WEBHOOK_URL                           where alerts go
+#   MONITOR_DB_PASSWORD                           the read-only role Alloy reads Postgres with
+
+name: promuse-edge
+
+services:
+  caddy:
+    image: caddy:2.11.7
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      STAGING_HOST: ${STAGING_HOST:?}
+      PRODUCTION_HOST: ${PRODUCTION_HOST:?}
+      GRAFANA_HOST: ${GRAFANA_HOST:?}
+      ACME_EMAIL: ${ACME_EMAIL:?}
+    volumes:
+      - ../caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      edge:
+        # 用公网名字找到 Caddy / The public names, answered inside the network with Caddy's own
+        # address. Alloy probes https://<name>/health/ready through Caddy and its real
+        # certificate without leaving the VM - no reliance on the cloud routing a VM's traffic
+        # back to its own public address.
+        aliases:
+          - ${STAGING_HOST}
+          - ${PRODUCTION_HOST}
+          - ${GRAFANA_HOST}
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  alloy:
+    image: grafana/alloy:v1.21.0
+    restart: unless-stopped
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    # 特权 / Privileged, and the Docker socket: the container metrics (cAdvisor) read the host's
+    # cgroups and Docker's own storage, and the socket alone is already root on the host. Alloy
+    # is the one container trusted this far; it publishes no port.
+    privileged: true
+    # The host's cgroup tree, not a namespace of Alloy's own: cAdvisor finds each container there.
+    cgroup: host
+    environment:
+      STAGING_HOST: ${STAGING_HOST:?}
+      PRODUCTION_HOST: ${PRODUCTION_HOST:?}
+      MONITOR_DB_PASSWORD: ${MONITOR_DB_PASSWORD:?}
+      # Set to true only by the local rehearsal, whose certificates come from Caddy's own CA.
+      PROBE_INSECURE_TLS: ${PROBE_INSECURE_TLS:-false}
+    volumes:
+      - ../monitoring/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - alloy-data:/var/lib/alloy/data
+      # docker.sock for the containers and their logs, and containerd's socket beside it, without
+      # which cAdvisor sees no container at all - only the machine as a whole.
+      - /var/run:/var/run:ro
+      # The host as the node metrics read it (prefixes in config.alloy), and /sys where cAdvisor
+      # looks for the cgroups.
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /sys:/sys:ro
+      - /:/rootfs:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk:/dev/disk:ro
+      # backup.sh writes when each environment was last backed up here, as a metric.
+      - ${PROMUSE_METRICS_DIR:-/srv/promuse/metrics}:/textfile:ro
+    networks:
+      - edge
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+
+  prometheus:
+    image: prom/prometheus:v3.15.0
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      # Alloy writes here (/api/v1/write) rather than being scraped.
+      - --web.enable-remote-write-receiver
+    volumes:
+      - ../monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks:
+      - edge
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  loki:
+    image: grafana/loki:3.7.9
+    restart: unless-stopped
+    command:
+      - -config.file=/etc/loki/loki.yaml
+    volumes:
+      - ../monitoring/loki/loki.yaml:/etc/loki/loki.yaml:ro
+      - loki-data:/loki
+    networks:
+      - edge
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+
+  grafana:
+    image: grafana/grafana:13.2.4
+    restart: unless-stopped
+    environment:
+      GF_SERVER_ROOT_URL: https://${GRAFANA_HOST:?}
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_LOG_MODE: console
+      GF_LOG_CONSOLE_FORMAT: json
+      # Read by the alerting provisioning file, never written into it.
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:?}
+    volumes:
+      - ../monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    networks:
+      - edge
+    deploy:
+      resources:
+        limits:
+          # Measured at about 230 MiB idle in the rehearsal: 256M left no room for a dashboard.
+          memory: 384M
+
+networks:
+  edge:
+    name: promuse-edge
+
+volumes:
+  caddy-data:
+  caddy-config:
+  alloy-data:
+  prometheus-data:
+  loki-data:
+  grafana-data:

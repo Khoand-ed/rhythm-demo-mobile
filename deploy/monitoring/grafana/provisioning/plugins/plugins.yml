@@ -1,0 +1,5 @@
+# No plugin apps. The file exists because Grafana reads this directory at every start and logs
+# an error when it is missing.
+apiVersion: 1
+
+apps: []

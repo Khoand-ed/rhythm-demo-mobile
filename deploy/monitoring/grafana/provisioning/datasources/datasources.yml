@@ -1,0 +1,23 @@
+# The two stores, with fixed uids: the dashboards and the alert rules name them by uid.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    uid: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      # The slowest collection interval (host, containers, Postgres: 60 s). $__rate_interval is
+      # four of these, so a rate always spans enough samples - at Grafana's default of 15 s, a
+      # 1-minute window over 60-second samples holds one, and draws nothing.
+      timeInterval: 60s
+
+  - name: Loki
+    type: loki
+    uid: loki
+    access: proxy
+    url: http://loki:3100
+    editable: false

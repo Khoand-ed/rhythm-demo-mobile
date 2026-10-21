@@ -1,0 +1,7 @@
+# Prometheus scrapes nothing here: Alloy collects every metric - the APIs' OTLP, the host, the
+# containers, Postgres, the probes - and writes it in through the remote write receiver
+# (--web.enable-remote-write-receiver, in edge.compose.yml). Retention is a flag there too.
+# This file only has to exist.
+
+global:
+  evaluation_interval: 30s

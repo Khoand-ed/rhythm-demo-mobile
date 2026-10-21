@@ -178,3 +178,7 @@ LightingData.asset     binary
 # Shell scripts run on Linux - CI and the server. Checked out with CRLF, as a Windows clone
 # would, bash fails on the first line ending ("$'\r': command not found").
 *.sh                   text eol=lf
+
+# Everything the VM reads - systemd units, the Caddyfile, compose and monitoring configuration -
+# is copied there from a checkout, possibly a Windows one (deploy/README.md).
+deploy/**              text eol=lf
