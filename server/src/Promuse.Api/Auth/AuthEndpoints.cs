@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Text.RegularExpressions;
 using Promuse.Api.Infrastructure;
+using Promuse.Contracts;
 using Promuse.Contracts.Auth;
 
 namespace Promuse.Api.Auth;
@@ -40,12 +41,13 @@ public static partial class AuthEndpoints
     // ------------------------------------------------------------- handlers
 
     private static async Task<IResult> GuestAsync(
-        GuestSignInRequest request, AuthService auth, CancellationToken ct)
+        GuestSignInRequest request, AuthService auth, PromuseMetrics metrics, CancellationToken ct)
     {
         if (Validate.Guest(request) is { Count: > 0 } errors)
-            return ApiProblems.ValidationFailed(errors).ToResult();
+            return Refused(metrics, "guest", ApiProblems.ValidationFailed(errors));
 
         var outcome = await auth.GuestSignInAsync(request.DeviceId, ct);
+        metrics.SignIn("guest", outcome.Problem);
 
         if (!outcome.IsSuccess) return outcome.Problem!.ToResult();
 
@@ -55,12 +57,13 @@ public static partial class AuthEndpoints
     }
 
     private static async Task<IResult> RegisterAsync(
-        RegisterRequest request, AuthService auth, CancellationToken ct)
+        RegisterRequest request, AuthService auth, PromuseMetrics metrics, CancellationToken ct)
     {
         if (Validate.Register(request) is { Count: > 0 } errors)
-            return ApiProblems.ValidationFailed(errors).ToResult();
+            return Refused(metrics, "register", ApiProblems.ValidationFailed(errors));
 
         var outcome = await auth.RegisterAsync(request, ct);
+        metrics.SignIn("register", outcome.Problem);
 
         return outcome.IsSuccess
             ? Results.Json(outcome.Value, statusCode: 201)
@@ -68,13 +71,14 @@ public static partial class AuthEndpoints
     }
 
     private static async Task<IResult> LoginAsync(
-        LoginRequest request, AuthService auth, CancellationToken ct)
+        LoginRequest request, AuthService auth, PromuseMetrics metrics, CancellationToken ct)
     {
         // 登录不做格式校验 / Deliberately no format validation. Answering 422 for
         // a password that is too short tells an attacker the rules without
         // costing them an attempt, and a legitimate user with an old password
         // that no longer meets current rules must still be able to sign in.
         var outcome = await auth.LoginAsync(request, ct);
+        metrics.SignIn("login", outcome.Problem);
 
         return outcome.IsSuccess
             ? Results.Json(outcome.Value, statusCode: 200)
@@ -82,15 +86,16 @@ public static partial class AuthEndpoints
     }
 
     private static async Task<IResult> LinkAsync(
-        RegisterRequest request, ClaimsPrincipal user, AuthService auth, CancellationToken ct)
+        RegisterRequest request, ClaimsPrincipal user, AuthService auth, PromuseMetrics metrics, CancellationToken ct)
     {
         if (Validate.Register(request) is { Count: > 0 } errors)
-            return ApiProblems.ValidationFailed(errors).ToResult();
+            return Refused(metrics, "link", ApiProblems.ValidationFailed(errors));
 
         if (!user.TryGetAccountId(out Guid accountId))
-            return ApiProblems.Unauthorized().ToResult();
+            return Refused(metrics, "link", ApiProblems.Unauthorized());
 
         var outcome = await auth.LinkAsync(accountId, request, ct);
+        metrics.SignIn("link", outcome.Problem);
 
         return outcome.IsSuccess
             ? Results.Json(outcome.Value, statusCode: 200)
@@ -98,12 +103,13 @@ public static partial class AuthEndpoints
     }
 
     private static async Task<IResult> RefreshAsync(
-        RefreshRequest request, AuthService auth, CancellationToken ct)
+        RefreshRequest request, AuthService auth, PromuseMetrics metrics, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(request.RefreshToken))
-            return ApiProblems.RefreshTokenInvalid().ToResult();
+            return Refused(metrics, "refresh", ApiProblems.RefreshTokenInvalid());
 
         var outcome = await auth.RefreshAsync(request.RefreshToken, ct);
+        metrics.SignIn("refresh", outcome.Problem);
 
         return outcome.IsSuccess
             ? Results.Json(outcome.Value, statusCode: 200)
@@ -122,6 +128,13 @@ public static partial class AuthEndpoints
         // difference would turn this into a way to test whether a stolen string
         // is live.
         return Results.NoContent();
+    }
+
+    /// <summary>A refusal before the service was asked, counted like one it gave.</summary>
+    private static IResult Refused(PromuseMetrics metrics, string method, ApiProblem problem)
+    {
+        metrics.SignIn(method, problem);
+        return problem.ToResult();
     }
 
     // ----------------------------------------------------------- validation

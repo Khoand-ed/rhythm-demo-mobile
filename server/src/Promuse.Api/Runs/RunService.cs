@@ -35,7 +35,8 @@ public sealed class RunService(
     PlayerLevels levels,
     Economy.Inventory inventory,
     GameData gameData,
-    IOptions<StaminaOptions> stamina)
+    IOptions<StaminaOptions> stamina,
+    PromuseMetrics metrics)
 {
     /// <param name="eventId">
     /// Set when the song is played as a stage of that event. Checked before anything is charged: a
@@ -151,6 +152,8 @@ public sealed class RunService(
             return Outcome<RunTicket>.Fail(ApiProblems.StateConflict(0));
         }
 
+        metrics.RunStarted(eventId is not null ? "event" : campaignStageId is not null ? "campaign" : "song");
+
         Outcome<PlayerState> state = await players.GetStateAsync(accountId, ct);
 
         if (!state.IsSuccess) return Outcome<RunTicket>.Fail(state.Problem!);
@@ -259,6 +262,8 @@ public sealed class RunService(
             await transaction.CommitAsync(ct);
         }
 
+        Count(review, request.Won);
+
         ScoreReview? answer = null;
 
         if (review is not null)
@@ -294,6 +299,35 @@ public sealed class RunService(
 
         return Outcome<RunCompletion>.Ok(new RunCompletion(
             runId, countsAsClear, answer, boards.Value!, state.Value!, now, rewards));
+    }
+
+    /// <summary>
+    /// 计数在提交之后 / Counted once the run is closed for good, so a completion that lost the race
+    /// for its run - told RUN_NOT_OPEN - is not counted twice.
+    /// </summary>
+    private void Count(ReviewResult? review, bool won)
+    {
+        if (review is null)
+        {
+            metrics.RunCompleted("none", won);
+            return;
+        }
+
+        metrics.RunCompleted(review.Verdict switch
+        {
+            ScoreVerdict.Accepted => "accepted",
+            ScoreVerdict.Flagged => "flagged",
+            _ => "rejected",
+        }, won);
+
+        if (review.Verdict == ScoreVerdict.Rejected)
+        {
+            foreach (string reason in review.Reasons) metrics.RunFinding("rejection", reason);
+        }
+        else
+        {
+            foreach (string flag in review.Flags) metrics.RunFinding("flag", flag);
+        }
     }
 
     /// <summary>A result that parsed, with its trace unwrapped.</summary>

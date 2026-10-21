@@ -23,6 +23,8 @@ using Promuse.Api.SignIn;
 using Promuse.Api.Campaign;
 using Promuse.Api.Characters;
 using Microsoft.Extensions.Options;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
 using Promuse.Persistence;
 
 // 必须显式传 / WriteAsJsonAsync sets Content-Type itself and overwrites
@@ -79,6 +81,36 @@ builder.Services.AddOptions<StaminaOptions>()
     .ValidateOnStart();
 
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<PromuseMetrics>();
+
+// 指标送出去 / Metrics leave the process only when there is somewhere to send them. The deploy
+// sets OTEL_EXPORTER_OTLP_ENDPOINT - the collector - and the exporter reads it and the rest of the
+// standard OTEL_* variables (protocol, OTEL_RESOURCE_ATTRIBUTES for the environment) itself.
+// Development and the tests set nothing and run exactly as before; PromuseMetrics still counts,
+// with no one listening.
+if (!string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]))
+{
+    builder.Services.AddOpenTelemetry()
+        .ConfigureResource(resource => resource.AddService("promuse-api"))
+        .WithMetrics(metrics => metrics
+            // The game's own: sign-ins, runs and their verdicts, headhunting, the shop.
+            .AddMeter(PromuseMetrics.MeterName)
+
+            // 框架自带 / Published by the framework and libraries themselves, so no
+            // instrumentation package is needed: requests and their duration by route and
+            // status, connections, the rate limiter, outgoing HTTP, the GC and thread pool, and
+            // the database connection pool.
+            .AddMeter(
+                "Microsoft.AspNetCore.Hosting",
+                "Microsoft.AspNetCore.Server.Kestrel",
+                "Microsoft.AspNetCore.Routing",
+                "Microsoft.AspNetCore.Diagnostics",
+                "Microsoft.AspNetCore.RateLimiting",
+                "System.Net.Http",
+                "System.Runtime",
+                "Npgsql")
+            .AddOtlpExporter());
+}
 builder.Services.AddSingleton<PasswordHasher>();
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<AuthService>();
