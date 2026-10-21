@@ -87,6 +87,8 @@ compose up -d --wait postgres
 # kept in step with the password on every deploy.
 compose exec -T postgres psql -v ON_ERROR_STOP=1 -q -U promuse -d promuse \
     -v pw="$MONITOR_DB_PASSWORD" >/dev/null <<'SQL'
+-- The GRANT says it was already granted on every deploy after the first.
+SET client_min_messages TO WARNING;
 SELECT format('CREATE ROLE promuse_monitor LOGIN PASSWORD %L', :'pw')
 WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'promuse_monitor') \gexec
 ALTER ROLE promuse_monitor WITH LOGIN PASSWORD :'pw';

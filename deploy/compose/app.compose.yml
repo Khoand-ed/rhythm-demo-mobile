@@ -65,6 +65,10 @@ services:
       ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
       # The scopes carry the request's trace id into every JSON log line.
       Logging__Console__FormatterOptions__IncludeScopes: "true"
+      # 不记每条 SQL / EF Core logs every SQL statement it runs at Information: every query the API
+      # makes, into Loki, and a few hundred lines of a migration's SQL into each deploy's log. A
+      # statement that fails is logged at Error, so nothing a problem needs is lost.
+      Logging__LogLevel__Microsoft.EntityFrameworkCore.Database.Command: Warning
       OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4317
       OTEL_RESOURCE_ATTRIBUTES: deployment.environment.name=${PROMUSE_ENV}
       OTEL_METRIC_EXPORT_INTERVAL: "15000"
