@@ -1,0 +1,15 @@
+# The local rehearsal's changes to edge.compose.yml (rehearse.sh passes it as EDGE_OVERRIDE).
+# Caddy on 8080/8443, so nothing already on this machine's 80/443 is in the way; Grafana told
+# its address carries that port.
+services:
+  caddy:
+    ports: !override
+      - "127.0.0.1:8080:80"
+      - "127.0.0.1:8443:443"
+
+  grafana:
+    environment:
+      GF_SERVER_ROOT_URL: https://${GRAFANA_HOST}:8443
+    # Also straight on http://127.0.0.1:3000, for a browser that will not accept Caddy's local CA.
+    ports:
+      - "127.0.0.1:3000:3000"

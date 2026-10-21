@@ -168,6 +168,10 @@ InitTestScene*.unity*
 /server/.env
 /deploy/**/.env
 
+# The local rehearsal's state (deploy/local/rehearse.sh): what /srv/promuse holds on the VM -
+# .env files, backups, metric files.
+/deploy/local/state/
+
 # Python bytecode cache from the ci/ checks. Regenerated on every run.
 __pycache__/
 *.pyc
