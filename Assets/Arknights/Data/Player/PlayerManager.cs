@@ -26,12 +26,16 @@ namespace Data.Player {
         private PlayerData playerData;
 
         protected override void Initialization() {
-            // 真机上 127.0.0.1 是手机自己 / On a device this loopback address is
-            // the phone, not the development machine. Pointing a build at a real
-            // server means changing this, and it is configuration rather than a
-            // literal for exactly that reason.
-            api = new PromuseApi(new PromuseConfig(), new TokenStore());
+            // 连哪个服务器 / The server this build was made for - Local, Staging or Production, chosen
+            // under Arknights/Build and kept in Resources/ServerTarget.asset. Each keeps its own session
+            // and caches on the device; Local's are the ones a device already has.
+            ServerTarget target = ServerTarget.Load();
+            api = new PromuseApi(target.CreateConfig(), new TokenStore(target.StorageScope));
+            Target = target;
         }
+
+        /// <summary>The server this build talks to.</summary>
+        public ServerTarget Target { get; private set; }
 
         public PromuseApi Api => api;
 

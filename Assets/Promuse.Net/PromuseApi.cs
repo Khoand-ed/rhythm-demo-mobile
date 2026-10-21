@@ -53,6 +53,20 @@ namespace Promuse.Net
 
         /// <summary>The first wait; each retry after it waits twice as long, with jitter.</summary>
         public float retryBaseDelaySeconds = 0.5f;
+
+        /// <summary>
+        /// 各服务器各存各的 / What sets this server's saved data apart on the device - the session, the
+        /// queued results, the caches. Empty for the development server, which keeps the names it always
+        /// had; see <see cref="ServerTarget.StorageScope"/>.
+        /// </summary>
+        public string storageScope = "";
+
+        /// <summary><paramref name="key"/> as this server's own: unchanged when there is no scope.</summary>
+        public string Scoped(string key) => string.IsNullOrEmpty(storageScope) ? key : key + "." + storageScope;
+
+        /// <summary>This server's folder under <paramref name="root"/>: the root itself when there is no scope.</summary>
+        public string DataDirectory(string root) =>
+            string.IsNullOrEmpty(storageScope) ? root : System.IO.Path.Combine(root, storageScope);
     }
 
     /// <summary>
@@ -97,12 +111,32 @@ namespace Promuse.Net
         {
             _config = config;
             _tokens = tokens;
-            Pending = new PendingRunResults(Application.persistentDataPath);
-            ConfigCache = new RemoteConfigCache(Application.persistentDataPath);
-            StoryPatches = new StoryPatchCache(Application.persistentDataPath);
+
+            // A result queued for one server is never sent to another, nor its config or story
+            // corrections read by a build pointed elsewhere.
+            DataDirectory = config.DataDirectory(Application.persistentDataPath);
+            try
+            {
+                System.IO.Directory.CreateDirectory(DataDirectory);
+            }
+            catch (System.IO.IOException e)
+            {
+                // The caches already treat a file they cannot write as nothing to keep; the game goes on.
+                Debug.LogWarning($"[PromuseApi] Cannot create {DataDirectory}: {e.Message}");
+            }
+
+            Pending = new PendingRunResults(DataDirectory);
+            ConfigCache = new RemoteConfigCache(DataDirectory);
+            StoryPatches = new StoryPatchCache(DataDirectory);
         }
 
         public TokenStore Tokens => _tokens;
+
+        /// <summary>Where this server's files live on the device. persistentDataPath itself for Local.</summary>
+        public string DataDirectory { get; }
+
+        /// <summary><paramref name="key"/> as this server's own PlayerPrefs key. Unchanged for Local.</summary>
+        public string Scoped(string key) => _config.Scoped(key);
 
         /// <summary>The server's root, for what is fetched outside this class - a notice banner, say.</summary>
         public string BaseUrl => _config.baseUrl;

@@ -12,8 +12,10 @@ using UnityEngine;
 ///   2. the player, a Development build - the only kind allowed to call the dev API over plain HTTP
 ///      (Player Settings: insecureHttpOption = development builds only).
 ///
-/// 输出在仓库外 / The APK lands outside the repository, in ../builds/Promuse-&lt;version&gt;-dev.apk next to
-/// the project folder, so no build output is ever committed.
+/// 输出在仓库外 / The APK lands outside the repository, in ../builds/Promuse-&lt;version&gt;-&lt;server&gt;-dev.apk
+/// next to the project folder, so no build output is ever committed. The server is the one chosen under
+/// Arknights/Build/Server (ServerTargetMenu), in the name so two builds for two servers never overwrite
+/// or pass for each other.
 ///
 /// From the Editor: Arknights/Build/Android Development APK. From a shell, with the Editor closed:
 ///   Unity -batchmode -quit -projectPath . -buildTarget Android -executeMethod AndroidBuild.BatchDevelopmentApk
@@ -37,7 +39,16 @@ public static class AndroidBuild
 
     public static string OutputPath =>
         Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", "builds",
-                                      $"Promuse-{PlayerSettings.bundleVersion}-dev.apk"));
+                                      $"Promuse-{PlayerSettings.bundleVersion}-{Server}-dev.apk"));
+
+    private static string Server
+    {
+        get
+        {
+            Promuse.Net.ServerTarget target = ServerTargetMenu.Find();
+            return (target != null ? target.environment : Promuse.Net.ServerEnvironment.Local).ToString().ToLowerInvariant();
+        }
+    }
 
     private static bool Build()
     {

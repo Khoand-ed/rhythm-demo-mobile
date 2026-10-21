@@ -63,7 +63,8 @@ namespace Data.HomeContent {
             if (banners.TryGetValue(url, out Sprite cached)) return cached;
 
             string name = Path.GetFileName(url);
-            string folder = Path.Combine(Application.persistentDataPath, "banners");
+            // This server's own folder: two servers may each have a banner called banner-1.png.
+            string folder = Path.Combine(PlayerManager.Inst().Api.DataDirectory, "banners");
             string path = Path.Combine(folder, name);
 
             Texture2D texture = null;
