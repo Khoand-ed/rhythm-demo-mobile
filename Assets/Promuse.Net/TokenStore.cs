@@ -20,11 +20,16 @@ namespace Promuse.Net
     /// project is demonstrating. A shipping game must not leave it here: the
     /// consequence of a stolen refresh token is a session, and the server's reuse
     /// detection limits but does not remove that.
+    ///
+    /// 每个服务器一份 / One session per server: a staging account's token means nothing to
+    /// production, and keeping both lets a tester switch builds without signing in again each time.
+    /// The keys carry the server's scope (ServerTarget.StorageScope) - none for Local, whose keys are
+    /// the ones it always had.
     /// </summary>
     public sealed class TokenStore
     {
-        private const string RefreshTokenKey = "Promuse.Auth.RefreshToken";
-        private const string PlayerIdKey = "Promuse.Auth.PlayerId";
+        private readonly string RefreshTokenKey;
+        private readonly string PlayerIdKey;
 
         private string? _accessToken;
         private DateTimeOffset _accessExpiresAt;
@@ -35,8 +40,13 @@ namespace Promuse.Net
 
         public bool HasSession => !string.IsNullOrEmpty(RefreshToken);
 
-        public TokenStore()
+        /// <param name="storageScope">The server's scope; empty for Local.</param>
+        public TokenStore(string storageScope = "")
         {
+            var scope = new PromuseConfig { storageScope = storageScope };
+            RefreshTokenKey = scope.Scoped("Promuse.Auth.RefreshToken");
+            PlayerIdKey = scope.Scoped("Promuse.Auth.PlayerId");
+
             RefreshToken = PlayerPrefs.GetString(RefreshTokenKey, string.Empty);
 
             if (string.IsNullOrEmpty(RefreshToken)) RefreshToken = null;

@@ -81,9 +81,11 @@ namespace Manager {
             if (string.IsNullOrWhiteSpace(text)) return;
 
             // 每条公告只弹一次 / Once per config version, remembered across launches.
-            if (PlayerPrefs.GetInt(SeenAnnouncementKey, 0) == config.Version) return;
+            // Each server numbers its config versions alone, so "seen" is kept per server.
+            string seenKey = Api.Scoped(SeenAnnouncementKey);
+            if (PlayerPrefs.GetInt(seenKey, 0) == config.Version) return;
 
-            PlayerPrefs.SetInt(SeenAnnouncementKey, config.Version);
+            PlayerPrefs.SetInt(seenKey, config.Version);
             PlayerPrefs.Save();
             CommonDialogUI.Message(CommonDialogUI.GroundType.WHITE, text);
         }
