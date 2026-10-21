@@ -48,6 +48,10 @@ on:
 
   workflow_dispatch:
 
+  # The deploy pipeline (deploy.yml) runs these same checks before it builds an image, so nothing
+  # is shipped that this workflow would have failed.
+  workflow_call:
+
   # Same reasoning as unity-tests.yml, different things to rot: the setup-dotnet
   # action, the NuGet feed, the postgres image tag, and the SDK patch line that
   # 10.0.x floats onto. A weekly run turns "red on the morning someone needs to
@@ -57,8 +61,10 @@ on:
   schedule:
     - cron: '0 3 * * 1'
 
+# github.workflow is the CALLER's name when deploy.yml calls this, so its run and the one a push to
+# main starts by itself are two groups - in one, each would cancel the other.
 concurrency:
-  group: backend-checks-${{ github.ref }}
+  group: ${{ github.workflow }}-backend-checks-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
