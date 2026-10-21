@@ -103,8 +103,10 @@ EOF
 log "$ROOT"
 install -d -m 755 -o "$DEPLOY_USER" -g "$DEPLOY_USER" "$ROOT" "$ROOT/metrics"
 install -d -m 700 -o "$DEPLOY_USER" -g "$DEPLOY_USER" "$ROOT/edge" "$ROOT/staging" "$ROOT/production" "$ROOT/backups"
-# The copy of deploy/ these scripts run from, put here by root: the pipeline replaces it as deploy.
+# The copy of deploy/ these scripts run from, put here by root: the pipeline rewrites it as deploy,
+# in place, with rsync (ship.sh says why).
 [ -d "$ROOT/deploy" ] && chown -R "$DEPLOY_USER:$DEPLOY_USER" "$ROOT/deploy"
+apt-get install -y rsync
 
 # ---------------------------------------------------------------------------------- 7. timers
 log "timers: backup nightly, DuckDNS every five minutes"
