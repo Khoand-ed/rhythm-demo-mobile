@@ -107,6 +107,21 @@ namespace Promuse.Net
 
         private bool _flushing;
 
+        /// <summary>
+        /// 只刷新一次 / The refresh in flight, if any. Every request that needs one while it runs waits
+        /// for this one instead of starting its own: the server rotates the refresh token on each use
+        /// and reads a second use of the same one as theft, revoking the whole session - so six
+        /// requests from Home finding the access token expired together used to sign the player out.
+        /// Only ever touched on the main thread, where every await here resumes.
+        /// </summary>
+        private Task<bool>? _refreshing;
+
+        /// <summary>
+        /// Bumped whenever the session's tokens change. A request answered 401 after another request's
+        /// refresh already replaced its token only needs sending again, not a refresh of its own.
+        /// </summary>
+        private int _tokenGeneration;
+
         public PromuseApi(PromuseConfig config, TokenStore tokens)
         {
             _config = config;
@@ -208,7 +223,11 @@ namespace Promuse.Net
 
             // A successful sign-in is the only place a session starts, so it is
             // the only place the store is written.
-            if (result.IsSuccess) _tokens.Adopt(result.Value!);
+            if (result.IsSuccess)
+            {
+                _tokens.Adopt(result.Value!);
+                _tokenGeneration++;
+            }
 
             return result;
         }
@@ -230,6 +249,7 @@ namespace Promuse.Net
 
             _playerETag = null;
             _tokens.Clear();
+            _tokenGeneration++;
         }
 
         // --------------------------------------------------------------- player
@@ -674,11 +694,19 @@ namespace Promuse.Net
             string? ifMatch = null,
             string? ifNoneMatch = null)
         {
+            int generation = _tokenGeneration;
+
             ApiResult<T> first = await SendWithRetriesAsync<T>(method, path, body, authenticate, idempotencyKey, ifMatch, ifNoneMatch);
 
             if (!authenticate || !first.Is(ErrorCodes.Unauthorized)) return first;
 
-            if (!await TryRefreshAsync()) return first;
+            // 别人已经刷新过 / Another request refreshed while this one was out: the token it carried is
+            // the old one, and sending it again with the new one is all it needs. Refreshing again
+            // would only spend the new refresh token for nothing. Otherwise refresh - or wait for the
+            // refresh already running.
+            bool renewed = _tokenGeneration != generation && _tokens.HasSession;
+
+            if (!renewed && !await TryRefreshAsync()) return first;
 
             // 幂等键要沿用 / The SAME idempotency key on the retry. A fresh one
             // would make the server treat this as a new request and do the work
@@ -716,33 +744,64 @@ namespace Promuse.Net
             }
         }
 
-        private async Task<bool> TryRefreshAsync()
+        /// <summary>
+        /// Refreshes the session, or joins the refresh already running (see <see cref="_refreshing"/>).
+        /// True when there is a fresh access token to send.
+        /// </summary>
+        private Task<bool> TryRefreshAsync()
         {
+            if (_refreshing != null) return _refreshing;
+
             string? refresh = _tokens.RefreshToken;
 
-            if (string.IsNullOrEmpty(refresh)) return false;
+            if (string.IsNullOrEmpty(refresh)) return Task.FromResult(false);
 
-            ApiResult<TokenPair> result = await SendOnceAsync<TokenPair>(
-                UnityWebRequest.kHttpVerbPOST, "/v1/auth/refresh", new RefreshRequest(refresh!),
-                authenticate: false, idempotencyKey: null, ifMatch: null, ifNoneMatch: null);
+            Task<bool> refreshing = RefreshAsync(refresh!);
 
-            if (result.IsSuccess)
+            // Held only while it runs: RefreshAsync lets go of it when it ends. A refresh that ended
+            // before getting here is never held, or it would answer every later caller forever.
+            if (!refreshing.IsCompleted) _refreshing = refreshing;
+
+            return refreshing;
+        }
+
+        private async Task<bool> RefreshAsync(string refresh)
+        {
+            try
             {
-                _tokens.Adopt(result.Value!);
-                return true;
-            }
+                ApiResult<TokenPair> result = await SendOnceAsync<TokenPair>(
+                    UnityWebRequest.kHttpVerbPOST, "/v1/auth/refresh", new RefreshRequest(refresh),
+                    authenticate: false, idempotencyKey: null, ifMatch: null, ifNoneMatch: null);
 
-            // 重放即终结 / The server treats a reused refresh token as final and
-            // has revoked the whole family. Keeping it locally would only produce
-            // a retry loop that can never succeed, so the session is dropped and
-            // the player signs in again.
-            if (result.Is(ErrorCodes.RefreshTokenReused) || result.Is(ErrorCodes.RefreshTokenInvalid))
+                // 会话已经换了 / Signed out - or signed in anew - while the refresh was out: its
+                // answer belongs to a session this device no longer holds, and adopting it would
+                // bring a signed-out player back.
+                if (_tokens.RefreshToken != refresh) return false;
+
+                if (result.IsSuccess)
+                {
+                    _tokens.Adopt(result.Value!);
+                    _tokenGeneration++;
+                    return true;
+                }
+
+                // 重放即终结 / The server treats a reused refresh token as final and
+                // has revoked the whole family. Keeping it locally would only produce
+                // a retry loop that can never succeed, so the session is dropped and
+                // the player signs in again.
+                if (result.Is(ErrorCodes.RefreshTokenReused) || result.Is(ErrorCodes.RefreshTokenInvalid))
+                {
+                    _tokens.Clear();
+                    _tokenGeneration++;
+                    _playerETag = null;
+                }
+
+                return false;
+            }
+            finally
             {
-                _tokens.Clear();
-                _playerETag = null;
+                _refreshing = null;
             }
-
-            return false;
         }
 
         private async Task<ApiResult<T>> SendOnceAsync<T>(
