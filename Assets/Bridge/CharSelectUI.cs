@@ -107,6 +107,8 @@ public class CharSelectUI : UIBase
         return ui;
     }
 
+    public override Button ExitButton() => backButton;
+
     public override void Init()
     {
         backButton.onClick.AddListener(() => HideAndDestroy(UIName));

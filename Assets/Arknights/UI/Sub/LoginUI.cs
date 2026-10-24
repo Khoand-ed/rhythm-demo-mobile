@@ -54,6 +54,17 @@ namespace UI.Sub {
         private AudioClip clip;
         private AudioClip loop_clip;
         
+        /// <summary>
+        /// Back closes the sign-in or sign-up form when one is open. Anywhere else here - the first screen,
+        /// the name screen a new account cannot skip - there is nothing further back, so it asks whether to
+        /// leave the game.
+        /// </summary>
+        public override void OnBack() {
+            if (registerPanel.gameObject.activeSelf) { Press(register_back); return; }
+            if (loginPanel.gameObject.activeSelf) { Press(login_back); return; }
+            BackKey.AskToLeave();
+        }
+
         public override void Init() {
             clip = Asset.Load<AudioClip>("Audio/Music/Login", "m_sys_title_intro");
             loop_clip = Asset.Load<AudioClip>("Audio/Music/Login", "m_sys_title_loop");

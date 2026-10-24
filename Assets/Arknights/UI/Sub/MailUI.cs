@@ -61,6 +61,14 @@ namespace UI.Sub {
 
         // ------------------------------------------------------------------ lifecycle
 
+        public override Button ExitButton() => backButton;
+
+        /// <summary>Back closes an open mail before the mailbox.</summary>
+        public override void OnBack() {
+            if (detail != null && detail.activeSelf) { Press(detailClose); return; }
+            base.OnBack();
+        }
+
         public override void Init() {
             backButton.onClick.AddListener(() => UIManager.Inst().Hide(UIName, true));
             deleteButton.onClick.AddListener(() => Act(MailManager.Inst().DeleteOpenedAsync()));

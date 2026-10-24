@@ -56,6 +56,8 @@ namespace UI.Sub {
 
         // ------------------------------------------------------------------ lifecycle
 
+        public override Button ExitButton() => closeButton;
+
         public override void Init() {
             closeButton.onClick.AddListener(Close);
             veilButton.onClick.AddListener(Close);

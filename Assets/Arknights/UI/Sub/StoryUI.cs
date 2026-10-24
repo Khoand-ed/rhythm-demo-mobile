@@ -89,6 +89,15 @@ namespace UI.Sub {
 
         // ------------------------------------------------------------------ lifecycle
 
+        /// <summary>
+        /// Back closes the log when it is open, and otherwise skips the story - through the SKIP button,
+        /// so it counts as seen exactly as a tap on it does.
+        /// </summary>
+        public override void OnBack() {
+            if (logPanel != null && logPanel.activeSelf) { Press(logClose); return; }
+            Press(skipButton);
+        }
+
         public override void Init() {
             tapArea.onClick.AddListener(Tap);
             skipButton.onClick.AddListener(() => Finish());

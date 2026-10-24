@@ -46,6 +46,14 @@ public class PauseMenu : MonoBehaviour
 
     private bool busy;
 
+    // READY/GO and the run-up while they play, the 3-2-1 while it counts: held so a Back or the app
+    // going to the background can stop them part-way (Interrupt).
+    private Coroutine intro;
+    private Coroutine countdown;
+
+    // A run-in cut short by the app going to the background, to play again from READY on return.
+    private bool introAgain;
+
     // ------------------------------------------------------------------- lifecycle
 
     private void Start()
@@ -54,8 +62,32 @@ public class PauseMenu : MonoBehaviour
         if (panel != null) panel.SetActive(false);
         if (overlay != null) overlay.SetActive(false);
 
-        StartCoroutine(RunIntro());
+        intro = StartCoroutine(RunIntro());
     }
+
+    private void Update()
+    {
+        // 安卓返回键 / Android's Back arrives as Escape (Esc in the Editor does the same). The front-end's
+        // BackKey sleeps with the UI camera while a song plays, so here this is the one that answers.
+        if (Input.GetKeyDown(KeyCode.Escape)) OnBack();
+    }
+
+#if !UNITY_EDITOR
+    // 切到后台 / On a phone only. In the Editor focus comes and goes with every click on another
+    // window, and a song that paused each time would be no use to work on; Interrupt and Return are
+    // public for trying it there.
+    private void OnApplicationPause(bool paused)
+    {
+        if (paused) Interrupt();
+        else Return();
+    }
+
+    private void OnApplicationFocus(bool focused)
+    {
+        if (!focused) Interrupt();
+        else Return();
+    }
+#endif
 
     private void OnDestroy()
     {
@@ -76,7 +108,11 @@ public class PauseMenu : MonoBehaviour
     private IEnumerator RunIntro()
     {
         GameManager game = GameManager.instance;
-        if (game == null) yield break;
+        if (game == null)
+        {
+            intro = null;
+            yield break;
+        }
 
         // 等加载画面撤走 / Wait for the loading screen to lift. It is still fading out over the
         // first frames of the scene, and a READY counted down underneath it is a READY the
@@ -108,6 +144,8 @@ public class PauseMenu : MonoBehaviour
         yield return Hide();
 
         if (pauseButton != null) pauseButton.SetActive(true);
+
+        intro = null;
     }
 
     private static float RunUpSeconds(GameManager game)
@@ -131,6 +169,13 @@ public class PauseMenu : MonoBehaviour
 
         GameManager.instance.PauseGame();
 
+        ShowPanel();
+
+        busy = false;
+    }
+
+    private void ShowPanel()
+    {
         if (pauseButton != null) pauseButton.SetActive(false);
         if (panel != null) panel.SetActive(true);
 
@@ -141,15 +186,13 @@ public class PauseMenu : MonoBehaviour
             // has to be told to ignore it or it never advances.
             panelGroup.DOFade(1f, 0.18f).SetUpdate(true);
         }
-
-        busy = false;
     }
 
     /// <summary>Wired to the green button: counts 3-2-1, then hands control back.</summary>
     public void Resume()
     {
         if (busy) return;
-        StartCoroutine(RunResume());
+        countdown = StartCoroutine(RunResume());
     }
 
     private IEnumerator RunResume()
@@ -172,6 +215,7 @@ public class PauseMenu : MonoBehaviour
         if (pauseButton != null) pauseButton.SetActive(true);
 
         busy = false;
+        countdown = null;
     }
 
     /// <summary>
@@ -199,6 +243,9 @@ public class PauseMenu : MonoBehaviour
     public void RestartWithIntro()
     {
         StopAllCoroutines();
+        intro = null;
+        countdown = null;
+        introAgain = false;
         StartCoroutine(RunRetry());
     }
 
@@ -216,7 +263,9 @@ public class PauseMenu : MonoBehaviour
 
         busy = false;
 
-        yield return RunIntro();
+        // Its own coroutine rather than nested here, so Interrupt can stop it like the first one.
+        intro = StartCoroutine(RunIntro());
+        yield break;
     }
 
     /// <summary>Wired to the pink button.</summary>
@@ -229,6 +278,104 @@ public class PauseMenu : MonoBehaviour
 
         // ReturnToSongSelect puts timeScale back itself, and loads the front-end scene.
         GameManager.instance.ReturnToSongSelect();
+    }
+
+    // ------------------------------------------------------------- back, background
+
+    /// <summary>
+    /// 返回键 / Android's Back during a song: what the two buttons would do. A running song pauses;
+    /// on the panel it resumes (3-2-1); during the 3-2-1 it goes back to the panel. READY/GO ignores
+    /// it - the song is about to start, and its run-up cannot be paused cleanly. On the results screen
+    /// it is that screen's own back button.
+    /// </summary>
+    public void OnBack()
+    {
+        GameManager game = GameManager.instance;
+        if (game == null) return;
+
+        if (game.resultsScreen != null && game.resultsScreen.activeInHierarchy)
+        {
+            PressResultsBack(game);
+            return;
+        }
+
+        if (countdown != null)
+        {
+            Interrupt();
+            return;
+        }
+
+        if (panel != null && panel.activeSelf)
+        {
+            Resume();
+            return;
+        }
+
+        if (intro == null) Pause();
+    }
+
+    /// <summary>
+    /// 切到后台 / The app went to the background, or lost focus to a call or the notification shade:
+    ///   - a running song pauses, its panel up, waiting for Resume;
+    ///   - a 3-2-1 stops, back at the panel - the song is still paused;
+    ///   - READY/GO is stopped and plays again from READY when the player is back (<see cref="Return"/>).
+    ///     Its waits run on the real clock, which kept going: left alone, the song would start the
+    ///     moment the app came back. During the run-up after GO the song has already been scheduled,
+    ///     so the run is put back to its start (ResetRun, as a Retry does) - nothing has been judged,
+    ///     the first note is still on its way.
+    /// </summary>
+    public void Interrupt()
+    {
+        GameManager game = GameManager.instance;
+        if (game == null) return;
+        if (game.resultsScreen != null && game.resultsScreen.activeInHierarchy) return;
+
+        if (countdown != null)
+        {
+            StopCoroutine(countdown);
+            countdown = null;
+            HideOverlayNow();
+            ShowPanel();
+            busy = false;
+            return;
+        }
+
+        if (intro != null)
+        {
+            StopCoroutine(intro);
+            intro = null;
+            HideOverlayNow();
+            if (game.startPlaying) game.ResetRun();
+            introAgain = true;
+            return;
+        }
+
+        Pause();
+    }
+
+    /// <summary>The app is back: a run-in <see cref="Interrupt"/> cut short plays again from READY.</summary>
+    public void Return()
+    {
+        if (!introAgain) return;
+
+        introAgain = false;
+        intro = StartCoroutine(RunIntro());
+    }
+
+    // The results screen's back button, wired to GameManager.ReturnToSongSelect in the scene by
+    // Tools/Rhythm/Wire Song Flow. Pressed as a tap would - not at all while it is switched off.
+    private static void PressResultsBack(GameManager game)
+    {
+        foreach (Button button in game.resultsScreen.GetComponentsInChildren<Button>(true))
+        {
+            for (int i = 0; i < button.onClick.GetPersistentEventCount(); i++)
+            {
+                if (button.onClick.GetPersistentMethodName(i) != nameof(GameManager.ReturnToSongSelect)) continue;
+
+                if (button.isActiveAndEnabled && button.IsInteractable()) button.onClick.Invoke();
+                return;
+            }
+        }
     }
 
     // ------------------------------------------------------------------- can pause
@@ -277,6 +424,14 @@ public class PauseMenu : MonoBehaviour
         rect.DOKill();
         rect.localScale = Vector3.one * 1.35f;
         rect.DOScale(1f, 0.25f).SetEase(Ease.OutBack).SetUpdate(true);
+    }
+
+    private void HideOverlayNow()
+    {
+        if (overlay == null) return;
+
+        if (overlayGroup != null) overlayGroup.DOKill();
+        overlay.SetActive(false);
     }
 
     private IEnumerator Hide()

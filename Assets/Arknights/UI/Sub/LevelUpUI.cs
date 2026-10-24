@@ -93,6 +93,8 @@ namespace UI.Sub {
 
         // ------------------------------------------------------------------ lifecycle
 
+        public override Button ExitButton() => backButton;
+
         public override void Init() {
             backButton.onClick.AddListener(() => UIManager.Inst().Hide(UIName, true));
             wheel.Stepped += Turn;

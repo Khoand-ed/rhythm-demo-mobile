@@ -23,6 +23,15 @@ namespace UI.Sub {
         private Transform[] prefabs = new Transform[3];
         private LinkedList<CharPrefab> charPrefabs = new LinkedList<CharPrefab>();
 
+        /// <summary>Back closes the profession help when it is up, before the page.</summary>
+        public override void OnBack() {
+            if (professionHelp != null && professionHelp.gameObject.activeSelf) {
+                Press(professionHelp.GetComponent<Button>());
+                return;
+            }
+            base.OnBack();
+        }
+
         public override void Init() {
             scrollRect = GetComponent<ScrollRect>();
             playerData = PlayerManager.Inst().Get();

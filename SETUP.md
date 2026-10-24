@@ -384,6 +384,27 @@ three addresses:
   the top right (`Arknights/Login/Build Server Badge`).
 - `Reset Server Target To Default` puts back Local and keeps the two VM addresses.
 
+### Android Back, and leaving the app mid-song
+
+Back (the button or the gesture; Esc in the Editor) always does what a tap on the screen would:
+
+| Where | Back |
+|---|---|
+| A screen or popup | Closes what that screen has open over itself first - a mail, a banner's details, the pull results, the story log - then presses the screen's own back or close button (`UIBase.OnBack`) |
+| Home, the sign-in screen, the name screen | Asks "Are you sure to leave?" - the tick leaves the game, the cross (or Back again) stays |
+| A story | Closes the log if it is open, otherwise SKIP |
+| A song | Pauses; on the pause panel, resumes (3-2-1); during the 3-2-1, back to the panel; nothing during READY/GO |
+| The results screen | Its back button: the song list |
+
+**The app going to the background** - Home button, a call, the notification shade - pauses a song with
+its panel up. During READY/GO the run-in starts over when the player is back, rather than the song
+starting the moment the app returns. In the Editor this is off (focus comes and goes with every
+click); `PauseMenu.Interrupt` and `Return` are public for trying it.
+
+A new screen needs a way back: a `backButton`/`closeButton` it returns from `ExitButton`, a prefab
+button that calls its `Hide`, or an `OnBack` of its own. `BackKeyTests` reads every screen prefab and
+fails for one that has none.
+
 ### Testing on a phone
 
 1. **Build:** `Arknights/Build/Android Development APK` builds the Android bundles, then a
