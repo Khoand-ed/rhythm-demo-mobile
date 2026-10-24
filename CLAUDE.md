@@ -113,6 +113,7 @@ licence, no secrets. There is no CI that compiles C#; only the Editor can do tha
 | Anything new that shows a player to others - a list, a chat, a friend request | A signed-up player has no name until the name screen: `players.display_name` and `tag` are null, and only the owner ever sees them that way because a run, a signature and a report are refused with `NAME_REQUIRED` before it. A new way of being seen needs the same refusal, or it shows a blank name. The username only signs in and is never shown |
 | Opening someone's profile card | `ProfileUI.Open(playerId)`. `UIManager.Show("ProfileUI")` on its own - which is all Home's button does - always opens the player's own card |
 | Showing an operator's standing art | `SplashFrame.Show(image, meta)` (Lua: `CS.UI.SplashFrame.Show`), never `image.sprite = meta.GetImage()`. The splash is whole and uncut; only a frame keeps its proportions. A new screen's `Image` needs a frame - add it to the list in `OperatorSplashFrames` |
+| Setting `Application.targetFrameRate` anywhere else, or removing `Manager.FrameRate` | It sets 60 once, before the first scene. A phone left to itself draws at 30, and a tap is judged on the first frame that sees it - up to 33 ms late, most of a Great window. A second place setting it (a scene, a screen) silently wins wherever it runs |
 | Anything in `CharacterPresenter` choosing by chance | It is presentation, and the server replays a run from its seed. Pick from the event (lane, note type), never from `RunState.NextRoll()` or `UnityEngine.Random` |
 
 ## Working here
