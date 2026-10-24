@@ -20,6 +20,15 @@ namespace UI {
         private Action<bool> luaHide;
 
 
+        /// <summary>Back on Home has nowhere further back to go: it asks whether to leave the game.</summary>
+        public override void OnBack() {
+            if (Name == BootIntent.Home) {
+                BackKey.AskToLeave();
+                return;
+            }
+            base.OnBack();
+        }
+
         public override void Init() { // 初始化
             scriptEnv = LuaEnv.NewTable();
             LuaTable meta = LuaEnv.NewTable();

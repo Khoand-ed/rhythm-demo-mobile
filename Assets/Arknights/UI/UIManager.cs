@@ -39,6 +39,10 @@ namespace UI {
             canvasSize.x = canvasSize.y * Screen.width / Screen.height;
             // canvasSize.y = canvasSize.x * Screen.height / Screen.width;
             Object.DontDestroyOnLoad(camera);
+
+            // 返回键跟着界面走 / Android Back for the front-end lives on the UI camera, which is switched
+            // off while a song plays - there the pause menu answers it instead.
+            camera.AddComponent<BackKey>();
         }
 
         // 打开
@@ -67,6 +71,16 @@ namespace UI {
             List<string> names = new List<string>();
             foreach (UIBase ui in open) names.Add(ui.Name);
             return names;
+        }
+
+        /// <summary>The screen open on top of all the others, or null when none is.</summary>
+        public UIBase Top() {
+            UIBase top = null;
+            foreach (UIBase ui in uiDictionary.Values) {
+                if (ui == null || ui.state != UIState.Show) continue;
+                if (top == null || ui.transform.GetSiblingIndex() > top.transform.GetSiblingIndex()) top = ui;
+            }
+            return top;
         }
 
         public void Update(string type) {
