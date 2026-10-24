@@ -405,6 +405,14 @@ three addresses:
 4. **The first launch** copies the music bundles out of the APK into the app's storage
    (`BundleInstaller`), so it shows nothing for a moment. Later launches start at once.
 
+**The frame rate.** The game draws at 60 FPS (`Manager.FrameRate`, set before the first scene); a phone
+left to itself draws at 30, and a tap is judged on the frame that sees it. On a display 60 does not
+divide - 90 Hz - it is 60 only if the display switches to 60 Hz (Optimized Frame Pacing asks it to),
+otherwise 45. The first line the game logs says which display it found:
+```
+adb logcat -s Unity | findstr FrameRate
+```
+
 **The version.** The server refuses a build older than remote config's minimum client version, and
 1.1 is the first build that judges through `RunJudge`. Raise `bundleVersion` (and the Android version
 code) for a build that changes how runs are judged, then the minimum on the admin page.
