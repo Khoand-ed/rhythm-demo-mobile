@@ -47,6 +47,18 @@ public class SongSelectUI : UIBase
     private InfoPanel infoPanel;
     private LeaderboardPanel leaderboard;
 
+    /// <summary>Back closes the song's panel when it is open, before the song list.</summary>
+    public override void OnBack()
+    {
+        if (infoPanel != null && infoPanel.IsOpen)
+        {
+            infoPanel.Hide();
+            return;
+        }
+
+        base.OnBack();
+    }
+
     public override void Init()
     {
         scroll = transform.GetComponent<ScrollRect>("Map");
@@ -257,6 +269,8 @@ public class SongSelectUI : UIBase
 
             group.gameObject.SetActive(false);
         }
+
+        internal bool IsOpen => group.gameObject.activeSelf;
 
         internal void Show(string songId, List<SongChart> charts)
         {

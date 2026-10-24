@@ -36,6 +36,8 @@ namespace UI.Sub {
 
         private float nextTick;
 
+        public override Button ExitButton() => backButton;
+
         public override void Init() {
             backButton.onClick.AddListener(() => UIManager.Inst().Hide(UIName, true));
             eventCard.onClick.AddListener(OpenEvents);

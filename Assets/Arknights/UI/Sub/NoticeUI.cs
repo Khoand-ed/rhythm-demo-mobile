@@ -73,6 +73,8 @@ namespace UI.Sub {
 
         // ------------------------------------------------------------------ lifecycle
 
+        public override Button ExitButton() => closeButton;
+
         public override void Init() {
             closeButton.onClick.AddListener(Close);
             for (int i = 0; i < tabs.Length; i++) {

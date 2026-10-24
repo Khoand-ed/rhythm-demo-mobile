@@ -58,6 +58,8 @@ namespace UI.Sub {
 
         // ------------------------------------------------------------------ lifecycle
 
+        public override Button ExitButton() => closeButton;
+
         public override void Init() {
             closeButton.onClick.AddListener(Close);
             cellTemplate.gameObject.SetActive(false);
