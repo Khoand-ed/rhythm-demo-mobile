@@ -159,6 +159,53 @@ public class AuthEndpointTests(PromuseApiFactory factory)
             (await second.Content.ReadFromJsonAsync<ApiProblem>())!.Code);
     }
 
+    // 一台设备多个账号 / One phone, several accounts: the game sends its device id with every sign-up,
+    // and the device id is unique (a guest sign-in on a device reopens that device's account). A
+    // second sign-up from the same device used to collide on it - and was answered USERNAME_TAKEN,
+    // whatever the username.
+    [Fact]
+    public async Task A_second_account_can_be_registered_on_the_same_device()
+    {
+        string device = Unique;
+
+        HttpResponseMessage first = await PostAsync("/v1/auth/register",
+            new RegisterRequest($"dev1_{Unique[..12]}", "correct horse battery", device), Unique);
+        HttpResponseMessage second = await PostAsync("/v1/auth/register",
+            new RegisterRequest($"dev2_{Unique[..12]}", "correct horse battery", device), Unique);
+
+        Assert.Equal(HttpStatusCode.Created, first.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, second.StatusCode);
+    }
+
+    [Fact]
+    public async Task The_device_stays_with_the_account_it_was_first_linked_to()
+    {
+        string device = Unique;
+        AuthSession guest = await GuestAsync(device);
+
+        HttpResponseMessage registered = await PostAsync("/v1/auth/register",
+            new RegisterRequest($"dev3_{Unique[..12]}", "correct horse battery", device), Unique);
+        Assert.Equal(HttpStatusCode.Created, registered.StatusCode);
+
+        // A guest sign-in on that device still reopens the guest, not the account made after it.
+        AuthSession again = await GuestAsync(device);
+        Assert.Equal(guest.PlayerId, again.PlayerId);
+    }
+
+    [Fact]
+    public async Task A_taken_username_is_still_refused_from_a_linked_device()
+    {
+        string device = Unique;
+        string name = $"dev4_{Unique[..12]}";
+
+        await PostAsync("/v1/auth/register", new RegisterRequest(name, "correct horse battery", device), Unique);
+        HttpResponseMessage second = await PostAsync("/v1/auth/register",
+            new RegisterRequest(name, "correct horse battery", device), Unique);
+
+        Assert.Equal(HttpStatusCode.Conflict, second.StatusCode);
+        Assert.Equal(ErrorCodes.UsernameTaken, (await second.Content.ReadFromJsonAsync<ApiProblem>())!.Code);
+    }
+
     [Theory]
     [InlineData("ab", "correct horse battery")]        // username too short
     [InlineData("has spaces", "correct horse battery")] // username shape
