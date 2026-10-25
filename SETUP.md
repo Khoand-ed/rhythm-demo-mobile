@@ -351,6 +351,12 @@ old cut `portrait.png` is replaced and removed.
 When you have art of your own, put it in the operator's `CharMeta` (tracked) and remove the local
 folder. No code changes: `CharMeta` asks the local registry first and falls back to its own fields.
 
+**A build carries it.** The folder is under `Resources`, so a player built on a machine where the art
+is installed - the APK from `Arknights/Build/Android Development APK` included - packs it, and the
+phone shows the same operators the Editor does. That is deliberate: this is a study project, not one
+that will be published or sold. Gitignored, the art still never reaches the repository; a clone
+builds with the placeholders. To build without it, run `Remove Local Character Art` first.
+
 ### You do not need to build AssetBundles to run the game
 
 `Asset.Load` falls back to `Resources`, and every UI prefab is committed under
