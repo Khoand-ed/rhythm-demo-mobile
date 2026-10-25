@@ -42,6 +42,15 @@ namespace UI.Sub {
         private ShopItemPanel shopItemPanel;
         private List<ShopItem> list = new List<ShopItem>();
 
+        /// <summary>Back closes the purchase panel when it is open, before the shop.</summary>
+        public override void OnBack() {
+            if (shopItemPanel != null && shopItemPanel.transform.gameObject.activeSelf) {
+                Press(shopItemPanel.transform.Find("CloseButton").GetComponent<Button>());
+                return;
+            }
+            base.OnBack();
+        }
+
         public override void Init() {
             shopItemPanel = new ShopItemPanel(this, transform.Find("ShopItemPanel"));
             shopItemPanel.transform.gameObject.SetActive(false);

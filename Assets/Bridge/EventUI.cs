@@ -109,6 +109,8 @@ public class EventUI : UIBase
 
     // ------------------------------------------------------------------ lifecycle
 
+    public override Button ExitButton() => backButton;
+
     public override void Init()
     {
         backButton.onClick.AddListener(() => UIManager.Inst().Hide(UIName, true));

@@ -25,6 +25,9 @@ namespace UI.Sub {
         private GroundType type;
         private Mode mode;
         
+        /// <summary>Back is the dialog's own back button (the cross), in whichever mode it is open.</summary>
+        public override Button ExitButton() => GetBackButton();
+
         public override void Show() {
             base.Show();
             

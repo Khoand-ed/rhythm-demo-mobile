@@ -89,6 +89,19 @@ namespace UI.Sub {
 
         // ------------------------------------------------------------------ lifecycle
 
+        public override Button ExitButton() => backButton;
+
+        /// <summary>
+        /// Back closes what is open over the banners first - the pull results (a tap: the first skips the
+        /// reveal, the next closes it), a banner's details, the history - and only then leaves.
+        /// </summary>
+        public override void OnBack() {
+            if (resultView != null && resultView.gameObject.activeSelf) { Press(resultView.tapArea); return; }
+            if (detailsOverlay != null && detailsOverlay.activeSelf) { Press(detailsClose); return; }
+            if (historyView != null && historyView.gameObject.activeSelf) { Press(historyView.closeButton); return; }
+            base.OnBack();
+        }
+
         public override void Init() {
             backButton.onClick.AddListener(Back);
             originitePlus.onClick.AddListener(OpenShop);
