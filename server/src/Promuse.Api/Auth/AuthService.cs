@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Promuse.Api.Infrastructure;
 using Promuse.Api.Players;
 using Promuse.Contracts;
@@ -89,10 +90,33 @@ public sealed class AuthService(
     {
         DateTimeOffset now = clock.GetUtcNow();
 
+        string? device = string.IsNullOrWhiteSpace(request.DeviceId) ? null : request.DeviceId;
+
+        // 一台设备只连一个账号 / A device is linked to one account - the one a guest sign-in on it
+        // reopens. A second sign-up from a device already linked is a second account, not a
+        // conflict: it is created without the link, and the device stays with the account it had.
+        if (device is not null && await db.Accounts.AnyAsync(a => a.DeviceId == device, ct)) device = null;
+
+        Outcome<AuthSession>? outcome = await TryRegisterAsync(request, device, now, ct);
+
+        // Lost a race with another sign-up from the same device, between the check and the insert:
+        // the same as finding it linked - the account is made without the link.
+        outcome ??= await TryRegisterAsync(request, null, now, ct);
+
+        return outcome ?? throw new InvalidOperationException("A sign-up without a device cannot collide on one.");
+    }
+
+    /// <summary>
+    /// One attempt at the insert. Null when the device id collided (only possible with one), so the
+    /// caller can go again without it.
+    /// </summary>
+    private async Task<Outcome<AuthSession>?> TryRegisterAsync(
+        RegisterRequest request, string? device, DateTimeOffset now, CancellationToken ct)
+    {
         Account account = NewAccount(now);
         account.Username = request.Username;
         account.PasswordHash = passwords.Hash(request.Password);
-        account.DeviceId = string.IsNullOrWhiteSpace(request.DeviceId) ? null : request.DeviceId;
+        account.DeviceId = device;
 
         db.Accounts.Add(account);
 
@@ -104,18 +128,24 @@ public sealed class AuthService(
         {
             await db.SaveChangesAsync(ct);
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException e) when (e.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } unique)
         {
-            // 唯一索引才是裁判 / The unique index is the arbiter, not a prior
-            // SELECT. Checking first and inserting second leaves a window two
-            // concurrent sign-ups both pass through; this cannot.
+            // 唯一索引才是裁判 / The unique indexes are the arbiters, not a prior SELECT: checking
+            // first and inserting second leaves a window two concurrent sign-ups both pass through.
+            // Which index refused it decides the answer - only the username's is USERNAME_TAKEN.
             db.ChangeTracker.Clear();
 
-            return Outcome<AuthSession>.Fail(ApiProblems.UsernameTaken());
+            if (unique.ConstraintName == DeviceIndex && device is not null) return null;
+            if (unique.ConstraintName == UsernameIndex) return Outcome<AuthSession>.Fail(ApiProblems.UsernameTaken());
+            throw;
         }
 
         return Outcome<AuthSession>.Ok(await IssueSessionAsync(account, now, ct), created: true);
     }
+
+    // The two unique indexes on accounts (PromuseDbContext), by the names the migrations gave them.
+    private const string DeviceIndex = "ix_accounts_device_id";
+    private const string UsernameIndex = "ix_accounts_username";
 
     // --------------------------------------------------------------- login
 

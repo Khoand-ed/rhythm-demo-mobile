@@ -22,7 +22,9 @@ namespace Promuse.Contracts.Auth
     /// this account now has a username and a password.
     /// </summary>
     /// <param name="DeviceId">
-    /// Optional. On register it links this device at creation; on link it is
+    /// Optional. On register it links this device at creation - unless the device
+    /// is already linked to another account, which keeps it (a guest sign-in on it
+    /// reopens that one); the new account is made without the link. On link it is
     /// ignored, because the device is already attached to the session being
     /// upgraded.
     /// </param>

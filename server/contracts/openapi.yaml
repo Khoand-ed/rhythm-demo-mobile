@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Promuse Backend API
-  version: 1.0.0-draft.20
+  version: 1.0.0-draft.21
   summary: Authentication and player state for the Promuse mobile rhythm game.
   description: |
     **Phase 1** authentication, **Phase 2** player state, **Phase 3** the economy -
@@ -2925,7 +2925,11 @@ components:
             never logged, never echoed back in any response.
         deviceId:
           type: string
-          description: Optional. Links this device to the new account at creation.
+          description: |
+            Optional. Links this device to the new account at creation - unless the device is
+            already linked to another account, which keeps it: a guest sign-in on a device
+            reopens the account it was linked to first. A device may sign up any number of
+            accounts; only a taken username is `USERNAME_TAKEN`.
 
     LoginRequest:
       type: object
