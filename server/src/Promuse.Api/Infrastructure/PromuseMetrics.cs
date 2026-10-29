@@ -31,6 +31,8 @@ public sealed class PromuseMetrics
     private readonly Counter<long> _spent;
     private readonly Counter<long> _replays;
     private readonly Counter<long> _liveOpsRefusals;
+    private readonly Counter<long> _manufactureCollected;
+    private readonly Counter<long> _manufactureUpgrades;
 
     public PromuseMetrics(IMeterFactory meters)
     {
@@ -54,6 +56,10 @@ public sealed class PromuseMetrics
             "Requests answered from a stored response because their Idempotency-Key was seen before, by route.");
         _liveOpsRefusals = meter.CreateCounter<long>("promuse.liveops.refusals", "{request}",
             "Requests refused before reaching the game: maintenance, or a build older than the minimum.");
+        _manufactureCollected = meter.CreateCounter<long>("promuse.manufacture.collected", "{item}",
+            "Items collected from Manufacture stations, by station and the item made. What an upgrade collects first counts too.");
+        _manufactureUpgrades = meter.CreateCounter<long>("promuse.manufacture.upgrades", "{upgrade}",
+            "Manufacture stations raised, by station and the level reached.");
     }
 
     /// <summary>
@@ -139,6 +145,19 @@ public sealed class PromuseMetrics
         _purchases.Add(1, currency);
         _spent.Add(priceTotal, currency);
     }
+
+    /// <param name="station">lmd or exp.</param>
+    /// <param name="itemId">What the station made at the level it was collected at: LMD or a battle record.</param>
+    public void ManufactureCollected(string station, int itemId, int amount) =>
+        _manufactureCollected.Add(amount,
+            new KeyValuePair<string, object?>("station", station),
+            new KeyValuePair<string, object?>("item", itemId));
+
+    /// <param name="toLevel">The level reached - 2 or 3 today.</param>
+    public void ManufactureUpgraded(string station, int toLevel) =>
+        _manufactureUpgrades.Add(1,
+            new KeyValuePair<string, object?>("station", station),
+            new KeyValuePair<string, object?>("to_level", toLevel));
 
     // ---------------------------------------------------------- the plumbing
 

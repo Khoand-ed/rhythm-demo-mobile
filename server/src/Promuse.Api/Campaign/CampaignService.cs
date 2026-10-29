@@ -110,6 +110,17 @@ public sealed class CampaignService(PromuseDbContext db, TimeProvider clock, Inv
         return CampaignRules.Furthest(CampaignRules.Flatten(await DefinitionAsync(ct)), cleared)?.Code;
     }
 
+    /// <summary>
+    /// Every stage's code by its id - "main_1_3" is "1-3" - for a screen that names a stage the way
+    /// the player knows it. From the live definition, so a stage an admin renamed shows its new code.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<string, string>> StageCodesAsync(CancellationToken ct)
+    {
+        var codes = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (_, stage) in CampaignRules.Flatten(await DefinitionAsync(ct))) codes.TryAdd(stage.StageId, stage.Code);
+        return codes;
+    }
+
     private async Task<HashSet<string>> ClearedAsync(Guid accountId, CancellationToken ct) =>
         [.. await db.CampaignClears.AsNoTracking()
             .Where(c => c.AccountId == accountId).Select(c => c.StageId).ToListAsync(ct)];

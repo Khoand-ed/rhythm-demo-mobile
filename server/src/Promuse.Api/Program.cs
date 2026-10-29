@@ -22,6 +22,7 @@ using Promuse.Api.Notices;
 using Promuse.Api.SignIn;
 using Promuse.Api.Campaign;
 using Promuse.Api.Characters;
+using Promuse.Api.Manufacture;
 using Microsoft.Extensions.Options;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -78,6 +79,16 @@ builder.Services.AddOptions<MissionOptions>()
 builder.Services.AddOptions<StaminaOptions>()
     .Bind(builder.Configuration.GetSection(StaminaOptions.SectionName))
     .ValidateDataAnnotations()
+    .ValidateOnStart();
+
+// 只有开发环境能加速 / A Manufacture that runs faster than real time is for trying the screens
+// locally. Anywhere else it would hand out the economy many times over, so the server refuses to
+// start rather than run that way.
+builder.Services.AddOptions<ManufactureOptions>()
+    .Bind(builder.Configuration.GetSection(ManufactureOptions.SectionName))
+    .ValidateDataAnnotations()
+    .Validate(o => ManufactureOptions.Allows(o.TimeScale, builder.Environment.IsDevelopment()),
+        "Manufacture:TimeScale runs the stations faster than real time, which only a Development server may do.")
     .ValidateOnStart();
 
 builder.Services.AddSingleton(TimeProvider.System);
@@ -138,6 +149,7 @@ builder.Services.AddScoped<MailService>();
 builder.Services.AddScoped<NoticeService>();
 builder.Services.AddScoped<SignInService>();
 builder.Services.AddScoped<CampaignService>();
+builder.Services.AddScoped<ManufactureService>();
 builder.Services.AddScoped<PlayerLevels>();
 builder.Services.AddOptions<NoticeOptions>().Bind(builder.Configuration.GetSection(NoticeOptions.SectionName));
 
@@ -336,6 +348,7 @@ app.MapMailEndpoints();
 app.MapNoticeEndpoints();
 app.MapSignInEndpoints();
 app.MapCampaignEndpoints();
+app.MapManufactureEndpoints();
 
 
 app.Run();
