@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Promuse Backend API
-  version: 1.0.0-draft.21
+  version: 1.0.0-draft.22
   summary: Authentication and player state for the Promuse mobile rhythm game.
   description: |
     **Phase 1** authentication, **Phase 2** player state, **Phase 3** the economy -
@@ -121,6 +121,14 @@ tags:
       once; every clear rolls its drops on the server. Every cleared ranked run also pays player
       EXP (Sanity x the config's expPerSanity), and each level reached pays level/5 Originite Prime
       and refills Sanity.
+  - name: manufacture
+    description: |
+      Manufacture: two stations, one making LMD and one making battle records, that produce in
+      real time into a store that stops when it is full. The player comes back to collect.
+
+      Opened by Manufacture Blueprint I. A station is raised with LMD while holding the next level's
+      blueprint. Blueprints are paid by the first clear of a story stage and are never spent.
+      Behind the `manufacture` feature flag, which is off unless a config switches it on.
   - name: mail
     description: |
       The mailbox. An administrator sends to one player or to every player who exists then;
@@ -1818,6 +1826,124 @@ paths:
           $ref: '#/components/responses/ValidationFailed'
         '428':
           $ref: '#/components/responses/PreconditionRequired'
+
+  /v1/manufacture:
+    get:
+      tags: [manufacture]
+      operationId: getManufacture
+      summary: The player's stations and what each holds now.
+      description: |
+        Locked until the player holds Manufacture Blueprint I: `isUnlocked` is false and
+        `unlockStageCode` names the stage that opens it. The first read after that creates both
+        stations at level 1, counting from the player's first clear of that stage.
+
+        What a station holds is worked out from `anchorAt` and the time - nothing is stored or
+        ticks - so two reads always agree. `nextUnitAt` and `fullAt` let the game count down
+        without asking again.
+      responses:
+        '200':
+          description: The stations, or the lock.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManufactureView'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /v1/manufacture/collect:
+    post:
+      tags: [manufacture]
+      operationId: collectManufacture
+      summary: Collect one station, or every station that has something.
+      description: |
+        Whole units only. The part of a unit still being made stays, so collecting early costs
+        nothing. A full store has stopped, and starts again from the collection.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CollectRequest'
+      responses:
+        '200':
+          description: Collected. The bag and the stations come back as they now are.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManufactureActionResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: |
+            `MANUFACTURE_LOCKED` (no Manufacture Blueprint I yet; the detail names the stage that
+            pays it), or `NOTHING_TO_CLAIM` (nothing made since the last collection).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /v1/manufacture/upgrade:
+    post:
+      tags: [manufacture]
+      operationId: upgradeManufactureStation
+      summary: Raise a station one level.
+      description: |
+        Needs the next level's blueprint in the bag and its LMD: 8,000 for level 2, 25,000 for
+        level 3. The blueprint is held, never spent. What the station made at its old level is
+        collected first, so LMD it made counts toward the price. Everything happens or nothing does.
+
+        `fromLevel` is the level the player saw. If the screen has fallen behind - the station was
+        raised on another device - the request is refused with `412` rather than raising it twice.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpgradeRequest'
+      responses:
+        '200':
+          description: Raised. The bag and the stations come back as they now are.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManufactureActionResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: |
+            `MANUFACTURE_LOCKED`, `LEVEL_CAPPED` (already at the highest level),
+            `BLUEPRINT_REQUIRED` (the detail names the stage that pays it), or
+            `INSUFFICIENT_FUNDS` (not enough LMD, even with what the station held). Nothing changes.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '412':
+          description: |
+            `STATE_CONFLICT`: the station is no longer at `fromLevel`. Reload Manufacture and try
+            again. Nothing changes.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
 
   /v1/mail:
     get:
@@ -3960,6 +4086,13 @@ components:
         leaderboards:
           type: boolean
           description: GET /v1/leaderboards/{stageId}. Scores are still recorded while off.
+        manufacture:
+          type: boolean
+          default: false
+          description: |
+            Every /v1/manufacture endpoint. Off unless a config says on: a config written before
+            Manufacture existed has no such field and reads as off. Production keeps counting
+            while it is off.
 
     ConfigDocument:
       type: object
@@ -5266,3 +5399,145 @@ components:
       properties:
         definition:
           $ref: '#/components/schemas/CampaignDefinition'
+
+    StationLevel:
+      type: object
+      description: What a Manufacture station makes at one level.
+      required: [level, itemId, unitAmount, secondsPerUnit, capacityUnits]
+      properties:
+        level:
+          type: integer
+          minimum: 1
+        itemId:
+          type: integer
+          description: 2 LMD, 11 Basic Battle Record, 14 Frontline Battle Record.
+        unitAmount:
+          type: integer
+          description: Items in one unit - 50 LMD, or one record.
+        secondsPerUnit:
+          type: integer
+          minimum: 1
+          description: |
+            As this server runs it. A Local server may run faster than real time to try the
+            screens; every other server runs in real time.
+        capacityUnits:
+          type: integer
+          minimum: 1
+          description: The store stops at this many units.
+
+    StationUpgrade:
+      type: object
+      description: A station's next level and what it takes to get there.
+      required: [to, cost, blueprintItemId, blueprintStageCode]
+      properties:
+        to:
+          $ref: '#/components/schemas/StationLevel'
+        cost:
+          type: array
+          description: Spent on the upgrade. The blueprint is not in it - it is held, not spent.
+          items:
+            $ref: '#/components/schemas/ItemStack'
+        blueprintItemId:
+          type: integer
+          description: The blueprint the player must hold - 31 Manufacture Blueprint II, 32 Blueprint III.
+        blueprintStageCode:
+          type: string
+          description: The stage whose first clear pays it, as the player knows it.
+          examples: ['1-3']
+
+    StationState:
+      type: object
+      required: [stationId, level, maxLevel, current, storedUnits, anchorAt]
+      properties:
+        stationId:
+          type: string
+          enum: [lmd, exp]
+        level:
+          type: integer
+          minimum: 1
+        maxLevel:
+          type: integer
+        current:
+          $ref: '#/components/schemas/StationLevel'
+        storedUnits:
+          type: integer
+          minimum: 0
+        anchorAt:
+          type: string
+          format: date-time
+          description: |
+            The moment production is counted from, in whole seconds. With `secondsPerUnit` it lets
+            the game run the same clock between two reads.
+        nextUnitAt:
+          type: [string, 'null']
+          format: date-time
+          description: When the next unit lands; null when the store is full.
+        fullAt:
+          type: [string, 'null']
+          format: date-time
+          description: When the store fills; null when it already has.
+        next:
+          oneOf:
+            - $ref: '#/components/schemas/StationUpgrade'
+            - type: 'null'
+          description: The next level; null at the highest.
+
+    ManufactureView:
+      type: object
+      required: [isUnlocked, stations, serverTime]
+      properties:
+        isUnlocked:
+          type: boolean
+          description: The player holds Manufacture Blueprint I.
+        unlockStageCode:
+          type: [string, 'null']
+          description: The stage whose first clear opens Manufacture; null once open.
+          examples: ['1-1']
+        stations:
+          type: array
+          description: Empty while locked. LMD first.
+          items:
+            $ref: '#/components/schemas/StationState'
+        serverTime:
+          $ref: '#/components/schemas/ServerTime'
+        player:
+          oneOf:
+            - $ref: '#/components/schemas/PlayerState'
+            - type: 'null'
+          description: |
+            Present only when this read handed something out, such as a blueprint owed for a stage
+            cleared before Manufacture existed. The bag changed, so the game applies it.
+
+    CollectRequest:
+      type: object
+      properties:
+        stationId:
+          type: [string, 'null']
+          enum: [lmd, exp, null]
+          description: One station, or null to collect from every station that has something.
+
+    UpgradeRequest:
+      type: object
+      required: [stationId, fromLevel]
+      properties:
+        stationId:
+          type: string
+          enum: [lmd, exp]
+        fromLevel:
+          type: integer
+          minimum: 1
+          description: The level the player saw the station at.
+
+    ManufactureActionResult:
+      type: object
+      required: [view, granted, player]
+      properties:
+        view:
+          $ref: '#/components/schemas/ManufactureView'
+        granted:
+          type: array
+          description: What went into the bag, including anything an upgrade collected first.
+          items:
+            $ref: '#/components/schemas/ItemStack'
+        player:
+          $ref: '#/components/schemas/PlayerState'
