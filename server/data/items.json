@@ -14,6 +14,9 @@
     { "id": 14, "name": "Frontline Battle Record", "rarity": 3 },
     { "id": 15, "name": "Tactical Battle Record", "rarity": 4 },
     { "id": 16, "name": "Strategic Battle Record", "rarity": 5 },
-    { "id": 20, "name": "Event Token", "rarity": 4 }
+    { "id": 20, "name": "Event Token", "rarity": 4 },
+    { "id": 30, "name": "Manufacture Blueprint I", "rarity": 3 },
+    { "id": 31, "name": "Manufacture Blueprint II", "rarity": 4 },
+    { "id": 32, "name": "Manufacture Blueprint III", "rarity": 5 }
   ]
 }

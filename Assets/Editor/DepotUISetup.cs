@@ -117,6 +117,29 @@ public static class DepotUISetup
             "A festival token. Worth a great deal at the festival and nothing at all after it.",
             "Event Stages, Event Rewards",
             new Color(0.95f, 0.62f, 0.25f)),
+
+        // 制造站蓝图 / Manufacture's key items (Promuse.Contracts.Items.KeyItems): held, never spent,
+        // each paid once by a story stage's first clear (ManufactureRules.Blueprints on the server).
+        new SeedItem(30, "Manufacture Blueprint I", 3, ItemType.JI_CHU,
+            "Unlocks Manufacture on Home. Kept, not spent.",
+            "Plans for a small production line, signed off by the logistics office. Whoever holds " +
+            "them has a workshop waiting.",
+            "First clear of 1-1",
+            new Color(0.40f, 0.72f, 0.86f)),
+
+        new SeedItem(31, "Manufacture Blueprint II", 4, ItemType.JI_CHU,
+            "Lets a Manufacture station reach Lv2. Kept, not spent.",
+            "Revised plans with a second shift pencilled in. The margins are full of someone's " +
+            "arguments with the supply budget.",
+            "First clear of 1-3",
+            new Color(0.56f, 0.52f, 0.90f)),
+
+        new SeedItem(32, "Manufacture Blueprint III", 5, ItemType.JI_CHU,
+            "Lets a Manufacture station reach Lv3. Kept, not spent.",
+            "The full layout, stamped and approved. Every station on it runs without stopping, " +
+            "on paper at least.",
+            "First clear of 2-3",
+            new Color(0.95f, 0.70f, 0.30f)),
     };
 
     [MenuItem("Arknights/Depot/Create Missing Item Metas", false, 0)]
