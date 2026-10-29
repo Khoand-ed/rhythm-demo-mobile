@@ -156,6 +156,7 @@ public class RetryAndQueueTests
         Assert.AreEqual("1.0.1", config.Document.MinClientVersion);
         Assert.IsFalse(config.Document.Features.Gacha);
         Assert.IsFalse(config.Document.Features.Leaderboards);
+        Assert.IsFalse(config.Document.Features.Manufacture, "a config written before Manufacture existed reads it as off");
         Assert.AreEqual("Hi", config.Document.Announcement);
 
         new RemoteConfigCache(directory).Store(config);
