@@ -115,6 +115,15 @@ public class ManufactureRulesTests
         Assert.Equal(1, ManufactureRules.Scaled(lmd, 100_000).SecondsPerUnit);
     }
 
+    [Fact]
+    public void Only_a_development_server_may_run_faster_than_real_time()
+    {
+        Assert.True(ManufactureOptions.Allows(1, isDevelopment: false));
+        Assert.True(ManufactureOptions.Allows(60, isDevelopment: true));
+        Assert.False(ManufactureOptions.Allows(60, isDevelopment: false));
+        Assert.False(ManufactureOptions.Allows(2, isDevelopment: false));
+    }
+
     // ----------------------------------------------------------- blueprints
 
     [Fact]

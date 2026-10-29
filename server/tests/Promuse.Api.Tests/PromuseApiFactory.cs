@@ -43,6 +43,10 @@ public sealed class PromuseApiFactory : WebApplicationFactory<Program>, IAsyncLi
         // itself by driving the endpoint past this number deliberately.
         builder.UseSetting("RateLimit:AuthPermitPerMinute", "10000");
 
+        // 真实时间 / Manufacture in real time, whatever the Development settings run it at: the
+        // tests move a station's anchor back by the hours they need rather than racing a clock.
+        builder.UseSetting("Manufacture:TimeScale", "1");
+
         builder.UseSetting("Jwt:Issuer", "promuse-test");
         builder.UseSetting("Jwt:Audience", "promuse-test-client");
         builder.UseSetting("Jwt:SigningKey", "test-only-signing-key-at-least-32-bytes-long");
