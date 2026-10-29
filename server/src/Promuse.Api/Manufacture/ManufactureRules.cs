@@ -7,8 +7,14 @@ namespace Promuse.Api.Manufacture;
 
 /// <summary>
 /// 制造站的规则 / What each station makes at each level, what raising it costs, and which story
-/// stage pays the blueprint that allows it. The numbers are docs/design/manufacture-plan.md,
-/// section 5.2; ManufactureRulesTests pins them, so changing one is a change to both.
+/// stage pays the blueprint that allows it. ManufactureRulesTests pins every number, so changing
+/// one is a deliberate change to both.
+///
+/// 定的尺度 / The scale: collected twice a day, level 3 adds about a third of the LMD a player
+/// earns from 15 clears of 2-1 plus missions and sign-in, and about three quarters of the EXP.
+/// More EXP than LMD on purpose - spending EXP costs LMD (3 to 8 tenths of it), so the record
+/// station is held back by the LMD station rather than handing out free levels. A store fills in
+/// 8 to 12 hours, so one or two visits a day collect nearly everything.
 ///
 /// 只放在服务端 / Server-side only. The client never needs the table: every screen reads the level
 /// it shows, and the next one, from the view the server sends.

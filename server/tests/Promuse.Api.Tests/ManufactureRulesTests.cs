@@ -8,9 +8,9 @@ using Promuse.Persistence;
 namespace Promuse.Api.Tests;
 
 /// <summary>
-/// 数字钉死 / The Manufacture table, pinned. These are the numbers agreed in
-/// docs/design/manufacture-plan.md, section 5.2: changing one here means changing it there, in
-/// the same change, with the reason.
+/// 数字钉死 / The Manufacture table, pinned to the numbers agreed for its first version. A
+/// failure here means a number moved: change it here too, in the same change, and say why in the
+/// commit - the economy around it was sized on these.
 /// </summary>
 public class ManufactureRulesTests
 {
