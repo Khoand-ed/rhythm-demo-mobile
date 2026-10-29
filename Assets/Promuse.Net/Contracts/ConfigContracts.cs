@@ -21,7 +21,15 @@ namespace Promuse.Contracts.Config
     /// <param name="Shop">Shop purchases.</param>
     /// <param name="Ranked">Opening a ranked run. Practice never touches the server.</param>
     /// <param name="Leaderboards">Reading the boards. Scores are still recorded while they are off.</param>
-    public sealed record FeatureFlags(bool Gacha, bool Shop, bool Ranked, bool Leaderboards);
+    /// <param name="Manufacture">
+    /// Every Manufacture endpoint - reading the stations, collecting, raising one. Production keeps
+    /// counting while it is off, so switching it back on takes nothing from anyone.
+    ///
+    /// 默认关 / Off unless a config says on, unlike the four above. Manufacture is a new source of
+    /// LMD and battle records, so a server that was never told about it - every config written before
+    /// it existed - does not open it by itself. Last, with a default, so those configs still read.
+    /// </param>
+    public sealed record FeatureFlags(bool Gacha, bool Shop, bool Ranked, bool Leaderboards, bool Manufacture = false);
 
     /// <summary>
     /// What an operator edits. Typed rather than a free-form bag of keys: each field has code on

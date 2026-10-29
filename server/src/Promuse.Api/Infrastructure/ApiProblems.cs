@@ -184,6 +184,26 @@ public static class ApiProblems
         Create(409, ErrorCodes.BelowLevelCap, "Not at the level cap yet",
             $"The operator is level {level}; promotion needs level {maxLevel}.");
 
+    public static ApiProblem ManufactureLocked(string stageCode) =>
+        Create(409, ErrorCodes.ManufactureLocked, "Manufacture is locked",
+            $"Clear stage {stageCode} to unlock Manufacture.");
+
+    public static ApiProblem BlueprintRequired(int level, string stageCode) =>
+        Create(409, ErrorCodes.BlueprintRequired, "Blueprint needed",
+            $"Raising a station to level {level} needs the blueprint that clearing stage {stageCode} gives.");
+
+    public static ApiProblem StationLevelCapped(int maxLevel) =>
+        Create(409, ErrorCodes.LevelCapped, "Already at the highest level",
+            $"The station is at level {maxLevel}, the highest there is.");
+
+    /// <summary>
+    /// 412 like every other "moved on": the screen that asked is behind - the station was raised
+    /// on another device - so it reloads rather than raising the station a second time.
+    /// </summary>
+    public static ApiProblem StationMovedOn(int level) =>
+        Create(412, ErrorCodes.StateConflict, "Station has moved on",
+            $"The station is at level {level} now. Reload Manufacture and try again.");
+
     public static ApiProblem PlayerNotFound() =>
         Create(404, ErrorCodes.PlayerNotFound, "No such player", "There is no player with that id.");
 

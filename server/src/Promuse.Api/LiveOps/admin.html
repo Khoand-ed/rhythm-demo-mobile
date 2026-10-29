@@ -133,6 +133,7 @@
         <label><input id="fShop" type="checkbox"> Store</label>
         <label><input id="fRanked" type="checkbox"> Ranked play</label>
         <label><input id="fLeaderboards" type="checkbox"> Leaderboards</label>
+        <label><input id="fManufacture" type="checkbox"> Manufacture</label>
       </div>
     </div>
 
@@ -538,6 +539,7 @@
     $('fShop').checked = doc.features.shop;
     $('fRanked').checked = doc.features.ranked;
     $('fLeaderboards').checked = doc.features.leaderboards;
+    $('fManufacture').checked = doc.features.manufacture === true;
     $('announcement').value = doc.announcement || '';
     $('expPerSanity').value = doc.expPerSanity ?? '';
   }
@@ -554,6 +556,7 @@
       features: {
         gacha: $('fGacha').checked, shop: $('fShop').checked,
         ranked: $('fRanked').checked, leaderboards: $('fLeaderboards').checked,
+        manufacture: $('fManufacture').checked,
       },
       announcement: text('announcement'),
       expPerSanity: $('expPerSanity').value.trim() === '' ? null : Number($('expPerSanity').value),
