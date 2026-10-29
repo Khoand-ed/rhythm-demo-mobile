@@ -3,10 +3,12 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.Extensions.DependencyInjection;
+using Promuse.Api.Manufacture;
 using Promuse.Api.Runs;
 using Promuse.Contracts.Campaign;
 using Promuse.Contracts.Events;
 using Promuse.Contracts.Items;
+using Promuse.Contracts.Manufacture;
 using Promuse.Persistence;
 
 namespace Promuse.Api.Tests;
@@ -68,6 +70,16 @@ public class ItemCatalogTests(PromuseApiFactory factory) : HomeContentTestBase(f
         paid.Add(("level-up", SeedCampaign.OriginitePrimeItemId));
 
         paid.AddRange(SeedSignIn.Default().Select(r => ("sign-in", r.ItemId)));
+
+        // 制造站 / What Manufacture pays: its blueprints, and what each station makes at every level.
+        paid.AddRange(ManufactureRules.Blueprints.Select(b => ("manufacture blueprint", b.ItemId)));
+        foreach (string station in ManufactureStations.All)
+        {
+            for (int level = 1; level <= ManufactureRules.MaxLevel; level++)
+            {
+                paid.Add(($"manufacture {station} level {level}", ManufactureRules.LevelOf(station, level).ItemId));
+            }
+        }
 
         // 新账号 / What a new account starts with.
         var (session, _) = await PlayerAsync();
