@@ -196,6 +196,18 @@ namespace Promuse.Contracts
         public const string BelowLevelCap = "BELOW_LEVEL_CAP";
 
         /// <summary>
+        /// Manufacture is not open to this player yet: it opens with Manufacture Blueprint I, which
+        /// the first clear of a story stage pays. The detail names the stage.
+        /// </summary>
+        public const string ManufactureLocked = "MANUFACTURE_LOCKED";
+
+        /// <summary>
+        /// Raising a station to the next level needs that level's blueprint in the bag. It is held,
+        /// not spent; the first clear of a story stage pays it, and the detail names the stage.
+        /// </summary>
+        public const string BlueprintRequired = "BLUEPRINT_REQUIRED";
+
+        /// <summary>
         /// The game is down for maintenance. Temporary by definition: a result that could not be
         /// sent is kept and sent afterwards, and the detail says what the operator wrote.
         /// </summary>
