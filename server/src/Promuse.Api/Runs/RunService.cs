@@ -204,6 +204,7 @@ public sealed class RunService(
         bool ranked = countsAsClear && review!.Verdict == ScoreVerdict.Accepted;
         bool personalBest = false;
         RunRewards? rewards = null;
+        List<Action> afterCommit = [];
 
         await using (var transaction = await db.Database.BeginTransactionAsync(ct))
         {
@@ -235,22 +236,25 @@ public sealed class RunService(
             }
 
             // 主线和经验 / A cleared run pays its EXP - and, played as a campaign stage, that stage's
-            // first-clear Orundum and drops - in the same transaction that closes it.
+            // first-clear Orundum, what else its first clear pays, and its drops - in the same
+            // transaction that closes it.
             if (countsAsClear)
             {
-                (int orundum, List<ItemStack> drops) = run.CampaignStageId is { } campaignStage
+                Campaign.CampaignPayout paid = run.CampaignStageId is { } campaignStage
                     ? await campaign.OnClearedAsync(accountId, campaignStage, now, ct)
-                    : (0, []);
+                    : Campaign.CampaignPayout.None;
 
                 ExpGain exp = await levels.GrantAsync(accountId, run.StaminaSpent, now, ct);
 
                 // GrantAsync moves the state version whenever it writes; the bag alone needs a bump.
-                if ((orundum > 0 || drops.Count > 0) && exp.Exp == 0)
+                if (paid.PaidAnything && exp.Exp == 0)
                 {
                     await inventory.BumpStateVersionAsync(accountId, now, ct);
                 }
 
-                rewards = new RunRewards(orundum, drops, exp.Exp, exp.LevelBefore, exp.LevelAfter, exp.Prime);
+                rewards = new RunRewards(paid.Orundum, paid.Drops, exp.Exp, exp.LevelBefore, exp.LevelAfter, exp.Prime,
+                    paid.FirstClearItems);
+                afterCommit = paid.AfterCommit;
             }
 
             if (ranked)
@@ -263,6 +267,9 @@ public sealed class RunService(
         }
 
         Count(review, request.Won);
+
+        // 提交之后 / What the first-clear listeners count, now that what they paid is committed.
+        foreach (Action committed in afterCommit) committed();
 
         ScoreReview? answer = null;
 

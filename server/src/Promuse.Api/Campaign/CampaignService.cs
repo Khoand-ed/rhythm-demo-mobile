@@ -14,8 +14,17 @@ namespace Promuse.Api.Campaign;
 /// <summary>
 /// The main campaign: what a player sees of it, whether a run may open as one of its stages, and
 /// what a cleared stage pays. Plus the admin side that edits it.
+///
+/// 首通的听众 / What else a first clear pays - Manufacture's blueprints - comes from the
+/// <see cref="ICampaignClearListener"/>s, so the campaign pays it and guards the stages it is paid
+/// on without knowing what any of it is.
 /// </summary>
-public sealed class CampaignService(PromuseDbContext db, TimeProvider clock, Inventory inventory, IGachaDice dice)
+public sealed class CampaignService(
+    PromuseDbContext db,
+    TimeProvider clock,
+    Inventory inventory,
+    IGachaDice dice,
+    IEnumerable<ICampaignClearListener> listeners)
 {
     // ------------------------------------------------------------------ player
 
@@ -65,17 +74,19 @@ public sealed class CampaignService(PromuseDbContext db, TimeProvider clock, Inv
     }
 
     /// <summary>
-    /// A run opened as a campaign stage was cleared: record the clear, pay the first-clear Orundum
-    /// the first time, roll the drops every time. Inside the caller's transaction, which opens none.
+    /// A run opened as a campaign stage was cleared: record the clear, pay the first-clear Orundum -
+    /// and whatever the listeners pay - the first time, roll the drops every time. Inside the caller's
+    /// transaction, which opens none; the caller runs <see cref="CampaignPayout.AfterCommit"/> once
+    /// it has committed.
     /// </summary>
-    public async Task<(int Orundum, List<ItemStack> Drops)> OnClearedAsync(
+    public async Task<CampaignPayout> OnClearedAsync(
         Guid accountId, string stageId, DateTimeOffset now, CancellationToken ct)
     {
         CampaignStage? stage = CampaignRules.Flatten(await DefinitionAsync(ct))
             .Select(o => o.Stage).FirstOrDefault(s => s.StageId == stageId);
 
         // 关卡被删了 / Removed from the campaign while the song was played: nothing to pay.
-        if (stage is null) return (0, []);
+        if (stage is null) return CampaignPayout.None;
 
         // 先插入 / Insert-if-absent first: of two clears racing for a first clear, exactly one inserts,
         // and only that one pays the Orundum. The other counts as a repeat clear.
@@ -95,10 +106,22 @@ public sealed class CampaignService(PromuseDbContext db, TimeProvider clock, Inv
         int orundum = first == 1 ? stage.FirstClearOrundum : 0;
         if (orundum > 0) await inventory.CreditAsync(accountId, SeedCampaign.OrundumItemId, orundum, ct);
 
+        var firstClearItems = new List<ItemStack>();
+        var afterCommit = new List<Action>();
+        if (first == 1)
+        {
+            foreach (ICampaignClearListener listener in listeners)
+            {
+                FirstClearPayout payout = await listener.OnFirstClearAsync(accountId, stageId, now, ct);
+                firstClearItems.AddRange(payout.Items);
+                if (payout.Committed is not null) afterCommit.Add(payout.Committed);
+            }
+        }
+
         List<ItemStack> drops = CampaignRules.Roll(stage.Drops, dice);
         foreach (ItemStack drop in drops) await inventory.CreditAsync(accountId, drop.ItemId, drop.Amount, ct);
 
-        return (orundum, drops);
+        return new CampaignPayout(orundum, drops, firstClearItems, afterCommit);
     }
 
     /// <summary>The code of the furthest stage <paramref name="accountId"/> has cleared, for a profile.</summary>
@@ -155,6 +178,22 @@ public sealed class CampaignService(PromuseDbContext db, TimeProvider clock, Inv
     {
         HashSet<string> charts = [.. await db.Stages.AsNoTracking().Select(s => s.StageId).ToListAsync(ct)];
         Dictionary<string, string[]> errors = CampaignRules.Validate(request?.Definition, charts);
+
+        // 不能删掉付东西的关 / A stage a listener pays on stays: without it, what it paid - a
+        // Manufacture blueprint - could never be had again, and everything behind it stays shut.
+        if (errors.Count == 0)
+        {
+            HashSet<string> stages =
+                [.. CampaignRules.Flatten(CampaignRules.Normalize(request!.Definition)).Select(o => o.Stage.StageId)];
+            string[] lost =
+            [
+                .. listeners.SelectMany(l => l.StagesPaidOn)
+                    .Where(paid => !stages.Contains(paid.Key))
+                    .Select(paid => $"Stage '{paid.Key}' cannot be removed: {paid.Value}."),
+            ];
+            if (lost.Length > 0) errors["chapters"] = lost;
+        }
+
         if (errors.Count > 0) return Outcome<AdminCampaign>.Fail(ApiProblems.ValidationFailed(errors));
 
         CampaignRow? row = await db.Campaigns.FirstOrDefaultAsync(c => c.Key == SeedCampaign.Key, ct);
