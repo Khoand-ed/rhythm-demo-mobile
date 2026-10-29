@@ -91,6 +91,8 @@ public class PromuseDbContext(DbContextOptions<PromuseDbContext> options) : DbCo
 
     public DbSet<SignatureReport> SignatureReports => Set<SignatureReport>();
 
+    public DbSet<ManufactureStation> ManufactureStations => Set<ManufactureStation>();
+
     /// <summary>Hands every story correction its revision - see <see cref="StoryLinePatch"/>.</summary>
     public const string StoryPatchRevisions = "story_patch_revisions";
 
@@ -691,6 +693,23 @@ public class PromuseDbContext(DbContextOptions<PromuseDbContext> options) : DbCo
             entity.Property(c => c.StageId).HasMaxLength(64);
             entity.ToTable(t => t.HasCheckConstraint("ck_campaign_clears_clears", "clears > 0"));
             entity.HasOne<Player>().WithMany().HasForeignKey(c => c.AccountId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ManufactureStation>(entity =>
+        {
+            entity.ToTable("manufacture_stations");
+            entity.HasKey(s => new { s.AccountId, s.StationId });
+            entity.Property(s => s.StationId).HasMaxLength(16);
+
+            // 没有上限 / A floor and no ceiling: the highest level lives in ManufactureRules, so a
+            // level added there needs no migration. The station ids are fixed and checked here.
+            entity.ToTable(t =>
+            {
+                t.HasCheckConstraint("ck_manufacture_stations_level", "level >= 1");
+                t.HasCheckConstraint("ck_manufacture_stations_station", "station_id IN ('exp', 'lmd')");
+            });
+
+            entity.HasOne<Player>().WithMany().HasForeignKey(s => s.AccountId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.HasSequence<int>(StoryPatchRevisions);

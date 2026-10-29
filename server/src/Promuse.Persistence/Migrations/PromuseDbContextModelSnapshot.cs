@@ -856,6 +856,40 @@ namespace Promuse.Persistence.Migrations
                     b.ToTable("mail_receipts", (string)null);
                 });
 
+            modelBuilder.Entity("Promuse.Persistence.Entities.ManufactureStation", b =>
+                {
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("account_id");
+
+                    b.Property<string>("StationId")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("station_id");
+
+                    b.Property<DateTimeOffset>("AnchorAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("anchor_at");
+
+                    b.Property<int>("Level")
+                        .HasColumnType("integer")
+                        .HasColumnName("level");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("AccountId", "StationId")
+                        .HasName("pk_manufacture_stations");
+
+                    b.ToTable("manufacture_stations", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_manufacture_stations_level", "level >= 1");
+
+                            t.HasCheckConstraint("ck_manufacture_stations_station", "station_id IN ('exp', 'lmd')");
+                        });
+                });
+
             modelBuilder.Entity("Promuse.Persistence.Entities.MissionClaim", b =>
                 {
                     b.Property<Guid>("AccountId")
@@ -2419,6 +2453,16 @@ namespace Promuse.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_mail_receipts_mails_mail_id");
+                });
+
+            modelBuilder.Entity("Promuse.Persistence.Entities.ManufactureStation", b =>
+                {
+                    b.HasOne("Promuse.Persistence.Entities.Player", null)
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_manufacture_stations_players_account_id");
                 });
 
             modelBuilder.Entity("Promuse.Persistence.Entities.MissionClaim", b =>
