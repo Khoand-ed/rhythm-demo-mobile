@@ -30,6 +30,7 @@ public sealed class ManufactureService(
     Inventory inventory,
     PlayerService players,
     CampaignService campaign,
+    BlueprintGrants blueprints,
     PromuseMetrics metrics,
     IOptions<ManufactureOptions> options,
     ILogger<ManufactureService> logger)
@@ -41,12 +42,22 @@ public sealed class ManufactureService(
 
     public async Task<ManufactureView> ViewAsync(Guid accountId, CancellationToken ct)
     {
+        // 先补发 / Blueprints the player earned and was never paid come first, so a player who
+        // cleared 1-1 before Manufacture existed finds it open on this very read. The bag changed,
+        // so the whole save comes back with the view.
+        PlayerState? player = null;
+        if ((await blueprints.BackfillAsync(accountId, ct)).Count > 0)
+        {
+            Outcome<PlayerState> state = await players.GetStateAsync(accountId, ct);
+            if (state.IsSuccess) player = state.Value;
+        }
+
         DateTimeOffset now = clock.GetUtcNow();
         IReadOnlyDictionary<string, string> codes = await campaign.StageCodesAsync(ct);
 
         if (!await HoldsAsync(accountId, KeyItems.ManufactureBlueprint1, ct))
         {
-            return new ManufactureView(false, CodeOf(codes, ManufactureRules.UnlockStageId), [], now);
+            return new ManufactureView(false, CodeOf(codes, ManufactureRules.UnlockStageId), [], now, player);
         }
 
         await EnsureStationsAsync(accountId, now, ct);
@@ -62,7 +73,7 @@ public sealed class ManufactureService(
             if (row is not null) stations.Add(StateOf(row, now, codes));
         }
 
-        return new ManufactureView(true, null, stations, now);
+        return new ManufactureView(true, null, stations, now, player);
     }
 
     // --------------------------------------------------------------- collect
