@@ -21,6 +21,7 @@ other way: predefined assemblies auto-reference every asmdef, never the reverse.
 | `Arknights` (asmdef) | `Assets/Arknights/` — UI, data, managers, Lua | DOTween, Spine, XLua, TMP, uGUI |
 | `Rhythm.Core` (asmdef) | `Assets/Source/Script/Core/` — judging, health, fever, chart data | UnityEngine only |
 | `Promuse.Net` (asmdef) | `Assets/Promuse.Net/` — wire contracts, HTTP transport, token store | UnityEngine, Newtonsoft |
+| `Promuse.Manufacture` (asmdef) | `Assets/Manufacture/` — Manufacture's data, and later its screen and room | `Arknights`, `Promuse.Net` |
 | `Assembly-CSharp` (default) | `Assets/Source/Script/`, `Assets/Bridge/` | **everything above** |
 | `Assembly-CSharp-Editor` (default) | `Assets/Editor/` | everything above |
 
@@ -40,6 +41,11 @@ Consequences that come up constantly:
   already has that type.
 - `Assets/Source/Script/Core/` was split out so tests can reference it. Keep it
   dependency-free: `UnityEngine` and nothing from the default assembly.
+- **`Promuse.Manufacture` sees `Arknights`, never the other way round.** Nothing in
+  `Arknights` may name a Manufacture type: a Home badge or button for it is a
+  component of `Promuse.Manufacture`, placed on the prefab by an editor tool. Its
+  screen prefab still goes in `Assets/Arknights/Resources/Prefab/UI/`, where
+  `UIManager` loads screens and `BackKeyTests` checks each has a way back.
 - Gameplay scripts under `Assets/Source/Script/` carry **no namespace**. Match that.
 
 ## Editor tools

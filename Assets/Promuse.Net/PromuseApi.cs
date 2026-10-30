@@ -78,7 +78,7 @@ namespace Promuse.Net
     /// site - and a call site that forgets one of those is how a save gets
     /// overwritten or an account gets created twice.
     /// </summary>
-    public sealed class PromuseApi
+    public sealed partial class PromuseApi
     {
         private static readonly JsonSerializerSettings Json = new JsonSerializerSettings
         {

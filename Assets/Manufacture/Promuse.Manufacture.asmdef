@@ -1,0 +1,17 @@
+{
+    "name": "Promuse.Manufacture",
+    "rootNamespace": "",
+    "references": [
+        "GUID:7271d7c66ce35414cbf167a152f550f1",
+        "GUID:f4f7bc7340a47b249b4c6cbf9d49e627"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
