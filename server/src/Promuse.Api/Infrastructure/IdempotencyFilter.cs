@@ -111,6 +111,12 @@ public sealed class IdempotencyFilter<TRequest> : IEndpointFilter
                 ExpiresAt = clock.GetUtcNow().Add(Retention),
             };
 
+            // 只写这一条 / The record and nothing else. This is the handler's DbContext, and
+            // SaveChanges writes everything tracked on it - so a row a service changed before it
+            // refused would be written here, outside the transaction its refusal rolled back. A
+            // Manufacture upgrade short of LMD once moved its station's anchor that way. By now the
+            // handler has saved what it meant to keep; anything still tracked is left over.
+            db.ChangeTracker.Clear();
             db.IdempotencyRecords.Add(record);
 
             try
