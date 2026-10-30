@@ -86,12 +86,14 @@ namespace Promuse.Manufacture {
             string costText = "";
             foreach (ItemStack price in next.Cost) {
                 long fromStation = price.ItemId == from.ItemId ? ManufactureFormat.Items(from, reading.StoredUnits) : 0;
-                long have = held(price.ItemId) + fromStation;
-                if (have < price.Amount) canPay = false;
+                long missing = price.Amount - (held(price.ItemId) + fromStation);
+                if (missing > 0) canPay = false;
                 if (costText.Length > 0) costText += "\n";
                 costText += ItemVisual.Name(price.ItemId) + "  " + ManufactureFormat.Amount(price.Amount) +
                             "  (you have " + ManufactureFormat.Amount(held(price.ItemId)) +
-                            (fromStation > 0 ? ", +" + ManufactureFormat.Amount(fromStation) + " from the station" : "") + ")";
+                            (fromStation > 0 ? ", +" + ManufactureFormat.Amount(fromStation) + " from the station" : "") + ")" +
+                            // 差多少 / Short of it, by how much - the reason the button is off.
+                            (missing > 0 ? "  - " + ManufactureFormat.Amount(missing) + " short" : "");
             }
             cost.text = costText;
             cost.color = canPay ? Color.white : ShortInk;

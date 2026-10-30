@@ -18,6 +18,10 @@ namespace Promuse.Manufacture {
     public class StationCard : MonoBehaviour {
         public static readonly Color FullInk = new Color(0.92f, 0.30f, 0.26f, 1f);
 
+        /// <summary>Collect's face and label while the store is full - the card's yellow, with dark ink on it.</summary>
+        public static readonly Color ReadyFace = new Color(0.96f, 0.73f, 0.05f, 1f);
+        public static readonly Color ReadyInk = new Color(0.05f, 0.055f, 0.06f, 1f);
+
         [Tooltip("lmd or exp - ManufactureStations. Which station this card draws.")]
         public string stationId;
 
@@ -40,11 +44,22 @@ namespace Promuse.Manufacture {
 
         private bool wired;
         private Color nextInk;
+        private Graphic collectFace;
+        private TMP_Text collectLabel;
+        private Color collectFaceInk;
+        private Color collectLabelInk;
 
         private void Wire() {
             if (wired) return;
             wired = true;
+
+            // 记下预制体的颜色 / The prefab's own colours, put back when the card stops calling out.
             nextInk = next.color;
+            collectFace = collectButton.targetGraphic;
+            collectLabel = collectButton.GetComponentInChildren<TMP_Text>(true);
+            if (collectFace != null) collectFaceInk = collectFace.color;
+            if (collectLabel != null) collectLabelInk = collectLabel.color;
+
             collectButton.onClick.AddListener(() => Collect?.Invoke(this));
             upgradeButton.onClick.AddListener(() => Upgrade?.Invoke(this));
         }
@@ -72,6 +87,7 @@ namespace Promuse.Manufacture {
 
             SetFill(ManufactureFormat.Progress(current, reading, serverNow));
 
+            bool stopped = reading.NextUnitAt == null;
             if (reading.NextUnitAt is DateTimeOffset nextAt) {
                 next.text = "+" + ManufactureFormat.Amount(current.UnitAmount) + " in " + ManufactureFormat.Countdown(nextAt - serverNow);
                 next.color = nextInk;
@@ -83,6 +99,10 @@ namespace Promuse.Manufacture {
                 next.color = FullInk;
                 full.text = "Collect to start it again";
             }
+
+            // 满了就醒目 / A full store's Collect stands out: every minute it waits is production lost.
+            if (collectFace != null) collectFace.color = stopped ? ReadyFace : collectFaceInk;
+            if (collectLabel != null) collectLabel.color = stopped ? ReadyInk : collectLabelInk;
 
             collectButton.interactable = !busy && reading.StoredUnits > 0;
             upgradeButton.gameObject.SetActive(!top);
