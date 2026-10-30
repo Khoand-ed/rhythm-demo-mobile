@@ -153,6 +153,11 @@ builder.Services.AddScoped<ManufactureService>();
 builder.Services.AddScoped<PlayerLevels>();
 builder.Services.AddOptions<NoticeOptions>().Bind(builder.Configuration.GetSection(NoticeOptions.SectionName));
 
+// 过期的幂等记录 / Idempotency records past their 24 hours, deleted every hour. The filter already
+// ignores an expired one; this keeps the table from holding every key ever sent. Not run by
+// `--migrate`, which exits before the host starts.
+builder.Services.AddHostedService<IdempotencySweep>();
+
 builder.Services.AddOptions<GameDataOptions>()
     .Bind(builder.Configuration.GetSection(GameDataOptions.SectionName));
 

@@ -48,7 +48,7 @@ public class IdempotencyRecord
     ///
     /// 过期就不算数 / Past it the record answers nothing: the key is free again,
     /// and the next request under it is a new request, whose answer takes the
-    /// old one's place.
+    /// old one's place. IdempotencySweep deletes the ones nobody comes back for.
     /// </summary>
     public DateTimeOffset ExpiresAt { get; set; }
 

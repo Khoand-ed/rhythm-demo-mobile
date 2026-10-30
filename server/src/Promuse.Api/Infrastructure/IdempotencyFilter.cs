@@ -31,7 +31,8 @@ namespace Promuse.Api.Infrastructure;
 /// it any more, so a request under an expired key runs as a new one. The expired
 /// row is deleted under the gate before the handler runs: it no longer answers, but
 /// it still holds the key's place under the unique index, and the answer stored
-/// afterwards must be able to take it.
+/// afterwards must be able to take it. IdempotencySweep deletes the rest, the ones
+/// no request comes back for.
 ///
 /// 同一个键排队 / Requests carrying the same key take turns. Without that, retries
 /// that overlap - a client firing again before the first answer arrived - all read
@@ -107,7 +108,7 @@ public sealed class IdempotencyFilter<TRequest> : IEndpointFilter
 
             // 过期的让位 / Past its 24 hours: no answer, but still in the key's place under the
             // unique index. Deleted here, under the gate, where no other request through this
-            // filter can be storing for the key.
+            // filter can be storing for the key - the sweep may not reach it for an hour.
             Guid expired = existing.Id;
             await db.IdempotencyRecords.Where(r => r.Id == expired).ExecuteDeleteAsync(ct);
         }
