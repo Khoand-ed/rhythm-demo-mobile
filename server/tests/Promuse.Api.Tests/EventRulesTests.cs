@@ -1,5 +1,6 @@
 using Promuse.Api.Events;
 using Promuse.Contracts.Events;
+using Promuse.Contracts.Items;
 using Promuse.Persistence;
 
 namespace Promuse.Api.Tests;
@@ -28,6 +29,14 @@ public class EventRulesTests
         [new("stage_001", 30)]);
 
     private static Dictionary<string, string[]> Check(EventDefinition d) => EventRules.Validate(d, Stages, Banners);
+
+    [Fact]
+    public void A_key_item_cannot_be_an_events_currency()
+    {
+        Dictionary<string, string[]> errors = Check(Valid() with { CurrencyItemId = KeyItems.ManufactureBlueprint2 });
+
+        Assert.Contains(errors["currencyItemId"], e => e.Contains("key item"));
+    }
 
     [Fact]
     public void A_sound_event_and_the_seeded_one_pass()

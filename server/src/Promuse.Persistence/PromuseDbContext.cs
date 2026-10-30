@@ -986,7 +986,8 @@ public class PromuseDbContext(DbContextOptions<PromuseDbContext> options) : DbCo
             // what still holds if anything else ever writes a record.
             entity.HasIndex(r => new { r.Key, r.Endpoint }).IsUnique();
 
-            // For the sweep that deletes expired records.
+            // For IdempotencySweep, which deletes expired records a batch at a
+            // time, oldest first.
             entity.HasIndex(r => r.ExpiresAt);
         });
     }

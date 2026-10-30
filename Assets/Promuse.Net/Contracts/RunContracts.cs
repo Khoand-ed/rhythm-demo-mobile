@@ -210,11 +210,16 @@ namespace Promuse.Contracts.Runs
     /// <param name="Drops">A campaign stage's drops this clear, rolled by the server.</param>
     /// <param name="Exp">Player EXP gained.</param>
     /// <param name="PrimeFromLevels">Originite Prime from the levels gained - each new level pays level / 5.</param>
+    /// <param name="FirstClearItems">
+    /// What else a campaign stage's first clear paid - a Manufacture blueprint, on the stages that
+    /// pay one. Empty otherwise; null from a server older than it.
+    /// </param>
     public sealed record RunRewards(
         int FirstClearOrundum,
         IReadOnlyList<ItemStack> Drops,
         int Exp,
         int LevelBefore,
         int LevelAfter,
-        int PrimeFromLevels);
+        int PrimeFromLevels,
+        IReadOnlyList<ItemStack>? FirstClearItems = null);
 }

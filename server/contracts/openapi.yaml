@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Promuse Backend API
-  version: 1.0.0-draft.23
+  version: 1.0.0-draft.24
   summary: Authentication and player state for the Promuse mobile rhythm game.
   description: |
     **Phase 1** authentication, **Phase 2** player state, **Phase 3** the economy -
@@ -42,7 +42,8 @@ info:
     - **Idempotency.** Every unsafe operation that creates or consumes something takes
       an `Idempotency-Key`. A mobile client on a train loses its response, not its
       request: without this, a retried sign-up creates a second account. The server
-      stores the key with the response for 24 hours and replays it verbatim.
+      stores the key with the response for 24 hours and replays it verbatim. After that
+      the key is forgotten, and a request under it is a new one.
     - **Optimistic concurrency.** `GET /v1/players/me` returns an `ETag`; writes take
       `If-Match` and answer `412` when the state moved underneath. This is what stops
       two devices silently overwriting one another, and it is why `stateVersion` is in
@@ -127,7 +128,10 @@ tags:
       real time into a store that stops when it is full. The player comes back to collect.
 
       Opened by Manufacture Blueprint I. A station is raised with LMD while holding the next level's
-      blueprint. Blueprints are paid by the first clear of a story stage and are never spent.
+      blueprint. Blueprints are paid by the first clear of a story stage (1-1, 1-3, 2-3) and are never
+      spent: nothing that spends - a shop, an event, a ticket - accepts one. A player who cleared a
+      stage without being paid (before Manufacture existed, or while it was switched off) is handed
+      the blueprint the next time they open Manufacture.
       Behind the `manufacture` feature flag, which is off unless a config switches it on.
   - name: mail
     description: |
@@ -1020,7 +1024,9 @@ paths:
         spent either way; it was spent when the run opened.
 
         The idempotency key the client uses is the run id itself: "this run ended" cannot
-        honestly happen twice, so a retry replays the first answer.
+        honestly happen twice, so a retry replays the first answer. A retry more than 24
+        hours later finds the key forgotten and the run closed: `409 RUN_NOT_OPEN`, never
+        the clear counted twice.
 
         A run that belongs to someone else is answered exactly like one that does not
         exist. Telling them apart would let a stranger probe which run ids are real.
@@ -1805,6 +1811,9 @@ paths:
       tags: [admin]
       operationId: saveCampaign
       summary: Save a new version of the whole campaign (If-Match).
+      description: |
+        A stage whose first clear pays a Manufacture blueprint cannot be removed: what it pays could
+        then never be had. Such a save is refused with `422`, the stage named under `chapters`.
       parameters:
         - $ref: '#/components/parameters/IfMatch'
       requestBody:
@@ -2865,6 +2874,11 @@ components:
         different for a new one. The server stores it against the response for 24 hours
         and replays that response rather than acting twice.
 
+        After those 24 hours the key is forgotten: the same key, body and all, is a new
+        request, and is answered as one - never with the stored response, which carries
+        player state as it was a day before. A client does not retry that late; the one
+        that might is a queued run result, and a closed run refuses it (`RUN_NOT_OPEN`).
+
         The same key with a *different* body answers 409 with code
         IDEMPOTENCY_KEY_CONFLICT - that is not a retry, and replying with the first
         response would answer a question that was not asked. A missing key answers 400
@@ -3843,6 +3857,14 @@ components:
         primeFromLevels:
           type: integer
           description: Originite Prime from the levels gained - each new level pays level / 5.
+        firstClearItems:
+          type: array
+          description: |
+            What else a campaign stage's first clear paid: the Manufacture blueprint on the stages
+            that pay one (1-1, 1-3, 2-3), while Manufacture is switched on. Empty otherwise. A server
+            older than this field does not send it.
+          items:
+            $ref: '#/components/schemas/ItemStack'
 
     LeaderboardPeriod:
       type: string

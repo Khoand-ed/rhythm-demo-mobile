@@ -34,5 +34,17 @@ public class CampaignWireTests
         Assert.IsNotNull(rewards);
         Assert.AreEqual((50, 72, 9, 10, 2), (rewards.FirstClearOrundum, rewards.Exp, rewards.LevelBefore, rewards.LevelAfter, rewards.PrimeFromLevels));
         Assert.AreEqual(350, rewards.Drops[0].Amount);
+        Assert.IsNull(rewards.FirstClearItems, "a server older than the field sends none");
+    }
+
+    [Test]
+    public void AFirstClearsOtherRewards_Read()
+    {
+        RunRewards rewards = PromuseApi.TryParse<RunRewards>(
+            Rewards.Replace(@"""primeFromLevels"":2}", @"""primeFromLevels"":2,""firstClearItems"":[{""itemId"":30,""amount"":1}]}"));
+
+        Assert.IsNotNull(rewards);
+        Assert.AreEqual(1, rewards.FirstClearItems.Count);
+        Assert.AreEqual((30, 1), (rewards.FirstClearItems[0].ItemId, rewards.FirstClearItems[0].Amount));
     }
 }

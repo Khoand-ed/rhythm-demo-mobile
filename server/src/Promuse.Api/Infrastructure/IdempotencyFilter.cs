@@ -19,10 +19,20 @@ namespace Promuse.Api.Infrastructure;
 /// should get the stored answer rather than a 409.
 ///
 /// 三种结果 / Three outcomes:
-///   - No record: run the handler, store what it returned, return it.
+///   - No record, or only one past its 24 hours: run the handler, store what it
+///     returned, return it.
 ///   - Record with the same request hash: replay it. The handler does not run.
 ///   - Record with a different hash: 409. The same key for a different request
 ///     is not a retry, and answering it with the first response would be a lie.
+///
+/// 二十四小时 / A record answers for its key for the contract's 24 hours and never
+/// after. A replay hands back a stored response in full - a sign-up's tokens, a
+/// pull's operators, a balance - and once those 24 hours are up nobody was promised
+/// it any more, so a request under an expired key runs as a new one. The expired
+/// row is deleted under the gate before the handler runs: it no longer answers, but
+/// it still holds the key's place under the unique index, and the answer stored
+/// afterwards must be able to take it. IdempotencySweep deletes the rest, the ones
+/// no request comes back for.
 ///
 /// 同一个键排队 / Requests carrying the same key take turns. Without that, retries
 /// that overlap - a client firing again before the first answer arrived - all read
@@ -100,11 +110,22 @@ public sealed class IdempotencyFilter<TRequest> : IEndpointFilter
         // waits here, then finds the first one's record below and replays it.
         await using Gate gate = await Gate.EnterAsync(db, key, endpoint, ct);
 
-        IdempotencyRecord? existing = await db.IdempotencyRecords
-            .AsNoTracking()
-            .FirstOrDefaultAsync(r => r.Key == key && r.Endpoint == endpoint, ct);
+        // 进门后再看钟 / Read once the gate is ours: a copy that queued behind another is
+        // judged by when it got to look, not by when it arrived. Both lookups below go by it.
+        DateTimeOffset now = clock.GetUtcNow();
 
-        if (existing is not null) return Replay(http, existing, requestHash);
+        IdempotencyRecord? existing = await FindAsync(db, key, endpoint, ct);
+
+        if (existing is not null)
+        {
+            if (existing.IsLive(now)) return Replay(http, existing, requestHash);
+
+            // 过期的让位 / Past its 24 hours: no answer, but still in the key's place under the
+            // unique index. Deleted here, under the gate, where no other request through this
+            // filter can be storing for the key - the sweep may not reach it for an hour.
+            Guid expired = existing.Id;
+            await db.IdempotencyRecords.Where(r => r.Id == expired).ExecuteDeleteAsync(ct);
+        }
 
         object? result = await next(context);
 
@@ -113,6 +134,7 @@ public sealed class IdempotencyFilter<TRequest> : IEndpointFilter
         // retry is that the next one might work.
         if (TryDescribe(result, json, out int status, out string body) && status < 500)
         {
+            DateTimeOffset storedAt = clock.GetUtcNow();
             var record = new IdempotencyRecord
             {
                 Id = Guid.NewGuid(),
@@ -121,8 +143,8 @@ public sealed class IdempotencyFilter<TRequest> : IEndpointFilter
                 RequestHash = requestHash,
                 StatusCode = status,
                 ResponseBody = body,
-                CreatedAt = clock.GetUtcNow(),
-                ExpiresAt = clock.GetUtcNow().Add(Retention),
+                CreatedAt = storedAt,
+                ExpiresAt = storedAt.Add(Retention),
             };
 
             // 只写这一条 / The record and nothing else. This is the handler's DbContext, and
@@ -142,14 +164,15 @@ public sealed class IdempotencyFilter<TRequest> : IEndpointFilter
                 // 兜底 / The gate makes this unreachable for two requests through this
                 // filter; the unique index stays as the last word if anything else ever
                 // writes a record for the key. The record already there is the
-                // authoritative answer, so replay it.
+                // authoritative answer while it is live, so replay it. An expired one
+                // answers nothing here either: it fails the request as finding no record
+                // does. It cannot be one this filter left behind - the one met above was
+                // deleted before the handler ran.
                 db.ChangeTracker.Clear();
 
-                IdempotencyRecord? winner = await db.IdempotencyRecords
-                    .AsNoTracking()
-                    .FirstOrDefaultAsync(r => r.Key == key && r.Endpoint == endpoint, ct);
+                IdempotencyRecord? winner = await FindAsync(db, key, endpoint, ct);
 
-                if (winner is not null) return Replay(http, winner, requestHash);
+                if (winner is not null && winner.IsLive(now)) return Replay(http, winner, requestHash);
 
                 throw;
             }
@@ -157,6 +180,16 @@ public sealed class IdempotencyFilter<TRequest> : IEndpointFilter
 
         return result;
     }
+
+    /// <summary>
+    /// The key's record on this endpoint - the unique index allows one - live or not. Whether
+    /// it may answer is <see cref="IdempotencyRecord.IsLive"/>'s to say, at both places that ask.
+    /// </summary>
+    private static Task<IdempotencyRecord?> FindAsync(
+        PromuseDbContext db, string key, string endpoint, CancellationToken ct) =>
+        db.IdempotencyRecords
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.Key == key && r.Endpoint == endpoint, ct);
 
     /// <summary>
     /// 谁在发这个请求 / Who the record belongs to.

@@ -1,10 +1,12 @@
 using Microsoft.EntityFrameworkCore;
+using Promuse.Contracts.Items;
 using Promuse.Persistence;
 
 namespace Promuse.Api.Economy;
 
 /// <summary>
-/// The only two ways a player's bag changes.
+/// The only ways a player's bag changes: adding to a stack, taking from one, and handing out a key
+/// item once.
 ///
 /// 一份实现 / Extracted when missions needed to hand out items too. Two copies of
 /// the upsert below would be two places to get the ON CONFLICT wrong, and the
@@ -58,6 +60,13 @@ public sealed class Inventory(PromuseDbContext db)
     /// </summary>
     public async Task<bool> TryDebitAsync(Guid accountId, int itemId, int amount, CancellationToken ct)
     {
+        // 钥匙道具不能花 / A key item is never taken, by anything that spends: an event priced in
+        // one, a shop, a ticket. The server hands a Manufacture blueprint back to anyone who cleared
+        // its stage without holding it, so one that could be spent would be spent, handed back and
+        // spent again, without end. Refused here, the one place every debit passes through, so no
+        // configuration - however it was saved - can open that loop.
+        if (KeyItems.Contains(itemId)) return false;
+
         // 0 means no row: the CHECK constraint makes a stored zero impossible,
         // so the two cases cannot be confused.
         int current = await db.Database
@@ -86,6 +95,19 @@ public sealed class Inventory(PromuseDbContext db)
 
         return true;
     }
+
+    /// <summary>
+    /// 只给一个 / Hands out one of a key item if the player holds none, and reports whether it did.
+    /// Never stacks: of two grants racing - a first clear and the backfill - one inserts and the
+    /// other finds the row, so nobody ever holds two.
+    /// </summary>
+    public async Task<bool> GiveOnceAsync(Guid accountId, int itemId, CancellationToken ct) =>
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"""
+             INSERT INTO player_items (account_id, item_id, amount)
+             VALUES ({accountId}, {itemId}, 1)
+             ON CONFLICT (account_id, item_id) DO NOTHING
+             """, ct) == 1;
 
     /// <summary>
     /// Bumped whenever the save changes, so an ETag a client is holding stops
