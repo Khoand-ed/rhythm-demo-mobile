@@ -44,6 +44,12 @@ public sealed class IdempotencyFilter<TRequest> : IEndpointFilter
 {
     public const string HeaderName = "Idempotency-Key";
 
+    /// <summary>
+    /// 列宽 / The width of the record's key column (PromuseDbContext). Counted in UTF-16 units,
+    /// which are never fewer than the characters Postgres counts, so whatever passes here fits there.
+    /// </summary>
+    public const int MaxKeyLength = 128;
+
     /// <summary>Long enough for any retry a client will really make.</summary>
     private static readonly TimeSpan Retention = TimeSpan.FromHours(24);
 
@@ -72,13 +78,17 @@ public sealed class IdempotencyFilter<TRequest> : IEndpointFilter
         if (!http.Request.Headers.TryGetValue(HeaderName, out var header) ||
             string.IsNullOrWhiteSpace(header.ToString()))
         {
-            return ApiProblems.Create(400, "IDEMPOTENCY_KEY_REQUIRED",
-                "Idempotency-Key is required",
-                $"This endpoint creates or consumes something, so it needs an {HeaderName} header.")
-                .ToResult();
+            return ApiProblems.IdempotencyKeyRequired().ToResult();
         }
 
         string key = header.ToString();
+
+        // 存不下就别开始 / Refused before the gate and the handler. A record cannot hold a longer key,
+        // and finding that out at the end is too late: the handler has committed - the purchase, the
+        // pull - when the record's insert fails, the request answers 500 with nothing stored, and the
+        // retry a 500 invites does the work a second time.
+        if (key.Length > MaxKeyLength) return ApiProblems.IdempotencyKeyInvalid(MaxKeyLength).ToResult();
+
         string endpoint = $"{Subject(http)} {http.Request.Method} {http.Request.Path}";
         string requestHash = HashRequest(context.Arguments.OfType<TRequest>().FirstOrDefault(), json);
 
