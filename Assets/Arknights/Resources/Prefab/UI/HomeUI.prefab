@@ -3321,6 +3321,7 @@ GameObject:
   - component: {fileID: 2468733220869797824}
   - component: {fileID: 2823619926352578545}
   - component: {fileID: 6133608659913408896}
+  - component: {fileID: 3782544531035213580}
   m_Layer: 0
   m_Name: ManufactureTile
   m_TagString: Untagged
@@ -3430,6 +3431,19 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
+--- !u!114 &3782544531035213580
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2732486906083147029}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 87649f0ce7ff2bc43bdfae9cfa3dd515, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::OpenUIButton
+  uiName: ManufactureUI
 --- !u!1 &2744407087535629018
 GameObject:
   m_ObjectHideFlags: 0
