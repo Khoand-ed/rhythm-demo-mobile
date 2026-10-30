@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Promuse.Contracts.Events;
+using Promuse.Contracts.Items;
 using Promuse.Contracts.Stories;
 using Promuse.Persistence;
 
@@ -82,6 +83,13 @@ public static partial class EventRules
         if (d.Description is { Length: > MaxDescription }) Add("description", $"At most {MaxDescription} characters.");
         if (d.StartsAt >= d.EndsAt) Add("endsAt", "Must be after startsAt.");
         if (d.CurrencyItemId is < 0) Add("currencyItemId", "Must not be negative.");
+
+        // 钥匙道具不是钱 / Spending refuses a key item anyway (Inventory.TryDebitAsync); saying so
+        // here means the admin finds out on saving, not from players who cannot buy anything.
+        if (d.CurrencyItemId is { } keyItem && KeyItems.Contains(keyItem))
+        {
+            Add("currencyItemId", $"Item {keyItem} is a key item - held, never spent - so it cannot be an event's currency.");
+        }
         if (d.BannerId is not null && !banners.Contains(d.BannerId)) Add("bannerId", $"No banner '{d.BannerId}'.");
 
         // ---- check-in: day 1, 2, 3... with no gaps

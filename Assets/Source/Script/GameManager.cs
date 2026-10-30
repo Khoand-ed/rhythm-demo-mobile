@@ -1146,8 +1146,8 @@ void Update()
     }
 
     /// <summary>
-    /// "FIRST CLEAR +50 Orundum · LMD ×350 · Orirock ×2 · +72 EXP", and on a new line
-    /// "LEVEL UP 9 → 10 · +2 Originite Prime". Empty when nothing was paid.
+    /// "FIRST CLEAR +50 Orundum · FIRST CLEAR Manufacture Blueprint I · LMD ×350 · Orirock ×2 ·
+    /// +72 EXP", and on a new line "LEVEL UP 9 → 10 · +2 Originite Prime". Empty when nothing was paid.
     /// </summary>
     private static string DescribeRewards(RunRewards rewards)
     {
@@ -1155,6 +1155,18 @@ void Update()
 
         var parts = new System.Collections.Generic.List<string>();
         if (rewards.FirstClearOrundum > 0) parts.Add("<color=#F5BA0D>FIRST CLEAR</color> +" + rewards.FirstClearOrundum + " " + global::UI.ItemVisual.Name(1));
+
+        // 首通的其他奖励 / What else the first clear paid - a Manufacture blueprint. Null from a
+        // server older than the field.
+        if (rewards.FirstClearItems != null)
+        {
+            foreach (Promuse.Contracts.Players.ItemStack item in rewards.FirstClearItems)
+            {
+                parts.Add("<color=#F5BA0D>FIRST CLEAR</color> " + global::UI.ItemVisual.Name(item.ItemId) +
+                          (item.Amount > 1 ? " ×" + global::UI.ItemVisual.Amount(item.Amount) : ""));
+            }
+        }
+
         foreach (Promuse.Contracts.Players.ItemStack drop in rewards.Drops)
         {
             parts.Add(global::UI.ItemVisual.Name(drop.ItemId) + " ×" + global::UI.ItemVisual.Amount(drop.Amount));

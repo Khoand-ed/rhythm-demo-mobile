@@ -6,18 +6,17 @@ using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.Metrics.Testing;
+using Promuse.Api.Economy;
 using Promuse.Api.Infrastructure;
 using Promuse.Api.LiveOps;
 using Promuse.Api.Manufacture;
 using Promuse.Contracts;
 using Promuse.Contracts.Auth;
 using Promuse.Contracts.Characters;
-using Promuse.Contracts.Config;
 using Promuse.Contracts.Items;
 using Promuse.Contracts.Manufacture;
 using Promuse.Contracts.Players;
 using Promuse.Persistence;
-using Promuse.Persistence.Entities;
 
 namespace Promuse.Api.Tests;
 
@@ -53,34 +52,7 @@ public class ManufactureEndpointTests(PromuseApiFactory factory) : IAsyncLifetim
 
     // --------------------------------------------------------------- helpers
 
-    /// <summary>
-    /// Writes the live config again with Manufacture switched, the way an admin's save would, and
-    /// drops the server's cached copy so the very next request sees it.
-    /// </summary>
-    private async Task SwitchAsync(bool on)
-    {
-        var store = factory.Services.GetRequiredService<RemoteConfigStore>();
-        store.Invalidate();
-        RemoteConfigStore.Snapshot live = await store.GetAsync(CancellationToken.None);
-        if (live.Document.Features.Manufacture == on) return;
-
-        ConfigDocument document = live.Document with { Features = live.Document.Features with { Manufacture = on } };
-
-        using (IServiceScope scope = factory.Services.CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<PromuseDbContext>();
-            db.RemoteConfigVersions.Add(new RemoteConfigVersion
-            {
-                Version = live.Version + 1,
-                Document = store.Serialize(document),
-                CreatedAt = DateTimeOffset.UtcNow,
-                Note = $"{nameof(ManufactureEndpointTests)}: manufacture {(on ? "on" : "off")}",
-            });
-            await db.SaveChangesAsync();
-        }
-
-        store.Invalidate();
-    }
+    private Task SwitchAsync(bool on) => ManufactureFlag.SwitchAsync(factory, on, nameof(ManufactureEndpointTests));
 
     private async Task<AuthSession> GuestAsync()
     {
@@ -164,6 +136,13 @@ public class ManufactureEndpointTests(PromuseApiFactory factory) : IAsyncLifetim
             """);
         return anchor;
     }
+
+    /// <summary>Records a first clear of <paramref name="stageId"/>, as the campaign does when a run clears it.</summary>
+    private Task ClearedAsync(AuthSession player, string stageId, DateTimeOffset? at = null) =>
+        SqlAsync($"""
+            INSERT INTO campaign_clears (account_id, stage_id, clears, first_cleared_at)
+            VALUES ({player.PlayerId}, {stageId}, 1, {at ?? DateTimeOffset.UtcNow})
+            """);
 
     private Task SetLevelAsync(AuthSession player, string stationId, int level) =>
         SqlAsync($"""
@@ -254,11 +233,7 @@ public class ManufactureEndpointTests(PromuseApiFactory factory) : IAsyncLifetim
     {
         AuthSession player = await GuestAsync();
         DateTimeOffset cleared = DateTimeOffset.UtcNow.AddHours(-3).AddMinutes(-10);
-        await SqlAsync($"""
-            INSERT INTO campaign_clears (account_id, stage_id, clears, first_cleared_at)
-            VALUES ({player.PlayerId}, 'main_1_1', 1, {cleared})
-            """);
-        await GiveAsync(player, KeyItems.ManufactureBlueprint1, 1);
+        await ClearedAsync(player, ManufactureRules.UnlockStageId, cleared);
 
         ManufactureView view = await ViewAsync(player);
 
@@ -562,6 +537,77 @@ public class ManufactureEndpointTests(PromuseApiFactory factory) : IAsyncLifetim
 
         Assert.Equal(3, exp.Level);
         Assert.Null(exp.Next);
+    }
+
+    // ------------------------------------------------------------- blueprints
+
+    [Fact]
+    public async Task A_player_who_cleared_the_stages_before_manufacture_is_handed_their_blueprints_on_opening_it()
+    {
+        AuthSession player = await GuestAsync();
+        await ClearedAsync(player, "main_1_1");
+        await ClearedAsync(player, "main_1_3");
+
+        ManufactureView first = await ViewAsync(player);
+
+        // Opened on this very read, with the save that changed under it.
+        Assert.True(first.IsUnlocked);
+        Assert.NotNull(first.Player);
+        Assert.Equal(1, Amount(first.Player!, KeyItems.ManufactureBlueprint1));
+        Assert.Equal(1, Amount(first.Player!, KeyItems.ManufactureBlueprint2));
+        Assert.Equal(0, Amount(first.Player!, KeyItems.ManufactureBlueprint3));
+
+        // Nothing more is owed, so the next read hands out nothing and carries no save.
+        ManufactureView again = await ViewAsync(player);
+        Assert.Null(again.Player);
+        Assert.Equal(1, await HeldAsync(player, KeyItems.ManufactureBlueprint1));
+        Assert.Equal(1, await HeldAsync(player, KeyItems.ManufactureBlueprint2));
+    }
+
+    [Fact]
+    public async Task A_blueprint_already_held_is_never_handed_out_a_second_time()
+    {
+        AuthSession player = await GuestAsync();
+        await GiveAsync(player, KeyItems.ManufactureBlueprint1, 1);
+        await ClearedAsync(player, "main_1_1");
+
+        ManufactureView view = await ViewAsync(player);
+
+        Assert.Null(view.Player);
+        Assert.Equal(1, await HeldAsync(player, KeyItems.ManufactureBlueprint1));
+    }
+
+    [Fact]
+    public async Task A_key_item_is_never_spent_by_anything()
+    {
+        AuthSession player = await UnlockedAsync();
+
+        using (IServiceScope scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PromuseDbContext>();
+            var inventory = scope.ServiceProvider.GetRequiredService<Inventory>();
+            await using var transaction = await db.Database.BeginTransactionAsync();
+
+            Assert.False(await inventory.TryDebitAsync(player.PlayerId, KeyItems.ManufactureBlueprint1, 1, CancellationToken.None));
+            await transaction.CommitAsync();
+        }
+
+        Assert.Equal(1, await HeldAsync(player, KeyItems.ManufactureBlueprint1));
+    }
+
+    [Fact]
+    public async Task The_backfill_is_counted_as_such()
+    {
+        using var granted = new MetricCollector<long>(
+            factory.Services.GetRequiredService<IMeterFactory>(), PromuseMetrics.MeterName, "promuse.manufacture.blueprints_granted");
+
+        AuthSession player = await GuestAsync();
+        await ClearedAsync(player, "main_1_1");
+        await ViewAsync(player);
+        await ViewAsync(player);
+
+        CollectedMeasurement<long> given = Assert.Single(granted.GetMeasurementSnapshot());
+        Assert.Equal((1L, (object?)KeyItems.ManufactureBlueprint1, "backfill"), (given.Value, given.Tags["item"], given.Tags["path"]));
     }
 
     // --------------------------------------------------------------- refusals

@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Promuse Backend API
-  version: 1.0.0-draft.22
+  version: 1.0.0-draft.23
   summary: Authentication and player state for the Promuse mobile rhythm game.
   description: |
     **Phase 1** authentication, **Phase 2** player state, **Phase 3** the economy -
@@ -127,7 +127,10 @@ tags:
       real time into a store that stops when it is full. The player comes back to collect.
 
       Opened by Manufacture Blueprint I. A station is raised with LMD while holding the next level's
-      blueprint. Blueprints are paid by the first clear of a story stage and are never spent.
+      blueprint. Blueprints are paid by the first clear of a story stage (1-1, 1-3, 2-3) and are never
+      spent: nothing that spends - a shop, an event, a ticket - accepts one. A player who cleared a
+      stage without being paid (before Manufacture existed, or while it was switched off) is handed
+      the blueprint the next time they open Manufacture.
       Behind the `manufacture` feature flag, which is off unless a config switches it on.
   - name: mail
     description: |
@@ -1805,6 +1808,9 @@ paths:
       tags: [admin]
       operationId: saveCampaign
       summary: Save a new version of the whole campaign (If-Match).
+      description: |
+        A stage whose first clear pays a Manufacture blueprint cannot be removed: what it pays could
+        then never be had. Such a save is refused with `422`, the stage named under `chapters`.
       parameters:
         - $ref: '#/components/parameters/IfMatch'
       requestBody:
@@ -3838,6 +3844,14 @@ components:
         primeFromLevels:
           type: integer
           description: Originite Prime from the levels gained - each new level pays level / 5.
+        firstClearItems:
+          type: array
+          description: |
+            What else a campaign stage's first clear paid: the Manufacture blueprint on the stages
+            that pay one (1-1, 1-3, 2-3), while Manufacture is switched on. Empty otherwise. A server
+            older than this field does not send it.
+          items:
+            $ref: '#/components/schemas/ItemStack'
 
     LeaderboardPeriod:
       type: string
