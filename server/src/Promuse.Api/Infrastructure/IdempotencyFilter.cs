@@ -45,10 +45,14 @@ public sealed class IdempotencyFilter<TRequest> : IEndpointFilter
     public const string HeaderName = "Idempotency-Key";
 
     /// <summary>
-    /// 列宽 / The width of the record's key column (PromuseDbContext). Counted in UTF-16 units,
-    /// which are never fewer than the characters Postgres counts, so whatever passes here fits there.
+    /// 列宽 / The widths of the two columns a record is filed under, its key and its endpoint
+    /// (PromuseDbContext). Counted in UTF-16 units, which are never fewer than the characters
+    /// Postgres counts, so whatever passes here fits there.
     /// </summary>
     public const int MaxKeyLength = 128;
+
+    /// <inheritdoc cref="MaxKeyLength"/>
+    public const int MaxEndpointLength = 128;
 
     /// <summary>Long enough for any retry a client will really make.</summary>
     private static readonly TimeSpan Retention = TimeSpan.FromHours(24);
@@ -89,7 +93,7 @@ public sealed class IdempotencyFilter<TRequest> : IEndpointFilter
         // retry a 500 invites does the work a second time.
         if (key.Length > MaxKeyLength) return ApiProblems.IdempotencyKeyInvalid(MaxKeyLength).ToResult();
 
-        string endpoint = $"{Subject(http)} {http.Request.Method} {http.Request.Path}";
+        string endpoint = EndpointName(http);
         string requestHash = HashRequest(context.Arguments.OfType<TRequest>().FirstOrDefault(), json);
 
         // 拿到锁才往下 / Held until the response is stored. The second copy of a request
@@ -165,6 +169,34 @@ public sealed class IdempotencyFilter<TRequest> : IEndpointFilter
     /// </summary>
     private static string Subject(HttpContext http) =>
         http.User.TryGetAccountId(out Guid accountId) ? accountId.ToString() : "anon";
+
+    /// <summary>
+    /// 记录归在谁名下 / What a record is filed under, and half its lock's name: whose it is, the
+    /// method and the path.
+    ///
+    /// 太长才换成摘要 / Unless that is longer than the endpoint column. Paths carry values the client
+    /// chose - an event id, an offer id, an operator id - and the ids an administrator may really
+    /// give an event and its shop offer, 64 characters each, make a purchase's name 196. A name like
+    /// that made the record's insert fail after the handler had committed: a 500 in place of the
+    /// service's own answer, and a retry that did the work again. It is filed under its owner and a
+    /// SHA-256 of the whole name instead - at most 108 characters, and the same on every retry.
+    ///
+    /// 平常的名字不动 / Only when too long, so every ordinary path keeps the name it has always been
+    /// filed under, and records written before this still replay. Not a wider column instead: the
+    /// client decides how long a path is, so any width would only move the 500 further out. The
+    /// owner stays in clear, so a record still opens with the account it belongs to; and as a plain
+    /// name has a space before its path while the digest form has none after its owner, the two
+    /// forms can never produce the same name.
+    /// </summary>
+    private static string EndpointName(HttpContext http)
+    {
+        string subject = Subject(http);
+        string name = $"{subject} {http.Request.Method} {http.Request.Path}";
+
+        if (name.Length <= MaxEndpointLength) return name;
+
+        return $"{subject} sha256:{Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(name)))}";
+    }
 
     private static IResult Replay(HttpContext http, IdempotencyRecord record, string requestHash)
     {
