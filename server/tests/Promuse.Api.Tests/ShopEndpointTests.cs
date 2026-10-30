@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Promuse.Api.Infrastructure;
 using Promuse.Contracts;
 using Promuse.Contracts.Auth;
 using Promuse.Contracts.Players;
@@ -256,6 +257,63 @@ public class ShopEndpointTests(PromuseApiFactory factory)
         var db = scope.ServiceProvider.GetRequiredService<PromuseDbContext>();
 
         Assert.Equal(1, await db.Purchases.CountAsync(p => p.AccountId == session.PlayerId));
+    }
+
+    /// <summary>
+    /// 存不下的键 / A key longer than the idempotency record holds is refused before anything is
+    /// done. Let through, the purchase committed first and only then did storing its answer fail: a
+    /// 500 with nothing kept, and the retry a 500 invites bought a second time.
+    /// </summary>
+    [Fact]
+    public async Task A_key_longer_than_a_record_holds_is_refused_before_anything_is_bought()
+    {
+        AuthSession session = await SignInAsync();
+        ShopOffer offer = await FirstOfferAsync(session);
+
+        await GrantAsync(session.PlayerId, offer.PriceItemId, offer.PriceAmount);
+
+        string key = Unique.PadRight(IdempotencyFilter<PurchaseRequest>.MaxKeyLength + 1, 'k');
+
+        HttpResponseMessage response = await _client.SendAsync(
+            Post("/v1/shop/purchases", session, new PurchaseRequest(offer.OfferId, 1), key));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(ErrorCodes.IdempotencyKeyInvalid,
+            (await response.Content.ReadFromJsonAsync<ApiProblem>())!.Code);
+
+        // 处理器没跑 / The handler never ran: the price is still in the bag and nothing was bought.
+        Assert.Equal(offer.PriceAmount, await BalanceAsync(session.PlayerId, offer.PriceItemId));
+        Assert.Equal(0, await BalanceAsync(session.PlayerId, offer.SellItemId));
+
+        using IServiceScope scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PromuseDbContext>();
+
+        Assert.Equal(0, await db.Purchases.CountAsync(p => p.AccountId == session.PlayerId));
+    }
+
+    /// <summary>The longest key a record holds still buys - and a retry under it still charges once.</summary>
+    [Fact]
+    public async Task A_key_as_long_as_a_record_holds_still_buys_once()
+    {
+        AuthSession session = await SignInAsync();
+        ShopOffer offer = await FirstOfferAsync(session);
+
+        await GrantAsync(session.PlayerId, offer.PriceItemId, offer.PriceAmount * 2);
+
+        string key = Unique.PadRight(IdempotencyFilter<PurchaseRequest>.MaxKeyLength, 'k');
+        var body = new PurchaseRequest(offer.OfferId, 1);
+
+        HttpResponseMessage first = await _client.SendAsync(Post("/v1/shop/purchases", session, body, key));
+        HttpResponseMessage replay = await _client.SendAsync(Post("/v1/shop/purchases", session, body, key));
+
+        Assert.Equal(HttpStatusCode.Created, first.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, replay.StatusCode);
+
+        Assert.Equal(
+            (await first.Content.ReadFromJsonAsync<PurchaseResult>())!.PurchaseId,
+            (await replay.Content.ReadFromJsonAsync<PurchaseResult>())!.PurchaseId);
+
+        Assert.Equal(offer.PriceAmount, await BalanceAsync(session.PlayerId, offer.PriceItemId));
     }
 
     [Fact]
