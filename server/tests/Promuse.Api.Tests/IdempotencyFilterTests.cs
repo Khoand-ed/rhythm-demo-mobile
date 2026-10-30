@@ -60,11 +60,12 @@ public class IdempotencyFilterTests(PromuseApiFactory factory)
     /// What routing and binding hand the filter for a POST from <paramref name="player"/> under
     /// <paramref name="key"/>, with <paramref name="scope"/> as the request's services.
     /// </summary>
-    private static EndpointFilterInvocationContext Invocation(IServiceScope scope, AuthSession player, string key, Body body)
+    private static EndpointFilterInvocationContext Invocation(
+        IServiceScope scope, AuthSession player, string key, Body body, string path = Url)
     {
         var http = new DefaultHttpContext { RequestServices = scope.ServiceProvider };
         http.Request.Method = HttpMethods.Post;
-        http.Request.Path = Url;
+        http.Request.Path = path;
         http.Request.Headers[IdempotencyFilter<Body>.HeaderName] = key;
         http.User = new ClaimsPrincipal(new ClaimsIdentity([new Claim("sub", player.PlayerId.ToString())], "Bearer"));
 
@@ -179,5 +180,50 @@ public class IdempotencyFilterTests(PromuseApiFactory factory)
 
         IdempotencyRecord stored = Assert.Single(await RecordsAsync(key));
         Assert.Equal("another request", stored.RequestHash);
+    }
+
+    /// <summary>
+    /// 放得下就原样 / A record is filed under whose it is, the method and the path - kept as they are
+    /// while they fit the endpoint column, the way every record was filed before, so those still
+    /// replay. One character more and the path carries a value the column cannot hold: the record is
+    /// filed under its owner and a digest instead, where it used to fail to be stored after the
+    /// handler had run. Either way the second request is the first one's answer, and the handler
+    /// runs once.
+    /// </summary>
+    [Theory]
+    [InlineData(0, true)]
+    [InlineData(1, false)]
+    public async Task A_request_is_filed_under_its_path_while_that_fits_and_under_a_digest_after(int over, bool asItIs)
+    {
+        AuthSession player = await GuestAsync();
+        string key = Unique;
+
+        // "{player} POST /v1/tests/idempotency/xxx...", exactly as long as the column, plus `over`.
+        string owner = $"{player.PlayerId} {HttpMethods.Post} ";
+        string path = $"{Url}/".PadRight(IdempotencyFilter<Body>.MaxEndpointLength - owner.Length + over, 'x');
+
+        int runs = 0;
+
+        for (int attempt = 0; attempt < 2; attempt++)
+        {
+            using IServiceScope request = factory.Services.CreateScope();
+
+            object? answer = await new IdempotencyFilter<Body>().InvokeAsync(
+                Invocation(request, player, key, new Body("long path"), path),
+                _ =>
+                {
+                    runs++;
+                    return ValueTask.FromResult<object?>(Results.Json(new { runs }, statusCode: StatusCodes.Status201Created));
+                });
+
+            Assert.Equal(StatusCodes.Status201Created, StatusOf(answer));
+        }
+
+        Assert.Equal(1, runs);
+
+        IdempotencyRecord record = Assert.Single(await RecordsAsync(key));
+        Assert.Equal(asItIs, record.Endpoint == owner + path);
+        Assert.StartsWith($"{player.PlayerId} ", record.Endpoint);
+        Assert.InRange(record.Endpoint.Length, 1, IdempotencyFilter<Body>.MaxEndpointLength);
     }
 }
