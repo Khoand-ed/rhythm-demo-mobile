@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Promuse Backend API
-  version: 1.0.0-draft.22
+  version: 1.0.0-draft.23
   summary: Authentication and player state for the Promuse mobile rhythm game.
   description: |
     **Phase 1** authentication, **Phase 2** player state, **Phase 3** the economy -
@@ -42,7 +42,8 @@ info:
     - **Idempotency.** Every unsafe operation that creates or consumes something takes
       an `Idempotency-Key`. A mobile client on a train loses its response, not its
       request: without this, a retried sign-up creates a second account. The server
-      stores the key with the response for 24 hours and replays it verbatim.
+      stores the key with the response for 24 hours and replays it verbatim. After that
+      the key is forgotten, and a request under it is a new one.
     - **Optimistic concurrency.** `GET /v1/players/me` returns an `ETag`; writes take
       `If-Match` and answer `412` when the state moved underneath. This is what stops
       two devices silently overwriting one another, and it is why `stateVersion` is in
@@ -1020,7 +1021,9 @@ paths:
         spent either way; it was spent when the run opened.
 
         The idempotency key the client uses is the run id itself: "this run ended" cannot
-        honestly happen twice, so a retry replays the first answer.
+        honestly happen twice, so a retry replays the first answer. A retry more than 24
+        hours later finds the key forgotten and the run closed: `409 RUN_NOT_OPEN`, never
+        the clear counted twice.
 
         A run that belongs to someone else is answered exactly like one that does not
         exist. Telling them apart would let a stranger probe which run ids are real.
@@ -2863,6 +2866,11 @@ components:
         Client-generated UUID, stable across retries of the *same* logical request and
         different for a new one. The server stores it against the response for 24 hours
         and replays that response rather than acting twice.
+
+        After those 24 hours the key is forgotten: the same key, body and all, is a new
+        request, and is answered as one - never with the stored response, which carries
+        player state as it was a day before. A client does not retry that late; the one
+        that might is a queued run result, and a closed run refuses it (`RUN_NOT_OPEN`).
 
         The same key with a *different* body answers 409 with code
         IDEMPOTENCY_KEY_CONFLICT - that is not a retry, and replying with the first
