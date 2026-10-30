@@ -18,7 +18,9 @@ namespace Promuse.Net
     ///
     /// 晚到也安全 / Sending late is safe for the same reason sending twice is: the result goes out
     /// under the run's own id as its idempotency key. If the first attempt did reach the server and
-    /// only the answer was lost, the server replays that answer instead of counting the clear again.
+    /// only the answer was lost, the server replays that answer instead of counting the clear again -
+    /// for the 24 hours it keeps a key. Later than that the run is simply closed: the server refuses
+    /// the result as RUN_NOT_OPEN, and FlushPendingRunsAsync drops it as it drops any refusal.
     ///
     /// 一个文件 / One small JSON file under persistentDataPath rather than PlayerPrefs: a result
     /// carries its input trace, tens of kilobytes, and PlayerPrefs on Android is an XML file that

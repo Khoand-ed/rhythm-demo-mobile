@@ -45,6 +45,17 @@ public class IdempotencyRecord
     /// <summary>
     /// 24 hours, per the contract. Long enough to cover any retry a client will
     /// actually make, short enough that this table does not grow without bound.
+    ///
+    /// 过期就不算数 / Past it the record answers nothing: the key is free again,
+    /// and the next request under it is a new request, whose answer takes the
+    /// old one's place. IdempotencySweep deletes the ones nobody comes back for.
     /// </summary>
     public DateTimeOffset ExpiresAt { get; set; }
+
+    /// <summary>
+    /// Still the key's answer at <paramref name="now"/>. Never replay a record
+    /// that is not: it is a stored response, player state included, and after
+    /// its 24 hours nobody promised it to anyone.
+    /// </summary>
+    public bool IsLive(DateTimeOffset now) => ExpiresAt > now;
 }

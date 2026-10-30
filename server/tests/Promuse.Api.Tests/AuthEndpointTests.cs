@@ -97,6 +97,40 @@ public class AuthEndpointTests(PromuseApiFactory factory)
     }
 
     /// <summary>
+    /// 二十四小时以后 / The contract keeps a key for 24 hours and no longer. A sign-up's stored
+    /// answer is a session - live tokens for the account - so a day-old copy must not be handed to
+    /// whoever presents the key next: past its 24 hours the same request is a new sign-up, which by
+    /// then finds its name taken.
+    /// </summary>
+    [Fact]
+    public async Task A_sign_up_retried_after_its_key_expired_is_a_new_request_not_a_replay()
+    {
+        string key = Unique;
+        var body = new RegisterRequest($"late_{Unique[..12]}", "correct horse battery");
+
+        HttpResponseMessage first = await PostAsync("/v1/auth/register", body, key);
+        Assert.Equal(HttpStatusCode.Created, first.StatusCode);
+
+        // A day and a second later.
+        using (IServiceScope scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PromuseDbContext>();
+            DateTimeOffset expired = DateTimeOffset.UtcNow.AddSeconds(-1);
+
+            await db.IdempotencyRecords
+                .Where(r => r.Key == key)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(r => r.CreatedAt, expired.AddHours(-24))
+                    .SetProperty(r => r.ExpiresAt, expired));
+        }
+
+        HttpResponseMessage late = await PostAsync("/v1/auth/register", body, key);
+
+        Assert.Equal(HttpStatusCode.Conflict, late.StatusCode);
+        Assert.Equal(ErrorCodes.UsernameTaken, (await late.Content.ReadFromJsonAsync<ApiProblem>())!.Code);
+    }
+
+    /// <summary>
     /// Concurrency, not sequence. Both requests read no record and both proceed;
     /// the unique index is what stops the second from committing a second
     /// account. This is the property a lookup-then-insert cannot provide.
