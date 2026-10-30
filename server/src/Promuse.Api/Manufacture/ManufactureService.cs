@@ -215,11 +215,12 @@ public sealed class ManufactureService(
     /// 收进包里 / Pays out what <paramref name="row"/> holds at <paramref name="now"/>, inside the
     /// caller's transaction with the row locked, and says where its anchor goes - without moving it.
     ///
-    /// 行先不动 / The row is left alone on purpose. The idempotency filter stores its record through
-    /// this same DbContext once the service has answered, and that save writes every tracked change -
-    /// so an anchor moved here by a request that is refused a step later (an upgrade short of LMD)
-    /// would be written after all, outside the transaction that took the LMD back, and the player
-    /// would lose what the station held. The caller moves the anchor once nothing can refuse.
+    /// 行先不动 / The row is left alone on purpose. A request refused a step later - an upgrade short
+    /// of LMD - rolls its transaction back, but an anchor moved here would stay tracked on this
+    /// DbContext, and the next save through it would write it after all: the player would lose what
+    /// the station held. The idempotency filter's save once did exactly that. It clears the tracker
+    /// before storing its record now, and with the row untouched no later save has to remember to.
+    /// The caller moves the anchor once nothing can refuse.
     /// </summary>
     private async Task<Settlement> SettleAsync(Guid accountId, ManufactureStation row, DateTimeOffset now, CancellationToken ct)
     {
