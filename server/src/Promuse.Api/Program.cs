@@ -150,6 +150,11 @@ builder.Services.AddScoped<NoticeService>();
 builder.Services.AddScoped<SignInService>();
 builder.Services.AddScoped<CampaignService>();
 builder.Services.AddScoped<ManufactureService>();
+
+// 首通的听众 / The campaign pays and guards what its listeners pay on a first clear. The same
+// scoped instance answers as BlueprintGrants, for the backfill, and as a listener.
+builder.Services.AddScoped<BlueprintGrants>();
+builder.Services.AddScoped<ICampaignClearListener>(sp => sp.GetRequiredService<BlueprintGrants>());
 builder.Services.AddScoped<PlayerLevels>();
 builder.Services.AddOptions<NoticeOptions>().Bind(builder.Configuration.GetSection(NoticeOptions.SectionName));
 

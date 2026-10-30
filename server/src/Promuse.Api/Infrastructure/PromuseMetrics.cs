@@ -33,6 +33,7 @@ public sealed class PromuseMetrics
     private readonly Counter<long> _liveOpsRefusals;
     private readonly Counter<long> _manufactureCollected;
     private readonly Counter<long> _manufactureUpgrades;
+    private readonly Counter<long> _manufactureBlueprints;
 
     public PromuseMetrics(IMeterFactory meters)
     {
@@ -60,6 +61,8 @@ public sealed class PromuseMetrics
             "Items collected from Manufacture stations, by station and the item made. What an upgrade collects first counts too.");
         _manufactureUpgrades = meter.CreateCounter<long>("promuse.manufacture.upgrades", "{upgrade}",
             "Manufacture stations raised, by station and the level reached.");
+        _manufactureBlueprints = meter.CreateCounter<long>("promuse.manufacture.blueprints_granted", "{blueprint}",
+            "Manufacture blueprints handed out, by item and how: a stage's first clear, or the backfill for a stage cleared before.");
     }
 
     /// <summary>
@@ -158,6 +161,12 @@ public sealed class PromuseMetrics
         _manufactureUpgrades.Add(1,
             new KeyValuePair<string, object?>("station", station),
             new KeyValuePair<string, object?>("to_level", toLevel));
+
+    /// <param name="path">first_clear or backfill.</param>
+    public void ManufactureBlueprintGranted(int itemId, string path) =>
+        _manufactureBlueprints.Add(1,
+            new KeyValuePair<string, object?>("item", itemId),
+            new KeyValuePair<string, object?>("path", path));
 
     // ---------------------------------------------------------- the plumbing
 

@@ -1,9 +1,16 @@
+using System.Diagnostics.Metrics;
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Diagnostics.Metrics.Testing;
+using Promuse.Api.Infrastructure;
 using Promuse.Api.Players;
 using Promuse.Contracts;
 using Promuse.Contracts.Auth;
 using Promuse.Contracts.Campaign;
+using Promuse.Contracts.Items;
+using Promuse.Contracts.Manufacture;
+using Promuse.Contracts.Players;
 using Promuse.Contracts.Runs;
 using Promuse.Persistence;
 
@@ -177,5 +184,88 @@ public class CampaignEndpointTests(PromuseApiFactory factory) : HomeContentTestB
             new CampaignUpsertRequest(current.Definition), ifMatch: $"W/\"{current.Version}\""));
         Assert.Equal(HttpStatusCode.OK, saved.StatusCode);
         Assert.Equal(current.Version + 1, (await ReadAsync<AdminCampaign>(saved)).Version);
+    }
+
+    // ----------------------------------------------------------- manufacture
+
+    [Fact]
+    public async Task The_first_clear_of_1_1_pays_manufacture_blueprint_one_and_only_once()
+    {
+        await ManufactureFlag.SwitchAsync(Factory, on: true, nameof(CampaignEndpointTests));
+        try
+        {
+            (AuthSession player, _) = await PlayerAsync();
+            using var granted = new MetricCollector<long>(
+                Factory.Services.GetRequiredService<IMeterFactory>(), PromuseMetrics.MeterName, "promuse.manufacture.blueprints_granted");
+
+            RunCompletion first = await WinAsync(player, "main_1_1");
+            Assert.Equal([new ItemStack(KeyItems.ManufactureBlueprint1, 1)], first.Rewards!.FirstClearItems!);
+            Assert.Contains(first.Player.Inventory, i => i.ItemId == KeyItems.ManufactureBlueprint1 && i.Amount == 1);
+
+            RunCompletion again = await WinAsync(player, "main_1_1");
+            Assert.Empty(again.Rewards!.FirstClearItems!);
+            Assert.Equal(1, await BalanceAsync(player.PlayerId, KeyItems.ManufactureBlueprint1));
+
+            // Counted once, after the run's transaction committed.
+            CollectedMeasurement<long> given = Assert.Single(granted.GetMeasurementSnapshot());
+            Assert.Equal((1L, (object?)KeyItems.ManufactureBlueprint1, "first_clear"),
+                         (given.Value, given.Tags["item"], given.Tags["path"]));
+        }
+        finally
+        {
+            await ManufactureFlag.SwitchAsync(Factory, on: false, nameof(CampaignEndpointTests));
+        }
+    }
+
+    [Fact]
+    public async Task While_manufacture_is_off_a_first_clear_pays_no_blueprint_and_opening_it_later_does()
+    {
+        (AuthSession player, _) = await PlayerAsync();
+
+        // Off, as it is until a config turns it on: nothing on the results screen for a feature
+        // players cannot open yet.
+        RunCompletion cleared = await WinAsync(player, "main_1_1");
+        Assert.Empty(cleared.Rewards!.FirstClearItems!);
+        Assert.Equal(0, await BalanceAsync(player.PlayerId, KeyItems.ManufactureBlueprint1));
+
+        await ManufactureFlag.SwitchAsync(Factory, on: true, nameof(CampaignEndpointTests));
+        try
+        {
+            HttpResponseMessage response = await Client.SendAsync(Send(HttpMethod.Get, "/v1/manufacture", player));
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            ManufactureView view = await ReadAsync<ManufactureView>(response);
+
+            Assert.True(view.IsUnlocked);
+            Assert.Contains(view.Player!.Inventory, i => i.ItemId == KeyItems.ManufactureBlueprint1 && i.Amount == 1);
+        }
+        finally
+        {
+            await ManufactureFlag.SwitchAsync(Factory, on: false, nameof(CampaignEndpointTests));
+        }
+    }
+
+    [Fact]
+    public async Task A_campaign_that_loses_a_stage_paying_a_blueprint_is_refused()
+    {
+        (AuthSession admin, _) = await PlayerAsync(admin: true);
+        AdminCampaign current = await ReadAsync<AdminCampaign>(await Client.SendAsync(Send(HttpMethod.Get, "/v1/admin/campaign", admin)));
+
+        CampaignChapter chapter = current.Definition.Chapters[0];
+        CampaignDefinition without = current.Definition with
+        {
+            Chapters = [chapter with { Stages = [.. chapter.Stages.Where(s => s.StageId != "main_1_3")] },
+                        .. current.Definition.Chapters.Skip(1)],
+        };
+
+        HttpResponseMessage refused = await Client.SendAsync(Send(HttpMethod.Put, "/v1/admin/campaign", admin,
+            new CampaignUpsertRequest(without), ifMatch: $"W/\"{current.Version}\""));
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, refused.StatusCode);
+        string error = Assert.Single((await ReadAsync<ApiProblem>(refused)).Errors!["chapters"]);
+        Assert.Contains("main_1_3", error);
+        Assert.Contains("Manufacture Blueprint II", error);
+
+        AdminCampaign after = await ReadAsync<AdminCampaign>(await Client.SendAsync(Send(HttpMethod.Get, "/v1/admin/campaign", admin)));
+        Assert.Equal(current.Version, after.Version);
     }
 }
