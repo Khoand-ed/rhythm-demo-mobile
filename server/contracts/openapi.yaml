@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Promuse Backend API
-  version: 1.0.0-draft.24
+  version: 1.0.0-draft.25
   summary: Authentication and player state for the Promuse mobile rhythm game.
   description: |
     **Phase 1** authentication, **Phase 2** player state, **Phase 3** the economy -
@@ -2868,6 +2868,7 @@ components:
       schema:
         type: string
         format: uuid
+        maxLength: 128
       description: |
         Client-generated UUID, stable across retries of the *same* logical request and
         different for a new one. The server stores it against the response for 24 hours
@@ -2880,11 +2881,15 @@ components:
 
         The same key with a *different* body answers 409 with code
         IDEMPOTENCY_KEY_CONFLICT - that is not a retry, and replying with the first
-        response would answer a question that was not asked. A missing key answers 400.
+        response would answer a question that was not asked. A missing key answers 400
+        `IDEMPOTENCY_KEY_REQUIRED`. The server does not insist on a UUID, but a key longer
+        than 128 characters is more than its record can hold: 400
+        `IDEMPOTENCY_KEY_INVALID`, answered before anything is done.
 
-        The guarantee is a unique index on (key, endpoint), not a lookup: two
-        concurrent retries both read nothing and both proceed, and the database is what
-        refuses the second write.
+        Retries that overlap - sent again before the first answer arrived - take turns:
+        each waits until the first one's answer is stored and is given that answer,
+        rather than acting again. A unique index on (key, endpoint) stands behind the
+        queue as the last word.
 
     IfMatch:
       name: If-Match

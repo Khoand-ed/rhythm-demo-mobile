@@ -118,10 +118,10 @@ public class EventEndpointTests(PromuseApiFactory factory)
         await _client.SendAsync(Send(HttpMethod.Put, $"/v1/admin/events/{id}", admin, new EventUpsertRequest(d),
             ifMatch: ifMatch is { } v ? $"W/\"{v}\"" : null));
 
-    private async Task<(AuthSession Admin, string Id)> CreateAsync(EventDefinition? definition = null)
+    private async Task<(AuthSession Admin, string Id)> CreateAsync(EventDefinition? definition = null, string? id = null)
     {
         AuthSession admin = await AdminAsync();
-        string id = "t_" + Unique[..12];
+        id ??= "t_" + Unique[..12];
         HttpResponseMessage response = await PutEventAsync(admin, id, definition ?? Open());
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         return (admin, id);
@@ -215,6 +215,26 @@ public class EventEndpointTests(PromuseApiFactory factory)
 
         Assert.Equal(HttpStatusCode.NotFound,
             (await _client.SendAsync(Send(HttpMethod.Get, $"/v1/events/{id}", player))).StatusCode);
+    }
+
+    /// <summary>
+    /// 路径里的值由客户端定 / The event id is whatever the client put in the path, and the
+    /// idempotency record is filed under that path. One too long for the record's column turned
+    /// the event's own 404 into a 500, after the handler had answered. The 404 is the answer now,
+    /// and a retry under the same key is given it again.
+    /// </summary>
+    [Fact]
+    public async Task An_event_id_too_long_for_the_idempotency_record_still_gets_the_events_own_404()
+    {
+        AuthSession player = await GuestAsync();
+        string id = "no_such_event_".PadRight(200, 'x');
+        string key = Unique;
+
+        var first = await ActAsync(player, $"/v1/events/{id}/check-in", key: key);
+        var retry = await ActAsync(player, $"/v1/events/{id}/check-in", key: key);
+
+        Assert.Equal((HttpStatusCode.NotFound, ErrorCodes.EventNotFound), (first.Status, first.Code));
+        Assert.Equal((HttpStatusCode.NotFound, ErrorCodes.EventNotFound), (retry.Status, retry.Code));
     }
 
     // ---------------------------------------------------------------- check-in
@@ -410,6 +430,42 @@ public class EventEndpointTests(PromuseApiFactory factory)
             var over = await ActAsync(player, $"/v1/events/{id}/shop/permit/purchase", new EventPurchaseRequest(1));
             Assert.Equal(ErrorCodes.OutOfStock, over.Code);
             Assert.Equal(120, await BalanceAsync(player.PlayerId, Token));
+        }
+        finally
+        {
+            await CloseAsync(admin, id);
+        }
+    }
+
+    /// <summary>
+    /// 合法的长 id / Ids an administrator may really choose - 64 characters each, the most the rules
+    /// allow - make the purchase's path too long for the idempotency record's endpoint column. The
+    /// purchase used to commit, fail to store its answer and answer 500, and the client's retry under
+    /// the same key bought again. Now the record is filed under a digest of the path: one purchase,
+    /// and the retry is its answer again.
+    /// </summary>
+    [Fact]
+    public async Task A_purchase_under_the_longest_ids_an_event_allows_is_charged_once_across_a_retry()
+    {
+        string id = ("t_" + Unique).PadRight(64, 'x');
+        string offer = "permit".PadRight(64, 'x');
+
+        (AuthSession admin, _) = await CreateAsync(Open() with { Shop = [new(offer, new(Permit, 1), 40, 2)] }, id);
+        try
+        {
+            AuthSession player = await GuestAsync();
+            await GrantAsync(player.PlayerId, Token, 200);
+
+            string key = Unique;
+            var first = await ActAsync(player, $"/v1/events/{id}/shop/{offer}/purchase", new EventPurchaseRequest(1), key);
+            var retry = await ActAsync(player, $"/v1/events/{id}/shop/{offer}/purchase", new EventPurchaseRequest(1), key);
+
+            Assert.Equal(HttpStatusCode.Created, first.Status);
+            Assert.Equal(HttpStatusCode.Created, retry.Status);
+            Assert.Equal(160, retry.Result!.Event.CurrencyBalance);
+
+            Assert.Equal(160, await BalanceAsync(player.PlayerId, Token));
+            Assert.Equal(1, await BalanceAsync(player.PlayerId, Permit));
         }
         finally
         {

@@ -91,6 +91,14 @@ public static class ApiProblems
         Create(409, ErrorCodes.IdempotencyKeyConflict, "Idempotency key reused with a different request",
             "This Idempotency-Key was already used for a different request body.");
 
+    public static ApiProblem IdempotencyKeyRequired() =>
+        Create(400, ErrorCodes.IdempotencyKeyRequired, "Idempotency-Key is required",
+            "This endpoint creates or consumes something, so it needs an Idempotency-Key header.");
+
+    public static ApiProblem IdempotencyKeyInvalid(int maxLength) =>
+        Create(400, ErrorCodes.IdempotencyKeyInvalid, "Idempotency-Key is too long",
+            $"An Idempotency-Key may be at most {maxLength} characters - a UUID is 36. Nothing was done.");
+
     public static ApiProblem OfferNotFound() =>
         Create(404, ErrorCodes.OfferNotFound, "No such offer",
             "That shop offer does not exist, or is no longer being sold.");

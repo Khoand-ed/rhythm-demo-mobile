@@ -74,6 +74,16 @@ namespace Promuse.Contracts
         /// </summary>
         public const string IdempotencyKeyConflict = "IDEMPOTENCY_KEY_CONFLICT";
 
+        /// <summary>An operation that creates or consumes something arrived without an Idempotency-Key.</summary>
+        public const string IdempotencyKeyRequired = "IDEMPOTENCY_KEY_REQUIRED";
+
+        /// <summary>
+        /// The Idempotency-Key is one the server cannot keep: longer than the 128 characters its
+        /// record holds. Refused before anything is done, so nothing happened. A client bug rather
+        /// than a passing fault - the same key is refused again however often it is sent.
+        /// </summary>
+        public const string IdempotencyKeyInvalid = "IDEMPOTENCY_KEY_INVALID";
+
         /// <summary>
         /// The state moved since the ETag was issued - another device wrote first.
         /// The client re-reads and shows the conflict; it does not merge silently.

@@ -980,11 +980,10 @@ public class PromuseDbContext(DbContextOptions<PromuseDbContext> options) : DbCo
             entity.Property(r => r.RequestHash).HasMaxLength(64).IsRequired();
             entity.Property(r => r.ResponseBody).IsRequired();
 
-            // 这个唯一键就是幂等本身 / This unique index IS the idempotency
-            // guarantee. Two concurrent retries both read nothing and both
-            // proceed; the database refuses the second insert, and that refusal
-            // is the only thing standing between the player and two accounts.
-            // A check in application code cannot do this.
+            // 唯一键兜底 / The last word on one record per key, not the first:
+            // the idempotency filter queues requests that share a key, so the
+            // second finds the first one's record before it runs. The index is
+            // what still holds if anything else ever writes a record.
             entity.HasIndex(r => new { r.Key, r.Endpoint }).IsUnique();
 
             // For IdempotencySweep, which deletes expired records a batch at a
