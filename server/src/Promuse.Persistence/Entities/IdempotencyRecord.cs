@@ -8,11 +8,12 @@ namespace Promuse.Persistence.Entities;
 /// the response is lost on a train, the client retries. Without this the second
 /// attempt creates a second account and the player has two.
 ///
-/// 唯一键才是机制 / The mechanism is the unique key on (Key, Endpoint), not the
-/// lookup that precedes it. Two concurrent retries both find nothing, both
-/// proceed, and the database refuses the second insert - that refusal is what
-/// makes this safe under a race, and it is why this has to be a relational
-/// constraint rather than a check in application code.
+/// 先排队, 唯一键兜底 / Two requests with one key take turns: the idempotency
+/// filter holds an advisory lock named by key and endpoint until the answer is
+/// stored, so the second finds the first one's record and replays it. The unique
+/// key on (Key, Endpoint) is the last word behind that, not the mechanism - with
+/// only the index, overlapping retries both ran the handler, a pull was rolled and
+/// charged once per copy, and only the second insert was refused.
 /// </summary>
 public class IdempotencyRecord
 {
@@ -26,6 +27,9 @@ public class IdempotencyRecord
     /// operations is two different records. A client that reuses a key across
     /// endpoints is confused, but it should not get one endpoint's answer to
     /// another endpoint's question.
+    ///
+    /// The filter writes "{account id, or anon} {method} {path}" - or, when that
+    /// is longer than the column, "{account id, or anon} sha256:{its digest}".
     /// </summary>
     public string Endpoint { get; set; } = string.Empty;
 

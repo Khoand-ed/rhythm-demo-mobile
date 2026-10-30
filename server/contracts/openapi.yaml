@@ -2872,9 +2872,10 @@ components:
         than 128 characters is more than its record can hold: 400
         `IDEMPOTENCY_KEY_INVALID`, answered before anything is done.
 
-        The guarantee is a unique index on (key, endpoint), not a lookup: two
-        concurrent retries both read nothing and both proceed, and the database is what
-        refuses the second write.
+        Retries that overlap - sent again before the first answer arrived - take turns:
+        each waits until the first one's answer is stored and is given that answer,
+        rather than acting again. A unique index on (key, endpoint) stands behind the
+        queue as the last word.
 
     IfMatch:
       name: If-Match
