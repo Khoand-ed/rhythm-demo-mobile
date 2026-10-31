@@ -219,6 +219,7 @@ public static class ManufactureUISetup
         view.productName = Label(card, "ProductName", TopLeft, new Vector2(152f, -108f), new Vector2(300f, 36f), 24f, Dim, TextAlignmentOptions.Left);
         view.stored = Label(card, "Stored", TopLeft, new Vector2(152f, -150f), new Vector2(300f, 64f), 46f, Color.white, TextAlignmentOptions.Left);
         view.stored.fontStyle = FontStyles.Bold;
+        FitOneLine(view.stored, 30f);
 
         Image track = NewImage("Progress", card, Track, raycast: false);
         Place(track.rectTransform, TopLeft, TopRight, TopCenter, new Vector2(0f, -236f), new Vector2(-56f, 16f));
@@ -690,6 +691,18 @@ public static class ManufactureUISetup
         text.text = "";
         if (TMP_Settings.defaultFontAsset != null) text.font = TMP_Settings.defaultFontAsset;
         return text;
+    }
+
+    /// <summary>
+    /// 一行放下 / Kept to one line, shrinking down to <paramref name="smallest"/> to fit: a full Lv2 store,
+    /// "1,250 / 1,250", is wider than its card at full size and wrapped over the product's name.
+    /// </summary>
+    private static void FitOneLine(TMP_Text text, float smallest)
+    {
+        text.textWrappingMode = TextWrappingModes.NoWrap;
+        text.enableAutoSizing = true;
+        text.fontSizeMin = smallest;
+        text.fontSizeMax = text.fontSize;
     }
 
     private static TextMeshProUGUI Label(RectTransform parent, string name, Vector2 corner, Vector2 position, Vector2 size,
