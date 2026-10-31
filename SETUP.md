@@ -554,7 +554,7 @@ Assets/
 ├── Bridge/         the seam between the two halves (see below)
 ├── Editor/         all 30 menu tools + the Beatmap DSP toolchain
 ├── Beatmaps/       chart JSON, SongChart assets, gameplay audio
-└── Tests/EditMode/ EditMode tests for Rhythm.Core
+└── Tests/EditMode/ EditMode tests, an assembly for each part they test (see Tests)
 
 ci/                 repo integrity checks, run locally and by CI
 docs/engine-reference/unity/   version-pinned Unity API notes for AI agents
@@ -579,9 +579,54 @@ files were moved into their own assembly so tests can reference them.
 
 Window → General → Test Runner → EditMode → Run All.
 
-The tests cover pure logic only — judging windows, miss damage, fever gain, chart
-sorting. Nothing there touches a scene or the Editor, so they finish in well under
-a second.
+Over 170 tests in six assemblies under `Assets/Tests/EditMode/`, each named for the
+part of the game it tests:
+
+- **`Rhythm.Core.EditModeTests`** - judging windows, miss damage, fever gain, chart
+  sorting, the scoring rules and the four passives; the rules fingerprint and the
+  seeded rolls, pinned to the values the server's tests pin, and the input trace
+  format; `server/data/ruleset.json` held to the assets it describes; and the golden
+  trace in `server/tests/golden` replayed to the server's pinned result.
+- **`Promuse.Net.EditModeTests`** - the server's responses for the campaign, events,
+  operator levelling, mail, notices and sign-in, Manufacture and profiles, read through
+  the client's own parser; which requests are retried, where a result waits when it
+  cannot be sent, which server a build talks to, and the session: refreshed once for
+  every request waiting on it, kept when the server cannot be reached, let go when the
+  server refuses it or the player signs out.
+- **`Promuse.UI.EditModeTests`** - every screen prefab has a way back for Android Back;
+  music switched off stays off, after a relaunch too; and the login screen reopens a
+  session a previous run left only while the game is open to this build.
+- **`Promuse.Story.EditModeTests`** - how a story script is read, and how the admin
+  page's corrections land on it.
+- **`Promuse.Art.EditModeTests`** - how `SplashFrame` sizes and places an operator's
+  splash.
+- **`Promuse.Manufacture.EditModeTests`** - the Manufacture screen as its builder leaves
+  it, its station cards and upgrade panel, how its countdowns and numbers read, and the
+  manager behind them.
+
+They are not all pure logic. `RulesetParityTests` opens `Main.unity` beside whatever is
+open and reads the `CharMeta` assets; `BackKeyTests`, `SoundSettingsTests` and the
+Manufacture screen and card tests load prefabs through `AssetDatabase`, and
+`SoundSettingsTests` writes PlayerPrefs, putting back what was there; `TokenRefreshTests`
+talks HTTP through `UnityWebRequest` to a small fake server it starts on the loopback.
+None of them needs a database, the dev API or the gitignored audio and art. A whole run
+takes two or three seconds on CI, over a second of it the token refresh tests.
+
+`.github/workflows/unity-tests.yml` runs every one of them, on each push to main, each
+pull request from this repository, every Monday, and by hand (*Actions → unity-tests →
+Run workflow*). It activates a Unity licence held in the repository's secrets, which
+GitHub withholds from forks, so a fork's pull request skips it. Of the nine minutes or
+so a run takes, the tests are those few seconds; the rest is pulling the editor image,
+importing the project and compiling it. A compile error anywhere fails the job before
+any test runs, and the job is a required check on main. The pass and fail counts, with
+each test's time, show on the pull request as a check of their own, *EditMode test
+results*; the editor log and the NUnit XML are kept as the run's artifact for 14 days.
+
+Two things it does not see. It fetches only the LFS binaries the compiler needs: the
+PNG, JPG, WAV, MP3 and TTF files stay LFS pointer text there, so a test must not need
+them. And its editor is Linux with no Android support, so none of the code behind
+`UNITY_ANDROID` or `!UNITY_EDITOR` is compiled there; only an Android build compiles all
+of it, and no workflow makes one.
 
 ---
 
@@ -601,7 +646,7 @@ A missing or duplicated `.meta` is the classic way a Unity repository breaks: Un
 regenerates it with a fresh GUID and every prefab that referenced the old one
 silently loses its link, surfacing days later as "Missing (Mono Script)".
 
-`.github/workflows/project-checks.yml` runs all three on every pull request. It needs
+`.github/workflows/project-checks.yml` runs all five on every pull request. It needs
 no Unity licence and no secrets.
 
 ---

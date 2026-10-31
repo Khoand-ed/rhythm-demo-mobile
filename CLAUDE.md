@@ -86,7 +86,15 @@ python ci/check_repo_hygiene.py      # stray build output, LFS integrity, confli
 ```
 
 `.github/workflows/project-checks.yml` runs the same five on every PR — no Unity
-licence, no secrets. There is no CI that compiles C#; only the Editor can do that.
+licence, no secrets. `.github/workflows/unity-tests.yml` compiles the Unity project's
+C#: on each push to main, each PR from this repository, weekly and by hand, it opens
+the project in Unity and runs every EditMode test assembly, not only Rhythm.Core's.
+A compile error anywhere fails it before any test runs. A fork's PR skips it, because
+GitHub withholds the licence secret from forks. Both jobs are required checks on main.
+A run takes about nine minutes, the tests a few seconds of that. Its editor is Linux
+with no Android support, so the `UNITY_ANDROID` and `!UNITY_EDITOR` branches
+(`ABManager`, `BundleInstaller`, `FrameRate`, `PauseMenu`) are not compiled there.
+Only an Android build compiles all of them, and no CI makes one.
 
 ## Traps
 
