@@ -63,9 +63,13 @@ namespace Manager {
         }
 
         /// <summary>The login screen opened: say if the game is closed or this build too old.</summary>
-        public async void CheckOnLogin() {
+        /// <returns>
+        /// True when it is - the player has been told, and the login screen does not reopen a stored
+        /// session over the warning: the server would refuse it anyway.
+        /// </returns>
+        public async Task<bool> CheckOnLogin() {
             await RefreshAsync();
-            WarnIfBlocked();
+            return WarnIfBlocked();
         }
 
         /// <summary>

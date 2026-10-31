@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Threading.Tasks;
 using Data.Player;
 using Promuse.Contracts.Players;
 using Promuse.Net;
@@ -54,6 +55,14 @@ namespace UI.Sub {
         private AudioClip clip;
         private AudioClip loop_clip;
         
+        // 上次的会话正在重开 / The session a previous run left is being reopened (ResumeStoredSession).
+        private bool resuming;
+
+        // 标题至少停这么久 / How long the title stays up, at least, before a reopened session moves on:
+        // long enough to be seen, short of being a wait. Counted from Show.
+        private const float TitleSeconds = 1.5f;
+        private float shownAt;
+
         /// <summary>
         /// Back closes the sign-in or sign-up form when one is open. Anywhere else here - the first screen,
         /// the name screen a new account cannot skip - there is nothing further back, so it asks whether to
@@ -330,12 +339,109 @@ namespace UI.Sub {
             });
         }
 
+        /// <summary>
+        /// 上次的会话 / Reopens the session a previous run left on this device, once the config check
+        /// has said the game is open to this build, and goes where a password sign-in goes - the name
+        /// screen for an account that never chose one, Home otherwise - without the password.
+        /// <see cref="SessionResume"/> holds the rules.
+        ///
+        /// 按钮先收起来 / ACCOUNT LOGIN and REGISTER are put away while it runs: a sign-in pressed over
+        /// it would race it for the player's save, and a screen about to move on by itself should not
+        /// offer to go somewhere else. They come back whenever it does not move on - the game closed to
+        /// this build, the session gone, the server out of reach - and then the screen is the one a
+        /// device without a session sees.
+        /// </summary>
+        private async void ResumeStoredSession(Task<bool> closedCheck) {
+            if (resuming) return;
+            resuming = true;
+            SetHomeButtons(false);
+
+            try {
+                bool closed = await closedCheck;
+                if (this == null) return;
+
+                if (!SessionResume.ShouldTry(PlayerManager.Inst().HasStoredSession, closed)) {
+                    SetHomeButtons(true);
+                    return;
+                }
+
+                ApiResult<PlayerData> result = await PlayerManager.Inst().ResumeAsync();
+                if (this == null) return;
+
+                SessionResume.Next next = SessionResume.After(
+                    result.IsSuccess, result.IsSuccess && result.Value.HasName(), PlayerManager.Inst().HasStoredSession);
+
+                switch (next) {
+                    case SessionResume.Next.EnterGame:
+                        LeaveTitle(() => EnterGame(homePanel));
+                        break;
+
+                    case SessionResume.Next.ChooseName:
+                        LeaveTitle(() => ShowNamePanel(homePanel));
+                        break;
+
+                    case SessionResume.Next.SignInAgain:
+                        SetHomeButtons(true);
+                        CommonDialogUI.Message(CommonDialogUI.GroundType.BLACK, "Your session has ended. Please sign in again.");
+                        break;
+
+                    case SessionResume.Next.TryAgain:
+                        SetHomeButtons(true);
+                        // 再试就从头再问一遍配置 / A retry asks for the config again too: the failure that
+                        // kept the session out may have kept the config out, and maintenance may have
+                        // begun since. Sent once the dialog has gone, as in ConfirmName.
+                        CommonDialogUI.Message(CommonDialogUI.GroundType.BLACK, $"{result.Message}\nTry again?", () => {
+                            SetHomeButtons(false);
+                            Delay.add(() => {
+                                if (this != null) ResumeStoredSession(RemoteConfigManager.Inst().CheckOnLogin());
+                            }, 0.3f);
+                        });
+                        break;
+                }
+            } catch (Exception e) {
+                // 出错也不能把人困在这 / Whatever broke, the screen is left as it is without a session:
+                // the buttons out, so the player can still sign in by hand.
+                Debug.LogException(e);
+                if (this != null) SetHomeButtons(true);
+            } finally {
+                resuming = false;
+            }
+        }
+
+        private void SetHomeButtons(bool shown) {
+            home_login.gameObject.SetActive(shown);
+            home_register.gameObject.SetActive(shown);
+        }
+
+        /// <summary>
+        /// 从标题直接走 / Leaves the title the way a reopened session does: once it has been up for
+        /// <see cref="TitleSeconds"/>, the backdrop goes dark and the ball's light goes out as on the way
+        /// to a form, so the loading bar and the name screen stand on the black they always stand on.
+        /// </summary>
+        private void LeaveTitle(Action next) {
+            float wait = Mathf.Max(0f, shownAt + TitleSeconds - Time.realtimeSinceStartup);
+
+            Delay.add(() => {
+                if (this == null) return;
+
+                backGround.DOFade(1, 0.5f);
+                sphereCamera.DOColor(black, 1f);
+                next();
+            }, wait);
+        }
+
         public override void Show() {
             base.Show();
+            shownAt = Time.realtimeSinceStartup;
 
             // 登录前先看一眼 / Before anyone signs in: is the game in maintenance, is this build too
             // old? The server refuses either way; this is what lets the screen say why first.
-            RemoteConfigManager.Inst().CheckOnLogin();
+            Task<bool> closed = RemoteConfigManager.Inst().CheckOnLogin();
+
+            // 记得就不再问密码 / Then a session this device still holds is reopened without asking for
+            // the password again. A sign-out has already let go of its own, so the screen it returns
+            // to offers the two buttons as always.
+            if (PlayerManager.Inst().HasStoredSession) ResumeStoredSession(closed);
 
             SoundManager.Inst().PlayMusic(clip, false, () => {
                 SoundManager.Inst().PlayMusic(loop_clip, true);

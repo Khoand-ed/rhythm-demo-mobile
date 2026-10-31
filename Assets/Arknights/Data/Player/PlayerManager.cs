@@ -75,6 +75,11 @@ namespace Data.Player {
         /// Reopens the session a previous run left behind, without asking for a
         /// password. Fails like any other sign-in if the token has expired or was
         /// revoked - and then the player simply signs in again.
+        ///
+        /// LoginUI calls it when it opens, after the maintenance and version check
+        /// (see UI.Sub.SessionResume). A refusal of the token itself also lets go of
+        /// it - <see cref="HasStoredSession"/> turns false - which is how the screen
+        /// tells a session that is gone from a server it could not reach.
         /// </summary>
         public async Task<ApiResult<PlayerData>> ResumeAsync() {
             if (!api.Tokens.HasSession) {
@@ -277,6 +282,10 @@ namespace Data.Player {
         /// afterwards without waiting. Signature unchanged because SettingUI calls
         /// it from a button, and a sign-out that appears to hang while a request
         /// times out is worse than one the server hears about a second later.
+        ///
+        /// At once includes the stored session: the login screen SettingUI returns
+        /// to reopens any session it finds, so one left there for the logout's
+        /// round trip would sign the player straight back in.
         /// </summary>
         public void Exit() {
             playerData = null;
