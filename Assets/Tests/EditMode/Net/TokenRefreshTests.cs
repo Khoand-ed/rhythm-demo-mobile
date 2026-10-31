@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using NUnit.Framework;
 using Promuse.Contracts.Auth;
 using Promuse.Contracts.Leaderboards;
+using Promuse.Contracts.Players;
 using Promuse.Net;
 using UnityEngine;
 using UnityEngine.TestTools;
@@ -24,11 +25,16 @@ using UnityEngine.TestTools;
 // Against a small server of the test's own (FakeAuthServer, below) that rotates and revokes the way
 // the real one does, so the client is exercised end to end - UnityWebRequest included - without a
 // database or the dev API.
+//
+// 上次的会话 / Further down, what becomes of a session a previous run left on the device - the one the
+// login screen reopens without a password - when the server honours it, refuses it or cannot be
+// reached, and when the player signs out.
 public class TokenRefreshTests
 {
     private FakeAuthServer server;
     private string scope;
     private TokenStore tokens;
+    private PromuseConfig config;
     private PromuseApi api;
 
     [SetUp]
@@ -38,7 +44,7 @@ public class TokenRefreshTests
         // A scope of the test's own: neither the session nor the files of a real server are touched.
         scope = "test-" + Guid.NewGuid().ToString("N");
         tokens = new TokenStore(scope);
-        var config = new PromuseConfig
+        config = new PromuseConfig
         {
             baseUrl = server.Url,
             storageScope = scope,
@@ -117,16 +123,114 @@ public class TokenRefreshTests
         Assert.IsFalse(tokens.HasSession, "the refresh that answered after the sign-out did not bring the session back");
     }
 
+    // ------------------------------------------------------------- a session from an earlier run
+    //
+    // LoginUI reopens it through PlayerManager.ResumeAsync, which reads GET /v1/players/me, and decides
+    // what to do from what is left on the device afterwards (UI.Sub.SessionResume): these pin that.
+
+    [UnityTest]
+    public IEnumerator ASessionFromAnEarlierRun_ReadsThePlayer_AndKeepsTheTokenItWasRotatedTo()
+    {
+        tokens.Adopt(Pair("a0", 900, "r0"));
+
+        // 重启 / A restart: a new store reads the session back from PlayerPrefs - the refresh token, never
+        // the access token - and a new client is built on it, as PlayerManager does.
+        var restarted = new PromuseApi(config, new TokenStore(scope));
+        Task<ApiResult<PlayerState>> read = restarted.GetPlayerStateAsync();
+        yield return Await(read);
+
+        Assert.IsTrue(read.Result.IsSuccess, read.Result.Message);
+        Assert.AreEqual("Edd", read.Result.Value.DisplayName);
+        Assert.AreEqual(1, server.Refreshes, "one refresh, for the access token a restart does not keep");
+        // The next launch has to present the token the server rotated to: r0 again would be read as
+        // theft, and the whole session revoked.
+        Assert.AreEqual("r1", new TokenStore(scope).RefreshToken);
+    }
+
+    [UnityTest]
+    public IEnumerator ASessionTheServerNoLongerHonours_IsLetGo()
+    {
+        // Expired or revoked: the server answers its refresh token with REFRESH_TOKEN_INVALID.
+        tokens.Adopt(Pair("a-old", 0, "r-old"));
+
+        Task<ApiResult<PlayerState>> read = api.GetPlayerStateAsync();
+        yield return Await(read);
+
+        Assert.IsFalse(read.Result.IsSuccess);
+        Assert.IsFalse(tokens.HasSession, "let go of - the login screen asks the player to sign in again");
+        Assert.IsFalse(new TokenStore(scope).HasSession, "on the device too: the next launch does not try it again");
+    }
+
+    [UnityTest]
+    public IEnumerator ASession_IsKept_WhenTheServerCannotBeReached()
+    {
+        tokens.Adopt(Pair("a0", 0, "r0"));
+
+        // Nothing listens there: what failed is the network, and nothing has said the session is bad.
+        var unreachable = new PromuseApi(new PromuseConfig
+        {
+            baseUrl = "http://127.0.0.1:" + ClosedPort(),
+            storageScope = scope,
+            timeoutSeconds = 10,
+            maxRetries = 0,
+        }, tokens);
+
+        Task<ApiResult<PlayerState>> read = unreachable.GetPlayerStateAsync();
+        yield return Await(read);
+
+        Assert.IsTrue(read.Result.Is(TransportErrorCodes.Offline), read.Result.Message);
+        Assert.IsTrue(tokens.HasSession, "kept - the login screen offers to try again");
+        Assert.AreEqual("r0", new TokenStore(scope).RefreshToken);
+    }
+
+    [UnityTest]
+    public IEnumerator SigningOut_LetsGoOfTheSession_BeforeTheServerHasAnswered()
+    {
+        tokens.Adopt(Pair("a0", 900, "r0"));
+
+        Task signOut = api.SignOutAsync();
+
+        // The login screen a sign-out returns to reopens any session it finds; none may be left for it
+        // while the logout is still on the wire.
+        Assert.IsFalse(signOut.IsCompleted, "the server has not answered yet");
+        Assert.IsFalse(tokens.HasSession);
+        Assert.IsFalse(new TokenStore(scope).HasSession, "nor on the device");
+
+        yield return Await(signOut);
+
+        Assert.AreEqual(1, server.Logouts);
+        Assert.AreEqual("r0", server.LoggedOut, "the server is still told which session ended");
+    }
+
+    private static int ClosedPort()
+    {
+        var probe = new TcpListener(IPAddress.Loopback, 0);
+        probe.Start();
+        int port = ((IPEndPoint)probe.LocalEndpoint).Port;
+        probe.Stop();
+        return port;
+    }
+
     // ------------------------------------------------------------------------- the server
 
     /// <summary>
     /// Just enough of the API on a loopback socket: /v1/auth/refresh rotates the pair and answers a
     /// refresh token presented twice with REFRESH_TOKEN_REUSED, revoking everything, as
-    /// AuthService does; /v1/leaderboards/* wants the current access token; /v1/auth/logout says yes.
-    /// HTTP/1.1, one request per connection.
+    /// AuthService does; /v1/leaderboards/* and /v1/players/me want the current access token;
+    /// /v1/auth/logout says yes, and remembers the token it was given. HTTP/1.1, one request per
+    /// connection.
     /// </summary>
     private sealed class FakeAuthServer : IDisposable
     {
+        // A save with a name, as GET /v1/players/me answers it.
+        private const string PlayerJson =
+            "{\"playerId\":\"6f1c2b1e-5a4d-4c3b-9a8f-000000000001\",\"displayName\":\"Edd\",\"tag\":7364," +
+            "\"level\":1,\"exp\":0,\"expToNextLevel\":100," +
+            "\"stamina\":{\"current\":82,\"max\":82,\"nextPointAt\":null,\"fullAt\":null}," +
+            "\"characters\":[],\"squad\":[null,null,null,null],\"desktopCharacterId\":null," +
+            "\"signature\":null,\"signatureLockedUntil\":null,\"inventory\":[]," +
+            "\"stateVersion\":3,\"serverTime\":\"2026-10-31T00:00:00Z\"}";
+
         private readonly TcpListener listener;
         private readonly Thread acceptor;
         private readonly object gate = new object();
@@ -135,6 +239,8 @@ public class TokenRefreshTests
         private string liveAccess = "a0";
         private int refreshes;
         private bool revoked;
+        private int logouts;
+        private string loggedOut;
         private volatile bool stopping;
 
         public int RefreshDelayMs = 200;
@@ -151,6 +257,10 @@ public class TokenRefreshTests
         public string Url { get; }
         public int Refreshes { get { lock (gate) return refreshes; } }
         public bool Revoked { get { lock (gate) return revoked; } }
+        public int Logouts { get { lock (gate) return logouts; } }
+
+        /// <summary>The refresh token the last logout presented.</summary>
+        public string LoggedOut { get { lock (gate) return loggedOut; } }
 
         private void Accept()
         {
@@ -232,11 +342,16 @@ public class TokenRefreshTests
 
             if (path == "/v1/auth/logout")
             {
+                lock (gate)
+                {
+                    logouts++;
+                    loggedOut = Regex.Match(body, "\"refreshToken\"\\s*:\\s*\"([^\"]*)\"").Groups[1].Value;
+                }
                 status = 204;
                 return "";
             }
 
-            if (path.StartsWith("/v1/leaderboards/", StringComparison.Ordinal))
+            if (path.StartsWith("/v1/leaderboards/", StringComparison.Ordinal) || path == "/v1/players/me")
             {
                 lock (gate)
                 {
@@ -247,7 +362,9 @@ public class TokenRefreshTests
                     }
                 }
                 status = 200;
-                return "{\"stageId\":\"stage\",\"periodKey\":\"all\",\"entries\":[],\"serverTime\":\"2026-10-24T00:00:00Z\"}";
+                return path == "/v1/players/me"
+                    ? PlayerJson
+                    : "{\"stageId\":\"stage\",\"periodKey\":\"all\",\"entries\":[],\"serverTime\":\"2026-10-24T00:00:00Z\"}";
             }
 
             status = 404;
