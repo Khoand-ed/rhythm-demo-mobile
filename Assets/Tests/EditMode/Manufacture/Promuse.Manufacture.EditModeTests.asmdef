@@ -5,6 +5,8 @@
         "Promuse.Manufacture",
         "Promuse.Net",
         "Arknights",
+        "UnityEngine.UI",
+        "Unity.TextMeshPro",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],

@@ -51,7 +51,13 @@ namespace Manager {
 #elif UNITY_IOS
                 return "IOS";
 #else
+                // 编辑器里只是没有AB包 / An Editor set to any other target - the Linux one the EditMode
+                // tests run in on CI, a Mac - simply has no bundles, and Asset.Load falls back to
+                // Resources. Logged as an error there, it failed every test that loaded an asset.
+                // Only a player built for a platform nobody named is a mistake worth an error.
+#if !UNITY_EDITOR
                 Debug.LogError("未指定该平台的名字");
+#endif
                 return "";
 #endif
             }
@@ -90,6 +96,9 @@ namespace Manager {
 
             //先判断总包是否加载过
             if (single == null) {
+                // 没有总包名就没有AB包 / No bundle name for this target, no bundles: the caller falls back.
+                if (string.IsNullOrEmpty(SingleABName)) return null;
+
                 if (!File.Exists(ABPath + SingleABName)) {
                     Debug.LogWarning($"未找到路径: {ABPath}{SingleABName}");
                     return null;
