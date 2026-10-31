@@ -96,6 +96,19 @@ XLua, Spine and DOTween under `Assets/Plugins/`.
    before Home opens. An account that signed up and left before this step is sent
    back to it at the next sign-in. The screen is built into `LoginUI.prefab` by
    `Arknights/Login/Build Name Entry`.
+7. **Next time there is no password to type.** The device keeps the session - one
+   per server, see *Which server the game talks to* - and the login screen reopens it
+   by itself once the maintenance / minimum-version check has passed: Home, or the
+   name screen for an account without a name, exactly as after a password. ACCOUNT
+   LOGIN and REGISTER stay hidden while it tries, and come back whenever it does not
+   go on:
+   - maintenance, or a build older than the minimum - that warning only; the session
+     waits for the game to open;
+   - the session has ended (30 days unused, or revoked) - "Your session has ended",
+     and the device lets it go;
+   - the server cannot be reached - the reason and *Try again?*; the session is kept.
+
+   To change account, return to the login screen from Settings: that signs out.
 
 ### Remote config and the admin page
 
