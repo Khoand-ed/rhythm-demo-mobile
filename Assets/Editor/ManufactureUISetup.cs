@@ -7,22 +7,26 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 制造站界面 / Builds the Manufacture screen prefab and hooks Home's MANUFACTURE tile to it.
+/// 制造站界面 / Builds the Manufacture screen prefab and the room's lines, and hooks Home's
+/// MANUFACTURE tile to the screen.
 ///
 ///   Arknights/Manufacture/Build Manufacture UI           - builds what is missing, keeps what exists
 ///   Arknights/Manufacture/Reset Manufacture UI To Default - builds the screen again from scratch
 ///
-/// 不动手改过的东西 / Build never touches a prefab that already exists: whatever has been placed,
-/// recoloured or swapped for real art by hand stays as it is. Only Reset throws that away, and asks
-/// first. It writes over the prefab in place rather than deleting it, so the asset keeps its GUID.
-/// Hooking the tile only ever adds what is missing to it.
+/// 不动手改过的东西 / Build never changes what is already there: whatever has been placed, recoloured
+/// or swapped for real art by hand stays as it is. On a prefab that exists it only adds the parts a
+/// later version of the screen has and this one lacks - the room's operators, the ROOM button, the
+/// room picker - and saves nothing when nothing is missing. Only Reset throws the prefab away, and asks
+/// first; it writes over the prefab in place, so the asset keeps its GUID. The lines asset is created
+/// once and never written again by either. Hooking the tile only ever adds what is missing to it.
 ///
 /// 布局 / The screen, bottom to top:
-///   Room        (child Canvas) wall, windows, floor, five empty chibi slots on the floor
+///   Room        (child Canvas, ManufactureRoom) wall, windows, floor, five slots the operators stand in
 ///   Hud         (child Canvas, CanvasGroup) the LMD and EXP station cards, left and right
 ///   LockOverlay below the top bar: "Clear 1-1 to unlock", "unavailable", a load error and Retry
-///   TopBar      Back, the title, the LMD the player holds, Collect all
+///   TopBar      Back, the title, ROOM, the LMD the player holds, Collect all
 ///   UpgradePanel over everything, top bar included, until it is confirmed or cancelled
+///   RoomPicker  over everything too: who stands in the room, up to five
 /// </summary>
 public static class ManufactureUISetup
 {
@@ -56,7 +60,8 @@ public static class ManufactureUISetup
 
         var done = new List<string>
         {
-            BuildIfMissing(),
+            BuildOrComplete(),
+            EnsureLines(),
             HookTile(),
         };
 
@@ -95,19 +100,38 @@ public static class ManufactureUISetup
         PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
         Object.DestroyImmediate(root);
 
+        string lines = EnsureLines();
         string hooked = HookTile();
         AssetDatabase.SaveAssets();
-        Debug.Log($"{Tag} Manufacture UI rebuilt from scratch at {PrefabPath}.\n  {hooked}");
+        Debug.Log($"{Tag} Manufacture UI rebuilt from scratch at {PrefabPath}.\n  {lines}\n  {hooked}");
     }
 
-    private static string BuildIfMissing()
+    private static string BuildOrComplete()
     {
-        if (AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath) != null) return $"{ManufactureUI.UIName}: kept as it is";
+        if (AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath) == null)
+        {
+            GameObject root = BuildScreen();
+            PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
+            Object.DestroyImmediate(root);
+            return $"{ManufactureUI.UIName}: built at {PrefabPath} - room and its operators, two station cards, " +
+                   "upgrade panel, room picker, lock";
+        }
 
-        GameObject root = BuildScreen();
-        PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
-        Object.DestroyImmediate(root);
-        return $"{ManufactureUI.UIName}: built at {PrefabPath} - room, two station cards, upgrade panel, lock";
+        // 只补缺的 / An existing screen keeps everything it has; only parts it lacks are added, and it is
+        // saved only when something was.
+        GameObject contents = PrefabUtility.LoadPrefabContents(PrefabPath);
+        try
+        {
+            List<string> added = Complete(contents);
+            if (added.Count == 0) return $"{ManufactureUI.UIName}: kept as it is";
+
+            PrefabUtility.SaveAsPrefabAsset(contents, PrefabPath);
+            return $"{ManufactureUI.UIName}: kept, and added what it lacked - " + string.Join(", ", added);
+        }
+        finally
+        {
+            PrefabUtility.UnloadPrefabContents(contents);
+        }
     }
 
     // ================================================================== screen
@@ -131,6 +155,10 @@ public static class ManufactureUISetup
         BuildTopBar(rect, ui);
         ui.upgradePanel = BuildUpgradePanel(rect);
 
+        // 后来加的部分 / The parts added since the first version, built the way Build adds them to an
+        // older prefab, so a new screen and a completed one come out the same.
+        Complete(root);
+
         return root;
     }
 
@@ -153,17 +181,19 @@ public static class ManufactureUISetup
         Image edge = NewImage("FloorEdge", floor.rectTransform, FloorEdge, raycast: false);
         Place(edge.rectTransform, TopLeft, TopRight, TopCenter, Vector2.zero, new Vector2(0f, 6f));
 
-        // 小人站的位置 / Where the chibis will stand, on the floor's edge. Empty until M6 fills them;
-        // placed here so they can be moved by hand and a later build keeps them where they were put.
+        // 小人站的位置 / Where the operators stand, on the floor's edge. Placed here so they can be moved
+        // by hand, and a later build keeps them where they were put.
         RectTransform slots = NewRect("ChibiSlots", room);
         Stretch(slots);
-        float[] xs = { -300f, -150f, 0f, 150f, 300f };
-        for (int i = 0; i < xs.Length; i++)
+        for (int i = 0; i < SlotXs.Length; i++)
         {
             RectTransform slot = NewRect("ChibiSlot" + i, slots);
-            Place(slot, BottomCenter, BottomCenter, BottomCenter, new Vector2(xs[i], 300f), new Vector2(180f, 260f));
+            Place(slot, BottomCenter, BottomCenter, BottomCenter, new Vector2(SlotXs[i], 300f), SlotSize);
         }
     }
+
+    private static readonly float[] SlotXs = { -300f, -150f, 0f, 150f, 300f };
+    private static readonly Vector2 SlotSize = new Vector2(180f, 260f);
 
     private static StationCard BuildCard(RectTransform parent, string stationId, bool left)
     {
@@ -189,6 +219,7 @@ public static class ManufactureUISetup
         view.productName = Label(card, "ProductName", TopLeft, new Vector2(152f, -108f), new Vector2(300f, 36f), 24f, Dim, TextAlignmentOptions.Left);
         view.stored = Label(card, "Stored", TopLeft, new Vector2(152f, -150f), new Vector2(300f, 64f), 46f, Color.white, TextAlignmentOptions.Left);
         view.stored.fontStyle = FontStyles.Bold;
+        FitOneLine(view.stored, 30f);
 
         Image track = NewImage("Progress", card, Track, raycast: false);
         Place(track.rectTransform, TopLeft, TopRight, TopCenter, new Vector2(0f, -236f), new Vector2(-56f, 16f));
@@ -275,6 +306,279 @@ public static class ManufactureUISetup
 
         veil.gameObject.SetActive(false);
         return panel;
+    }
+
+    // ================================================================== later parts
+
+    private const string MaterialPath = "Assets/Plugins/Spine/Runtime/spine-unity/Materials/SkeletonGraphicDefault.mat";
+
+    private static readonly Color BubbleInk = new Color(0.04f, 0.045f, 0.05f, 0.92f);
+    private static readonly Color Picked = new Color(0.96f, 0.73f, 0.05f, 0.28f);
+    private static readonly Color Refused = new Color(0.92f, 0.30f, 0.26f, 1f);
+
+    /// <summary>
+    /// 补上后来的部分 / Adds each part a later version of the screen has and this one lacks - the room's
+    /// operators, the ROOM button, the room picker - leaving everything there as it is. Returns what it
+    /// added: nothing, on a screen that has it all.
+    /// </summary>
+    private static List<string> Complete(GameObject root)
+    {
+        var added = new List<string>();
+        ManufactureUI ui = root.GetComponent<ManufactureUI>();
+        RectTransform rect = (RectTransform)root.transform;
+
+        EnsureRoom(rect, ui, added);
+        EnsureRoomButton(rect, ui, added);
+        EnsureRoomPicker(rect, ui, added);
+        return added;
+    }
+
+    private static void EnsureRoom(RectTransform root, ManufactureUI ui, List<string> added)
+    {
+        RectTransform room = root.Find("Room") as RectTransform;
+        if (room == null)
+        {
+            Debug.LogWarning($"{Tag} {ManufactureUI.UIName} has no Room; Reset Manufacture UI To Default builds one.");
+            return;
+        }
+
+        ManufactureRoom floor = room.GetComponent<ManufactureRoom>();
+        if (floor == null)
+        {
+            floor = room.gameObject.AddComponent<ManufactureRoom>();
+            added.Add("the room's operators");
+        }
+        if (ui.room == null) ui.room = floor;
+        if (floor.graphicMaterial == null) floor.graphicMaterial = AssetDatabase.LoadAssetAtPath<Material>(MaterialPath);
+
+        RectTransform slots = room.Find("ChibiSlots") as RectTransform;
+        if (slots == null)
+        {
+            slots = NewRect("ChibiSlots", room);
+            Stretch(slots);
+        }
+
+        var chibis = new List<ManufactureChibi>();
+        for (int i = 0; i < SlotXs.Length; i++)
+        {
+            RectTransform slot = slots.Find("ChibiSlot" + i) as RectTransform;
+            if (slot == null)
+            {
+                slot = NewRect("ChibiSlot" + i, slots);
+                Place(slot, BottomCenter, BottomCenter, BottomCenter, new Vector2(SlotXs[i], 300f), SlotSize);
+            }
+            chibis.Add(EnsureChibi(slot));
+        }
+
+        // 没绑才绑 / Bound only where nothing is: slots reordered or dropped by hand stay that way.
+        if (floor.slots == null || floor.slots.Length == 0) floor.slots = chibis.ToArray();
+    }
+
+    /// <summary>A slot's tap area, the figure the operator stands in and the bubble over it, each only if missing.</summary>
+    private static ManufactureChibi EnsureChibi(RectTransform slot)
+    {
+        ManufactureChibi chibi = slot.GetComponent<ManufactureChibi>();
+        if (chibi == null) chibi = slot.gameObject.AddComponent<ManufactureChibi>();
+
+        // 透明的点击区 / Transparent, and a raycast target only while someone stands here - ManufactureChibi
+        // switches it - so an empty slot never takes a tap from the room behind it.
+        UnityEngine.UI.Image hit = slot.GetComponent<UnityEngine.UI.Image>();
+        if (hit == null)
+        {
+            hit = slot.gameObject.AddComponent<UnityEngine.UI.Image>();
+            hit.color = new Color(0f, 0f, 0f, 0f);
+            hit.raycastTarget = false;
+        }
+        if (chibi.hitArea == null) chibi.hitArea = hit;
+
+        RectTransform figure = slot.Find("Figure") as RectTransform;
+        if (figure == null)
+        {
+            figure = NewRect("Figure", slot);
+            Place(figure, BottomCenter, BottomCenter, BottomCenter, Vector2.zero, SlotSize);
+        }
+        if (chibi.figure == null) chibi.figure = figure;
+
+        Transform bubble = slot.Find("Bubble");
+        if (bubble == null)
+        {
+            UnityEngine.UI.Image box = NewImage("Bubble", slot, BubbleInk, raycast: false);
+            Place(box.rectTransform, TopCenter, TopCenter, BottomCenter, new Vector2(0f, 8f), new Vector2(360f, 100f));
+            TextMeshProUGUI said = NewText("Text", box.rectTransform, 22f, Color.white, TextAlignmentOptions.Center);
+            Stretch(said.rectTransform);
+            said.rectTransform.offsetMin = new Vector2(14f, 8f);
+            said.rectTransform.offsetMax = new Vector2(-14f, -8f);
+
+            // 长句缩小 / A long line shrinks to fit rather than spilling out of the box.
+            said.enableAutoSizing = true;
+            said.fontSizeMin = 16f;
+            said.fontSizeMax = 22f;
+            box.gameObject.SetActive(false);
+            bubble = box.transform;
+        }
+        if (chibi.bubble == null) chibi.bubble = bubble.gameObject;
+        if (chibi.bubbleText == null) chibi.bubbleText = bubble.GetComponentInChildren<TextMeshProUGUI>(true);
+
+        return chibi;
+    }
+
+    private static void EnsureRoomButton(RectTransform root, ManufactureUI ui, List<string> added)
+    {
+        RectTransform bar = root.Find("TopBar") as RectTransform;
+        if (bar == null) return;
+
+        Transform button = bar.Find("RoomButton");
+        if (button == null)
+        {
+            // 在 LMD 左边 / Left of the LMD the player holds, and clear of the title down to 4:3.
+            button = SolidButton("RoomButton", bar, TopRight, new Vector2(-680f, -33f), new Vector2(150f, 55f),
+                                 "ROOM", Slab, Color.white).transform;
+            added.Add("the ROOM button");
+        }
+        if (ui.roomButton == null) ui.roomButton = button.GetComponent<UnityEngine.UI.Button>();
+    }
+
+    private static void EnsureRoomPicker(RectTransform root, ManufactureUI ui, List<string> added)
+    {
+        Transform picker = root.Find("RoomPicker");
+        if (picker == null)
+        {
+            // 加在最后 / Added last, so it draws over everything, the top bar and the upgrade panel too.
+            picker = BuildRoomPicker(root).transform;
+            added.Add("the room picker");
+        }
+        if (ui.roomPicker == null) ui.roomPicker = picker.GetComponent<RoomPicker>();
+    }
+
+    private static RoomPicker BuildRoomPicker(RectTransform parent)
+    {
+        UnityEngine.UI.Image veil = NewImage("RoomPicker", parent, Veil, raycast: true);
+        Stretch(veil.rectTransform);
+        RoomPicker picker = veil.gameObject.AddComponent<RoomPicker>();
+
+        UnityEngine.UI.Image box = NewImage("Box", veil.rectTransform, new Color(Card.r, Card.g, Card.b, 1f), raycast: true);
+        Place(box.rectTransform, Center, Center, Center, Vector2.zero, new Vector2(1100f, 780f));
+        RectTransform rect = box.rectTransform;
+
+        UnityEngine.UI.Image accent = NewImage("Accent", rect, Yellow, raycast: false);
+        Place(accent.rectTransform, TopLeft, TopRight, TopCenter, Vector2.zero, new Vector2(0f, 6f));
+
+        TextMeshProUGUI title = Label(rect, "Title", TopLeft, new Vector2(40f, -56f), new Vector2(600f, 50f), 38f, Color.white, TextAlignmentOptions.Left);
+        title.fontStyle = FontStyles.Bold;
+        title.text = "ROOM";
+        TextMeshProUGUI about = Label(rect, "About", TopLeft, new Vector2(40f, -112f), new Vector2(1020f, 36f), 24f, Dim, TextAlignmentOptions.Left);
+        about.text = $"Choose up to {RoomSelection.Capacity} operators to stand in the room. Tap again to take one out.";
+        picker.count = Label(rect, "Count", TopRight, new Vector2(-40f, -56f), new Vector2(200f, 50f), 34f, Yellow, TextAlignmentOptions.Right);
+
+        // 网格 / The owned operators, five to a row, two rows before it runs out of room.
+        RectTransform grid = NewRect("Grid", rect);
+        Place(grid, TopCenter, TopCenter, TopCenter, new Vector2(0f, -176f), new Vector2(1020f, 384f));
+        UnityEngine.UI.GridLayoutGroup layout = grid.gameObject.AddComponent<UnityEngine.UI.GridLayoutGroup>();
+        layout.cellSize = new Vector2(180f, 180f);
+        layout.spacing = new Vector2(24f, 24f);
+        layout.constraint = UnityEngine.UI.GridLayoutGroup.Constraint.FixedColumnCount;
+        layout.constraintCount = RoomSelection.Capacity;
+        layout.childAlignment = TextAnchor.UpperCenter;
+        picker.grid = grid;
+        picker.tileTemplate = BuildPickerTile(grid);
+
+        picker.hint = Label(rect, "Hint", BottomCenter, new Vector2(0f, 140f), new Vector2(1020f, 40f), 24f, Refused, TextAlignmentOptions.Center);
+        picker.hint.gameObject.SetActive(false);
+
+        picker.confirmButton = SolidButton("ConfirmButton", rect, BottomRight, new Vector2(-40f, 40f), new Vector2(280f, 76f), "CONFIRM", Accent, Color.white);
+        picker.cancelButton = SolidButton("CancelButton", rect, BottomLeft, new Vector2(40f, 40f), new Vector2(240f, 76f), "CANCEL", Slab, Color.white);
+
+        veil.gameObject.SetActive(false);
+        return picker;
+    }
+
+    /// <summary>The tile copied for each owned operator: the portrait, and when chosen a tint and its place, 1 to 5.</summary>
+    private static RectTransform BuildPickerTile(RectTransform grid)
+    {
+        UnityEngine.UI.Image frame = NewImage("TileTemplate", grid, Slab, raycast: true);
+        RectTransform tile = frame.rectTransform;
+        UnityEngine.UI.Button button = frame.gameObject.AddComponent<UnityEngine.UI.Button>();
+        button.targetGraphic = frame;
+
+        RectTransform mask = NewRect("Mask", tile);
+        Stretch(mask);
+        mask.offsetMin = new Vector2(6f, 6f);
+        mask.offsetMax = new Vector2(-6f, -6f);
+        mask.gameObject.AddComponent<UnityEngine.UI.RectMask2D>();
+        UnityEngine.UI.Image portrait = NewImage("Portrait", mask, Color.white, raycast: false);
+        Stretch(portrait.rectTransform);
+        portrait.preserveAspect = true;
+
+        UnityEngine.UI.Image selected = NewImage("Selected", tile, Picked, raycast: false);
+        Stretch(selected.rectTransform);
+        UnityEngine.UI.Image badge = NewImage("Badge", selected.rectTransform, Yellow, raycast: false);
+        Place(badge.rectTransform, TopRight, TopRight, TopRight, new Vector2(-6f, -6f), new Vector2(44f, 44f));
+        TextMeshProUGUI order = Label(selected.rectTransform, "Order", TopRight, new Vector2(-6f, -6f), new Vector2(44f, 44f), 28f, Bar, TextAlignmentOptions.Center);
+        order.fontStyle = FontStyles.Bold;
+        selected.gameObject.SetActive(false);
+
+        return tile;
+    }
+
+    // ================================================================== lines
+
+    private const string LinesDir = "Assets/Manufacture/Resources/" + ManufactureLines.LoadPath;
+    private static string LinesPath => $"{LinesDir}/{ManufactureLines.AssetName}.asset";
+
+    /// <summary>
+    /// 只写第一次 / The room's lines, created with their first words when missing and never written again,
+    /// so lines edited in the Inspector stay. English, three for each operator and three for anyone else.
+    /// </summary>
+    private static string EnsureLines()
+    {
+        if (AssetDatabase.LoadAssetAtPath<ManufactureLines>(LinesPath) != null) return "ManufactureLines: kept as they are";
+
+        EnsureFolder(LinesDir);
+        ManufactureLines lines = ScriptableObject.CreateInstance<ManufactureLines>();
+        lines.entries = new List<ManufactureLines.Entry>
+        {
+            Lines("AMIYA",
+                  "The line is running smoothly. Thank you for checking in, Doctor.",
+                  "Every record we make here helps someone train. Let's keep going.",
+                  "Take a break if you need one. I'll keep an eye on the stations."),
+            Lines("NOVA",
+                  "Another batch done! I could do this all day.",
+                  "The machine keeps its own tempo. I'm learning to follow it.",
+                  "Collect it before it fills up, okay? I hate seeing it stop."),
+            Lines("ECHO",
+                  "...The press hums in four-four. Did you notice?",
+                  "I counted the units. Twice. They're all there.",
+                  "It's quiet in here. I like it."),
+            Lines("PULSE",
+                  "Keep the beat, keep the line moving. Same thing, really.",
+                  "Hey, Doctor! The press sounds great on the off-beat.",
+                  "Raise the station a level and I'll make it sing."),
+        };
+        lines.fallback = new[]
+        {
+            "Everything's running on time.",
+            "Need something, Doctor?",
+            "The stations won't run themselves. Well, they do, actually.",
+        };
+
+        AssetDatabase.CreateAsset(lines, LinesPath);
+        return $"ManufactureLines: created at {LinesPath} - {lines.entries.Count} operators with 3 lines each, " +
+               $"and {lines.fallback.Length} for anyone else";
+    }
+
+    private static ManufactureLines.Entry Lines(string charId, params string[] said)
+    {
+        return new ManufactureLines.Entry { charId = charId, lines = said };
+    }
+
+    private static void EnsureFolder(string path)
+    {
+        if (AssetDatabase.IsValidFolder(path)) return;
+
+        int slash = path.LastIndexOf('/');
+        string parent = path.Substring(0, slash);
+        EnsureFolder(parent);
+        AssetDatabase.CreateFolder(parent, path.Substring(slash + 1));
     }
 
     // ================================================================== Home tile
@@ -387,6 +691,18 @@ public static class ManufactureUISetup
         text.text = "";
         if (TMP_Settings.defaultFontAsset != null) text.font = TMP_Settings.defaultFontAsset;
         return text;
+    }
+
+    /// <summary>
+    /// 一行放下 / Kept to one line, shrinking down to <paramref name="smallest"/> to fit: a full Lv2 store,
+    /// "1,250 / 1,250", is wider than its card at full size and wrapped over the product's name.
+    /// </summary>
+    private static void FitOneLine(TMP_Text text, float smallest)
+    {
+        text.textWrappingMode = TextWrappingModes.NoWrap;
+        text.enableAutoSizing = true;
+        text.fontSizeMin = smallest;
+        text.fontSizeMax = text.fontSize;
     }
 
     private static TextMeshProUGUI Label(RectTransform parent, string name, Vector2 corner, Vector2 position, Vector2 size,
