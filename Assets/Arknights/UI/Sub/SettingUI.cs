@@ -34,11 +34,15 @@ namespace UI.Sub {
             // game_keep_speed.Initialization(GameSettings.GAME_KEEP_SPEED);
             // game_performance.Initialization(GameSettings.GAME_PERFORMANCE);
             game_profileScreen.value = GameSettings.GAME_PROFILED_SCREEN;
-            // sound_soundEffect.Initialization(GameSettings.SOUND_SOUND_EFFECT_ENABLE);
+
+            // 开关显示存下来的值 / The sound switches show the saved settings, not the prefab's "on".
+            // Without this a screen rebuilt after signing out, or opened after a relaunch, said "on"
+            // while Music was off - and the first tap on it switched nothing.
+            SetSwitch(sound_soundEffect, GameSettings.SOUND_SOUND_EFFECT_ENABLE);
             sound_soundEffect_value.value = GameSettings.SOUND_SOUND_EFFECT_VALUE;
-            // sound_music.Initialization(GameSettings.SOUND_MUSIC_ENABLE);
+            SetSwitch(sound_music, GameSettings.SOUND_MUSIC_ENABLE);
             sound_music_value.value = GameSettings.SOUND_MUSIC_VALUE;
-            // sound_voice.Initialization(GameSettings.SOUND_VOICE_ENABLE);
+            SetSwitch(sound_voice, GameSettings.SOUND_VOICE_ENABLE);
             sound_voice_value.value = GameSettings.SOUND_VOICE_VALUE;
             
             game_keep_speed.onValueChanged.AddListener(value => GameSettings.GAME_KEEP_SPEED = value);
@@ -96,10 +100,27 @@ namespace UI.Sub {
         }
 
         public override void Hide(bool destroy = false) {
+            // 关界面时存 / Saved as the screen closes - every way out (its close button, Android Back,
+            // signing out) comes through here - rather than on every step of a slider drag.
+            GameSettings.SaveSound();
+
             Material blurryShader = blur.material;
             float value = blurryShader.GetFloat("_Size");
             DOTween.To(() => value,v => value = v,0,0.2f).OnUpdate(() => blurryShader.SetFloat("_Size",value));
             canvasGroup.DOFade(0,0.2f).OnComplete(() => { base.Hide(destroy); });
+        }
+
+        // 切到后台也存 / And when the app goes to the background with this screen still open. Unity
+        // otherwise writes PlayerPrefs to disk only as the app quits, and Android can end an app in
+        // the background without it ever quitting.
+        private void OnApplicationPause(bool paused) {
+            if (paused) GameSettings.SaveSound();
+        }
+
+        private static void SetSwitch(Toggle toggle, bool on) {
+            PillSwitch pill = toggle.GetComponent<PillSwitch>();
+            if (pill != null) pill.SetWithoutNotify(on);
+            else toggle.SetIsOnWithoutNotify(on);
         }
     }
 }

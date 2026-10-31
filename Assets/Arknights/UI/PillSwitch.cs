@@ -48,8 +48,21 @@ namespace UI {
         }
 
         /// <summary>
-        /// instant 用在 Awake: 打开界面时不该看到开关自己滑一下
-        /// `instant` is for Awake - the switch should not animate itself the moment the screen opens.
+        /// 不滑动、不通知地设值 / Sets the switch for a screen putting a saved value in place before
+        /// anyone sees it: no slide, and no onValueChanged. Setting Toggle.isOn would slide the knob
+        /// as the screen fades in; Toggle.SetIsOnWithoutNotify alone would leave it showing the old
+        /// value, since this only hears about a change through that event.
+        /// </summary>
+        public void SetWithoutNotify(bool on) {
+            if (toggle == null) toggle = GetComponent<Toggle>();
+            toggle.SetIsOnWithoutNotify(on);
+            Apply(on, true);
+        }
+
+        /// <summary>
+        /// instant 用在 Awake 和 SetWithoutNotify: 打开界面时不该看到开关自己滑一下
+        /// `instant` is for Awake and SetWithoutNotify - the switch should not animate itself the
+        /// moment the screen opens.
         /// </summary>
         private void Apply(bool on, bool instant) {
             Stop();
