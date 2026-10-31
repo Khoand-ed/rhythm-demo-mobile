@@ -117,13 +117,32 @@ public class TokenRefreshTests
         Assert.IsFalse(tokens.HasSession, "the refresh that answered after the sign-out did not bring the session back");
     }
 
+    [UnityTest]
+    public IEnumerator SigningOut_LetsGoOfTheSession_BeforeTheServerHasAnswered()
+    {
+        tokens.Adopt(Pair("a0", 900, "r0"));
+
+        Task signOut = api.SignOutAsync();
+
+        // The login screen a sign-out returns to reopens any session it finds; none may be left for it
+        // while the logout is still on the wire.
+        Assert.IsFalse(signOut.IsCompleted, "the server has not answered yet");
+        Assert.IsFalse(tokens.HasSession);
+        Assert.IsFalse(new TokenStore(scope).HasSession, "nor on the device");
+
+        yield return Await(signOut);
+
+        Assert.AreEqual(1, server.Logouts);
+        Assert.AreEqual("r0", server.LoggedOut, "the server is still told which session ended");
+    }
+
     // ------------------------------------------------------------------------- the server
 
     /// <summary>
     /// Just enough of the API on a loopback socket: /v1/auth/refresh rotates the pair and answers a
     /// refresh token presented twice with REFRESH_TOKEN_REUSED, revoking everything, as
-    /// AuthService does; /v1/leaderboards/* wants the current access token; /v1/auth/logout says yes.
-    /// HTTP/1.1, one request per connection.
+    /// AuthService does; /v1/leaderboards/* wants the current access token; /v1/auth/logout says yes,
+    /// and remembers the token it was given. HTTP/1.1, one request per connection.
     /// </summary>
     private sealed class FakeAuthServer : IDisposable
     {
@@ -135,6 +154,8 @@ public class TokenRefreshTests
         private string liveAccess = "a0";
         private int refreshes;
         private bool revoked;
+        private int logouts;
+        private string loggedOut;
         private volatile bool stopping;
 
         public int RefreshDelayMs = 200;
@@ -151,6 +172,10 @@ public class TokenRefreshTests
         public string Url { get; }
         public int Refreshes { get { lock (gate) return refreshes; } }
         public bool Revoked { get { lock (gate) return revoked; } }
+        public int Logouts { get { lock (gate) return logouts; } }
+
+        /// <summary>The refresh token the last logout presented.</summary>
+        public string LoggedOut { get { lock (gate) return loggedOut; } }
 
         private void Accept()
         {
@@ -232,6 +257,11 @@ public class TokenRefreshTests
 
             if (path == "/v1/auth/logout")
             {
+                lock (gate)
+                {
+                    logouts++;
+                    loggedOut = Regex.Match(body, "\"refreshToken\"\\s*:\\s*\"([^\"]*)\"").Groups[1].Value;
+                }
                 status = 204;
                 return "";
             }

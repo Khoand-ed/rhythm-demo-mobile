@@ -236,20 +236,26 @@ namespace Promuse.Net
         /// Ends the session on the server as well as locally. Local state is
         /// cleared whatever the server says - if the call failed, the token is
         /// still the one thing this device should stop holding.
+        ///
+        /// 先忘掉, 再通知 / Forgotten here before the server is told, not after it
+        /// answers. The sign-in screen a sign-out returns to reopens any session it
+        /// finds on the device, and a logout still on the wire - a slow network, a
+        /// server that is down and takes the whole timeout to say so - would leave
+        /// one there for it to find: the player would be signed straight back in.
         /// </summary>
         public async Task SignOutAsync()
         {
             string? refresh = _tokens.RefreshToken;
+
+            _playerETag = null;
+            _tokens.Clear();
+            _tokenGeneration++;
 
             if (!string.IsNullOrEmpty(refresh))
             {
                 await SendAsync<object>(UnityWebRequest.kHttpVerbPOST, "/v1/auth/logout",
                     new RefreshRequest(refresh!));
             }
-
-            _playerETag = null;
-            _tokens.Clear();
-            _tokenGeneration++;
         }
 
         // --------------------------------------------------------------- player
