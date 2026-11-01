@@ -69,6 +69,7 @@ public static class AndroidBuild
 
         string output = OutputPath;
         Directory.CreateDirectory(Path.GetDirectoryName(output));
+        ForgetGradleApk();
 
         BuildReport report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
         {
@@ -88,6 +89,51 @@ public static class AndroidBuild
         if (ok) Debug.Log(line + "\n  Install: adb install -r \"" + output + "\"");
         else Debug.LogError(line);
 
+        if (ok && GradleApkFolders().Count == 0)
+        {
+            Debug.LogWarning("[AndroidBuild] Gradle's APK was not under Library/Bee/Android/Prj/<backend>/Gradle/launcher/" +
+                             "build/outputs/apk. If Unity has moved its Gradle project, point GradleApkFolders there, or " +
+                             "the next build updates this APK in place and keeps its dead space.");
+        }
+
         return ok;
+    }
+
+    /// <summary>
+    /// 每次从头打包 / Deletes the APK Gradle packed last time, so it packs this one whole. Kept, that file is
+    /// updated in place (incremental packaging): an entry that changed is written again elsewhere and its old
+    /// bytes stay where they were, referenced by nothing. Unity copies the file out as it is, so each APK
+    /// carried the dead space of the builds before it - the first 1.2 with Manufacture weighed 147 MB for
+    /// 109 MB of entries. Packing whole costs a few seconds; every other Gradle step stays incremental.
+    /// </summary>
+    private static void ForgetGradleApk()
+    {
+        foreach (string folder in GradleApkFolders())
+        {
+            try
+            {
+                Directory.Delete(folder, true);
+            }
+            catch (System.Exception e) when (e is IOException || e is System.UnauthorizedAccessException)
+            {
+                Debug.LogWarning($"[AndroidBuild] Could not delete {folder} ({e.Message}): this APK may keep the " +
+                                 "dead space of the last one.");
+            }
+        }
+    }
+
+    // Unity's Gradle project, one per scripting backend: Library/Bee/Android/Prj/IL2CPP (or Mono2x)/Gradle.
+    private static List<string> GradleApkFolders()
+    {
+        var folders = new List<string>();
+        string projects = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Library", "Bee", "Android", "Prj"));
+        if (!Directory.Exists(projects)) return folders;
+
+        foreach (string backend in Directory.GetDirectories(projects))
+        {
+            string apk = Path.Combine(backend, "Gradle", "launcher", "build", "outputs", "apk");
+            if (Directory.Exists(apk)) folders.Add(apk);
+        }
+        return folders;
     }
 }
