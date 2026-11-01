@@ -7,17 +7,31 @@ using UnityEngine.UI;
 
 // 仓库界面 / Builds the depot screen and the item detail popup.
 //
+//   Arknights/Depot/Build Depot UI            - builds what is missing, keeps what exists
+//   Arknights/Depot/Reset Depot UI To Default - builds both prefabs again from scratch
+//
 // DepotUI.cs, ItemInfoUI.cs and ItemIconComponent.cs were already in the project; only their
 // prefabs were missing, which is why the Depot tile went nowhere. Everything here exists to
 // satisfy the fields those three scripts already expect - the names below are theirs, not a
 // design choice, and renaming a node breaks the binding.
+//
+// 不动已有的 / Build never rebuilds a prefab that exists. It opens it, adds only the parts it lacks,
+// points a screen field at its node only where the field points at nothing, and saves it only when
+// it added something - so a run on an up-to-date project writes no file at all. It used to build
+// both prefabs afresh on every run and save them over the old ones. Saving over a prefab pairs old
+// and new objects by name, and the three tab Labels share one, so they came back under new fileIDs
+// each time: a diff with nothing in it. Only Reset rebuilds, and asks first; it writes over each
+// prefab in place, so the assets keep their GUIDs.
 //
 // 用旧版 Text 而不是 TMP / Legacy Text throughout, deliberately: ItemInfoUI and ItemIconComponent
 // declare UnityEngine.UI.Text fields, so a TextMeshProUGUI would simply not bind. Convert both
 // together later with Tools/Convert All Legacy Text To TMP if the project moves over.
 public static class DepotUISetup
 {
+    private const string Tag = "[DepotUISetup]";
     private const string UiPrefabDir = "Assets/Arknights/Resources/Prefab/UI";
+    private const string DepotName = "DepotUI";
+    private const string ItemInfoName = "ItemInfoUI";
     private const string ItemMetaDir = "Assets/Arknights/Resources/Meta/Item";
     private const string ItemIconDir = "Assets/Arknights/Resources/Sprite/Item/Icon";
     private const string MaterialDir = "Assets/Arknights/Shaders";
@@ -176,8 +190,8 @@ public static class DepotUISetup
         AssetDatabase.SaveAssets();
 
         Debug.Log(made.Count == 0
-            ? "Every item the save holds already has an ItemMeta."
-            : $"Created {made.Count} ItemMeta: {string.Join(", ", made)}\n" +
+            ? $"{Tag} Every item the save holds already has an ItemMeta."
+            : $"{Tag} Created {made.Count} ItemMeta: {string.Join(", ", made)}\n" +
               $"  Icons generated into {ItemIconDir}. Replace them with real art whenever you have it.");
     }
 
@@ -251,48 +265,156 @@ public static class DepotUISetup
         if (!GuardEditMode()) return;
 
         CreateMissingItemMetas();
+        LoadFont();
 
-        font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        if (font == null) Debug.LogWarning("No builtin font found; Text components will render blank.");
-
-        BuildDepotScreen();
-        BuildItemInfoUI();
-        bool hooked = HookDepotTile();
+        List<string> done = new List<string>
+        {
+            BuildOrComplete(DepotName, NewDepotRoot, CompleteDepot, "grid, three tabs, scrolls vertically"),
+            BuildOrComplete(ItemInfoName, NewItemInfoRoot, CompleteItemInfo,
+                            "detail popup, blurred backdrop, scrolling body"),
+            HookDepotTile(),
+        };
 
         AssetDatabase.SaveAssets();
-
-        Debug.Log("Depot UI built.\n" +
-                  $"  {UiPrefabDir}/DepotUI.prefab - grid, three tabs, scrolls vertically\n" +
-                  $"  {UiPrefabDir}/ItemInfoUI.prefab - detail popup, blurred backdrop, scrolling body\n" +
-                  $"  HomeUI {DepotTileName}: {(hooked ? "opens DepotUI" : "NOT hooked, see warning above")}");
+        Debug.Log($"{Tag} Depot UI:\n  " + string.Join("\n  ", done));
     }
 
-    private static void BuildDepotScreen()
+    [MenuItem("Arknights/Depot/Reset Depot UI To Default", false, 20)]
+    public static void ResetDepotUIToDefault()
     {
-        GameObject root = new GameObject("DepotUI",
+        if (!GuardEditMode()) return;
+
+        bool sure = Application.isBatchMode || EditorUtility.DisplayDialog(
+            "Reset Depot UI",
+            $"This builds {PrefabPath(DepotName)} and {PrefabPath(ItemInfoName)} again from scratch, over " +
+            "what is there. Anything changed on them by hand - positions, colours, art - is lost.",
+            "Reset", "Cancel");
+        if (!sure)
+        {
+            Debug.Log($"{Tag} Reset cancelled; nothing changed.");
+            return;
+        }
+
+        RebuildDepotUI();
+    }
+
+    /// <summary>
+    /// 重建 / Builds both prefabs again over the existing ones, keeping their GUIDs, then hooks the
+    /// tile. What Reset does once it has asked; called directly only by automation that has decided to.
+    /// </summary>
+    public static void RebuildDepotUI()
+    {
+        if (!GuardEditMode()) return;
+
+        CreateMissingItemMetas();
+        LoadFont();
+
+        List<string> done = new List<string>
+        {
+            Rebuild(DepotName, NewDepotRoot, CompleteDepot),
+            Rebuild(ItemInfoName, NewItemInfoRoot, CompleteItemInfo),
+            HookDepotTile(),
+        };
+
+        AssetDatabase.SaveAssets();
+        Debug.Log($"{Tag} Depot UI rebuilt from scratch:\n  " + string.Join("\n  ", done));
+    }
+
+    /// <summary>
+    /// 有就补, 没有才建 / Builds the prefab when there is none. One that exists is kept: only the parts
+    /// it lacks are added, and it is saved only when one was - so a second run writes nothing.
+    /// </summary>
+    private static string BuildOrComplete(string name, System.Func<GameObject> newRoot,
+                                          System.Func<GameObject, List<string>> complete, string built)
+    {
+        string path = PrefabPath(name);
+        if (AssetDatabase.LoadAssetAtPath<GameObject>(path) == null)
+        {
+            Save(BuildFresh(newRoot, complete), name);
+            return $"{name}: built at {path} - {built}";
+        }
+
+        GameObject contents = PrefabUtility.LoadPrefabContents(path);
+
+        try
+        {
+            List<string> added = complete(contents);
+            if (added.Count == 0) return $"{name}: kept as it is";
+
+            PrefabUtility.SaveAsPrefabAsset(contents, path);
+            return $"{name}: kept, and added what it lacked - {string.Join(", ", added)}";
+        }
+        finally
+        {
+            PrefabUtility.UnloadPrefabContents(contents);
+        }
+    }
+
+    private static string Rebuild(string name, System.Func<GameObject> newRoot,
+                                  System.Func<GameObject, List<string>> complete)
+    {
+        Save(BuildFresh(newRoot, complete), name);
+        return $"{name}: built again at {PrefabPath(name)}";
+    }
+
+    /// <summary>
+    /// 新建就是全补 / A new screen is an empty root completed: every part is missing, so every part is
+    /// built - by the same code that adds one to an older prefab, so the two come out alike.
+    /// </summary>
+    private static GameObject BuildFresh(System.Func<GameObject> newRoot,
+                                         System.Func<GameObject, List<string>> complete)
+    {
+        GameObject root = newRoot();
+        complete(root);
+        return root;
+    }
+
+    private static GameObject NewDepotRoot()
+    {
+        GameObject root = new GameObject(DepotName,
             typeof(RectTransform), typeof(CanvasGroup), typeof(UI.Sub.DepotUI));
         Stretch((RectTransform)root.transform);
-
-        UnityEngine.UI.Image backdrop = NewImage("Backdrop", (RectTransform)root.transform, Paper);
-        Stretch((RectTransform)backdrop.transform);
-        backdrop.raycastTarget = true;
-
-        BuildDepotTopBar((RectTransform)root.transform, out Toggle all,
-                         out Toggle basic, out Toggle material);
-
-        RectTransform template = BuildGrid((RectTransform)root.transform);
-
-        UI.Sub.DepotUI house = root.GetComponent<UI.Sub.DepotUI>();
-        house.ALL = all;
-        house.JI_CHU = basic;
-        house.YANG_CHENG = material;
-        house.prefab = template.GetComponent<ItemIconComponent>();
-
-        Save(root, "DepotUI");
+        return root;
     }
 
-    private static void BuildDepotTopBar(RectTransform parent, out Toggle all,
-                                         out Toggle basic, out Toggle material)
+    /// <summary>
+    /// 补上缺的部分 / Adds each part of the depot screen that is missing - the backdrop, the top bar
+    /// with its back button and tabs, the grid with its cell template - and leaves every part that is
+    /// there as it is. Returns what it added: nothing, on a screen that has them all.
+    /// </summary>
+    private static List<string> CompleteDepot(GameObject root)
+    {
+        List<string> added = new List<string>();
+        RectTransform rect = (RectTransform)root.transform;
+
+        UI.Sub.DepotUI house = root.GetComponent<UI.Sub.DepotUI>();
+        if (house == null)
+        {
+            Debug.LogWarning($"{Tag} {root.name} has no DepotUI component; Reset Depot UI To Default builds it again.");
+            return added;
+        }
+
+        Transform backdrop = EnsurePart(rect, "Backdrop", null, "the backdrop", added, () => BuildBackdrop(rect));
+        Transform bar = EnsurePart(rect, "TopBar", backdrop, "the top bar", added, () => BuildDepotTopBar(rect, house));
+        EnsurePart(rect, "Grid", bar, "the grid", added, () => BuildGrid(rect, house));
+
+        Bind(ref house.ALL, nameof(house.ALL), rect, "TopBar/Tabs/ALL", added);
+        Bind(ref house.JI_CHU, nameof(house.JI_CHU), rect, "TopBar/Tabs/JI_CHU", added);
+        Bind(ref house.YANG_CHENG, nameof(house.YANG_CHENG), rect, "TopBar/Tabs/YANG_CHENG", added);
+        Bind(ref house.prefab, nameof(house.prefab), rect, "Grid/Viewport/Content/ItemIconTemplate", added);
+
+        return added;
+    }
+
+    private static RectTransform BuildBackdrop(RectTransform parent)
+    {
+        UnityEngine.UI.Image backdrop = NewImage("Backdrop", parent, Paper);
+        Stretch((RectTransform)backdrop.transform);
+        backdrop.raycastTarget = true;
+        return (RectTransform)backdrop.transform;
+    }
+
+    private static RectTransform BuildDepotTopBar(RectTransform parent, UI.Sub.DepotUI house)
     {
         RectTransform bar = NewRect("TopBar", parent);
         bar.anchorMin = new Vector2(0f, 1f);
@@ -312,8 +434,7 @@ public static class DepotUISetup
 
         Button backButton = back.gameObject.AddComponent<Button>();
         backButton.targetGraphic = back;
-        UnityEditor.Events.UnityEventTools.AddBoolPersistentListener(
-            backButton.onClick, parent.GetComponent<UI.Sub.DepotUI>().Hide, true);
+        UnityEditor.Events.UnityEventTools.AddBoolPersistentListener(backButton.onClick, house.Hide, true);
 
         Text backLabel = NewText("Text", backRect, 46, Color.white, TextAnchor.MiddleCenter);
         Stretch((RectTransform)backLabel.transform);
@@ -337,9 +458,10 @@ public static class DepotUISetup
 
         ToggleGroup group = tabs.gameObject.AddComponent<ToggleGroup>();
 
-        all = NewTab("ALL", tabs, group, "ALL", true);
-        basic = NewTab("JI_CHU", tabs, group, Expand.GetName(ItemType.JI_CHU), false);
-        material = NewTab("YANG_CHENG", tabs, group, Expand.GetName(ItemType.YANG_CHENG), false);
+        house.ALL = NewTab("ALL", tabs, group, "ALL", true);
+        house.JI_CHU = NewTab("JI_CHU", tabs, group, Expand.GetName(ItemType.JI_CHU), false);
+        house.YANG_CHENG = NewTab("YANG_CHENG", tabs, group, Expand.GetName(ItemType.YANG_CHENG), false);
+        return bar;
     }
 
     private static Toggle NewTab(string name, RectTransform parent, ToggleGroup group,
@@ -368,7 +490,7 @@ public static class DepotUISetup
         return toggle;
     }
 
-    private static RectTransform BuildGrid(RectTransform parent)
+    private static RectTransform BuildGrid(RectTransform parent, UI.Sub.DepotUI house)
     {
         RectTransform scrollRoot = NewRect("Grid", parent);
         scrollRoot.anchorMin = Vector2.zero;
@@ -407,7 +529,8 @@ public static class DepotUISetup
         scroll.movementType = ScrollRect.MovementType.Elastic;
         scroll.scrollSensitivity = 40f;
 
-        return BuildItemIconTemplate(content);
+        house.prefab = BuildItemIconTemplate(content).GetComponent<ItemIconComponent>();
+        return scrollRoot;
     }
 
     /// <summary>
@@ -452,21 +575,53 @@ public static class DepotUISetup
 
     // ------------------------------------------------------------- item info
 
-    private static void BuildItemInfoUI()
+    private static GameObject NewItemInfoRoot()
     {
-        GameObject root = new GameObject("ItemInfoUI",
+        GameObject root = new GameObject(ItemInfoName,
             typeof(RectTransform), typeof(CanvasGroup), typeof(UI.Sub.ItemInfoUI));
-        RectTransform rootRect = (RectTransform)root.transform;
-        Stretch(rootRect);
+        Stretch((RectTransform)root.transform);
+        return root;
+    }
+
+    /// <summary>
+    /// 补上缺的部分 / Adds each part of the item popup that is missing - the blurred backdrop that
+    /// closes it, the card - and leaves every part that is there as it is. Returns what it added.
+    /// </summary>
+    private static List<string> CompleteItemInfo(GameObject root)
+    {
+        List<string> added = new List<string>();
+        RectTransform rect = (RectTransform)root.transform;
 
         UI.Sub.ItemInfoUI info = root.GetComponent<UI.Sub.ItemInfoUI>();
+        if (info == null)
+        {
+            Debug.LogWarning($"{Tag} {root.name} has no ItemInfoUI component; Reset Depot UI To Default builds it again.");
+            return added;
+        }
 
+        Transform blur = EnsurePart(rect, "Blur", null, "the blurred backdrop", added, () => BuildInfoBlur(rect, info));
+        EnsurePart(rect, "Panel", blur, "the card", added, () => BuildInfoPanel(rect, info));
+
+        const string Body = "Panel/Body/Viewport/Content";
+        Bind(ref info.blur, nameof(info.blur), rect, "Blur", added);
+        Bind(ref info.itemName, nameof(info.itemName), rect, "Panel/NameGround/ItemName", added);
+        Bind(ref info.amount, nameof(info.amount), rect, "Panel/StockGround/Amount", added);
+        Bind(ref info.icon, nameof(info.icon), rect, "Panel/Icon", added);
+        Bind(ref info.useInfo, nameof(info.useInfo), rect, Body + "/UseInfoGround/UseInfo", added);
+        Bind(ref info.description, nameof(info.description), rect, Body + "/Description", added);
+        Bind(ref info.waysObtain, nameof(info.waysObtain), rect, Body + "/WaysObtain", added);
+
+        return added;
+    }
+
+    private static RectTransform BuildInfoBlur(RectTransform parent, UI.Sub.ItemInfoUI info)
+    {
         // 点背景关闭 / The blurred backdrop doubles as the dismiss button, the way tapping
         // outside the card closes it in the reference screens.
         // 背景压暗一点 / Tinted down, not just blurred. The depot behind is nearly the same
         // shade as the card, so blur alone leaves the two indistinguishable; the reference
         // darkens the backdrop as well, and that is what separates them.
-        UnityEngine.UI.Image blur = NewImage("Blur", rootRect, new Color(0.70f, 0.71f, 0.73f, 1f));
+        UnityEngine.UI.Image blur = NewImage("Blur", parent, new Color(0.70f, 0.71f, 0.73f, 1f));
         Stretch((RectTransform)blur.transform);
         blur.material = BlurMaterial();
         blur.gameObject.AddComponent<UI.UiBlurCapture>();
@@ -475,10 +630,8 @@ public static class DepotUISetup
         dismiss.targetGraphic = blur;
         UnityEditor.Events.UnityEventTools.AddBoolPersistentListener(dismiss.onClick, info.Hide, true);
 
-        BuildInfoPanel(rootRect, info);
         info.blur = blur;
-
-        Save(root, "ItemInfoUI");
+        return (RectTransform)blur.transform;
     }
 
     private static RectTransform BuildInfoPanel(RectTransform parent, UI.Sub.ItemInfoUI info)
@@ -643,13 +796,18 @@ public static class DepotUISetup
 
     // ---------------------------------------------------------------- wiring
 
-    private static bool HookDepotTile()
+    /// <summary>
+    /// 只加缺的 / Points Home's Depot tile at the depot, adding only what the tile lacks - a clear hit
+    /// area when it draws nothing of its own, a Button, an OpenUIButton naming DepotUI - and saving
+    /// HomeUI only when it changed one of them.
+    /// </summary>
+    private static string HookDepotTile()
     {
         string homePath = UiPrefabDir + "/HomeUI.prefab";
         if (AssetDatabase.LoadAssetAtPath<GameObject>(homePath) == null)
         {
-            Debug.LogWarning($"No HomeUI prefab at {homePath}, so nothing opens the depot yet.");
-            return false;
+            Debug.LogWarning($"{Tag} No HomeUI prefab at {homePath}, so nothing opens the depot yet.");
+            return $"HomeUI {DepotTileName}: NOT hooked - no HomeUI prefab";
         }
 
         GameObject contents = PrefabUtility.LoadPrefabContents(homePath);
@@ -659,23 +817,62 @@ public static class DepotUISetup
             Transform tile = FindDeep(contents.transform, DepotTileName);
             if (tile == null)
             {
-                Debug.LogWarning($"HomeUI has no '{DepotTileName}' child.");
-                return false;
+                Debug.LogWarning($"{Tag} HomeUI has no '{DepotTileName}' child.");
+                return $"HomeUI {DepotTileName}: NOT hooked - no such tile";
             }
 
-            if (tile.GetComponent<Graphic>() == null)
+            List<string> changed = new List<string>();
+
+            // 透明图也能接收点击 / An alpha-zero Image is still a raycast target: a tile that draws
+            // nothing of its own gets one as a child, stretched over it - once, since a second run
+            // finds it.
+            Graphic face = tile.GetComponent<Graphic>();
+            if (face == null)
             {
-                NewImage("Hit", (RectTransform)tile, new Color(0f, 0f, 0f, 0f));
+                Transform hit = tile.Find("Hit");
+                if (hit != null)
+                {
+                    face = hit.GetComponent<Graphic>();
+                }
+                else
+                {
+                    face = NewImage("Hit", tile, new Color(0f, 0f, 0f, 0f));
+                    Stretch(face.rectTransform);
+                    changed.Add("added a hit area");
+                }
             }
 
-            Button button = tile.GetComponent<Button>() ?? tile.gameObject.AddComponent<Button>();
-            button.targetGraphic = tile.GetComponent<Graphic>();
+            // 显式判空, 不用 ?? / Explicit null checks rather than ??: in the Editor a missing
+            // component can come back as Unity's fake-null object, which compares equal to null
+            // but is not a null reference, so ?? would keep it instead of adding the component.
+            Button button = tile.GetComponent<Button>();
+            if (button == null)
+            {
+                button = tile.gameObject.AddComponent<Button>();
+                changed.Add("added a Button");
+            }
+            if (button.targetGraphic == null && face != null)
+            {
+                button.targetGraphic = face;
+                changed.Add("pointed the Button at the tile's graphic");
+            }
 
-            OpenUIButton open = tile.GetComponent<OpenUIButton>() ?? tile.gameObject.AddComponent<OpenUIButton>();
-            open.uiName = "DepotUI";
+            OpenUIButton open = tile.GetComponent<OpenUIButton>();
+            if (open == null)
+            {
+                open = tile.gameObject.AddComponent<OpenUIButton>();
+                changed.Add("added an OpenUIButton");
+            }
+            if (open.uiName != DepotName)
+            {
+                open.uiName = DepotName;
+                changed.Add($"named {DepotName} on it");
+            }
+
+            if (changed.Count == 0) return $"HomeUI {DepotTileName}: already opens {DepotName}";
 
             PrefabUtility.SaveAsPrefabAsset(contents, homePath);
-            return true;
+            return $"HomeUI {DepotTileName}: now opens {DepotName} - {string.Join(", ", changed)}";
         }
         finally
         {
@@ -692,11 +889,59 @@ public static class DepotUISetup
         return false;
     }
 
+    private static void LoadFont()
+    {
+        font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (font == null) Debug.LogWarning($"{Tag} No builtin font found; Text components will render blank.");
+    }
+
+    private static string PrefabPath(string name) => $"{UiPrefabDir}/{name}.prefab";
+
     private static void Save(GameObject root, string name)
     {
         Directory.CreateDirectory(UiPrefabDir);
-        PrefabUtility.SaveAsPrefabAsset(root, $"{UiPrefabDir}/{name}.prefab");
+        PrefabUtility.SaveAsPrefabAsset(root, PrefabPath(name));
         Object.DestroyImmediate(root);
+    }
+
+    /// <summary>
+    /// 有就留着, 没有才建 / The screen's part called <paramref name="name"/>: the one that is there,
+    /// kept as it is, or a new one from <paramref name="build"/> when there is none - put straight
+    /// after the part before it, so a backdrop added to an older prefab still draws behind the rest.
+    /// </summary>
+    private static Transform EnsurePart(Transform root, string name, Transform previous, string what,
+                                        List<string> added, System.Func<RectTransform> build)
+    {
+        Transform part = root.Find(name);
+        if (part != null) return part;
+
+        part = build();
+        part.SetSiblingIndex(previous != null ? previous.GetSiblingIndex() + 1 : 0);
+        added.Add(what);
+        return part;
+    }
+
+    /// <summary>
+    /// 只绑空的 / Points one of the screen's fields at the node it reads, only when the field points at
+    /// nothing: one pointed elsewhere by hand stays where it was put. A node that is not there is
+    /// reported rather than built - Reset Depot UI To Default builds the whole screen again.
+    /// </summary>
+    private static void Bind<T>(ref T field, string fieldName, Transform root, string path, List<string> added)
+        where T : Component
+    {
+        if (field != null) return;
+
+        Transform node = root.Find(path);
+        T found = node != null ? node.GetComponent<T>() : null;
+        if (found == null)
+        {
+            Debug.LogWarning($"{Tag} {root.name}.{fieldName} is empty and there is no {typeof(T).Name} at " +
+                             $"{path} to point it at; Reset Depot UI To Default builds the screen again.");
+            return;
+        }
+
+        field = found;
+        added.Add($"{fieldName} pointed at {path}");
     }
 
     private static RectTransform NewRect(string name, Transform parent)

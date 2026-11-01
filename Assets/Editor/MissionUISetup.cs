@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.IO;
 using Data.Item;
 using UnityEditor;
@@ -5,6 +6,9 @@ using UnityEngine;
 using UnityEngine.UI;
 
 // 任务界面 / Builds the mission board and its reward popup.
+//
+//   Arknights/Mission/Build Mission UI            - builds what is missing, keeps what exists
+//   Arknights/Mission/Reset Mission UI To Default - builds both prefabs again from scratch
 //
 // 布局参考截图 / Laid out from the reference screens: rewards down the left in a narrow column,
 // missions down the right in a wide one, both scrolling vertically on their own.
@@ -16,8 +20,18 @@ using UnityEngine.UI;
 // 节点名字是绑定的一部分 / The node names here are load-bearing. MissionUI and MissionRewardUI look
 // their row parts up by path, so renaming a node here breaks the binding with nothing but a null
 // reference to explain it.
+//
+// 不动已有的 / Build never rebuilds a prefab that exists. It opens it, adds only the parts it lacks,
+// points a screen field at its node only where the field points at nothing, and saves it only when
+// it added something - so a run on an up-to-date project writes no file at all. It used to build
+// both prefabs afresh on every run and save them over the old ones. Saving over a prefab pairs old
+// and new objects by name, and a dozen names repeat here - Text, Label, Icon, Claim, Done and more -
+// so those came back under new fileIDs each time: thousands of changed lines with nothing in them.
+// Only Reset rebuilds, and asks first; it writes over each prefab in place, so the assets keep their
+// GUIDs.
 public static class MissionUISetup
 {
+    private const string Tag = "[MissionUISetup]";
     private const string UiPrefabDir = "Assets/Arknights/Resources/Prefab/UI";
     private const string MaterialDir = "Assets/Arknights/Shaders";
     private const string BlurShader = "Arknights/UI/Blur";
@@ -56,49 +70,175 @@ public static class MissionUISetup
     {
         if (!GuardEditMode()) return;
 
-        font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        if (font == null) Debug.LogWarning("[MissionUISetup] No builtin font found; Text components will render blank.");
+        LoadFont();
 
-        BuildMissionScreen();
-        BuildRewardPopup();
-        bool hooked = HookMissionsTile();
+        List<string> done = new List<string>
+        {
+            BuildOrComplete(UI.Sub.MissionUI.UIName, NewMissionRoot, CompleteMission,
+                            "Daily/Weekly tabs, rewards left, missions right, both scroll"),
+            BuildOrComplete(UI.Sub.MissionRewardUI.UIName, NewRewardPopupRoot, CompleteRewardPopup,
+                            "claim popup, blurred backdrop"),
+            HookMissionsTile(),
+        };
 
         AssetDatabase.SaveAssets();
-
-        Debug.Log("[MissionUISetup] Mission UI built.\n" +
-                  $"  {UiPrefabDir}/MissionUI.prefab - Daily/Weekly tabs, rewards left, missions right, both scroll\n" +
-                  $"  {UiPrefabDir}/MissionRewardUI.prefab - claim popup, blurred backdrop\n" +
-                  $"  HomeUI {MissionsTileName}: {(hooked ? "opens MissionUI" : "NOT hooked, see warning above")}\n" +
-                  "  The boards themselves come from the server; this only builds the prefabs.");
+        Debug.Log($"{Tag} Mission UI:\n  " + string.Join("\n  ", done) +
+                  "\n  The boards themselves come from the server; this only builds the prefabs.");
     }
 
-    // 没有重置菜单了 / There used to be an Arknights/Mission/Reset Mission Progress item here,
+    [MenuItem("Arknights/Mission/Reset Mission UI To Default", false, 20)]
+    public static void ResetMissionUIToDefault()
+    {
+        if (!GuardEditMode()) return;
+
+        bool sure = Application.isBatchMode || EditorUtility.DisplayDialog(
+            "Reset Mission UI",
+            $"This builds {PrefabPath(UI.Sub.MissionUI.UIName)} and {PrefabPath(UI.Sub.MissionRewardUI.UIName)} " +
+            "again from scratch, over what is there. Anything changed on them by hand - positions, colours, " +
+            "art - is lost.",
+            "Reset", "Cancel");
+        if (!sure)
+        {
+            Debug.Log($"{Tag} Reset cancelled; nothing changed.");
+            return;
+        }
+
+        RebuildMissionUI();
+    }
+
+    /// <summary>
+    /// 重建 / Builds both prefabs again over the existing ones, keeping their GUIDs, then hooks the
+    /// tile. What Reset does once it has asked; called directly only by automation that has decided to.
+    /// </summary>
+    public static void RebuildMissionUI()
+    {
+        if (!GuardEditMode()) return;
+
+        LoadFont();
+
+        List<string> done = new List<string>
+        {
+            Rebuild(UI.Sub.MissionUI.UIName, NewMissionRoot, CompleteMission),
+            Rebuild(UI.Sub.MissionRewardUI.UIName, NewRewardPopupRoot, CompleteRewardPopup),
+            HookMissionsTile(),
+        };
+
+        AssetDatabase.SaveAssets();
+        Debug.Log($"{Tag} Mission UI rebuilt from scratch:\n  " + string.Join("\n  ", done));
+    }
+
+    // 没有重置进度的菜单了 / There used to be an Arknights/Mission/Reset Mission Progress item here,
     // because progress lived in PlayerPrefs and nothing read a calendar. It is gone: the counters
     // are rows on the server keyed by the period they belong to, so a board resets by the key
-    // moving on and there is nothing on this machine left to clear.
+    // moving on and there is nothing on this machine left to clear. Reset Mission UI To Default
+    // above rebuilds the two prefabs and has nothing to do with progress.
+
+    /// <summary>
+    /// 有就补, 没有才建 / Builds the prefab when there is none. One that exists is kept: only the parts
+    /// it lacks are added, and it is saved only when one was - so a second run writes nothing.
+    /// </summary>
+    private static string BuildOrComplete(string name, System.Func<GameObject> newRoot,
+                                          System.Func<GameObject, List<string>> complete, string built)
+    {
+        string path = PrefabPath(name);
+        if (AssetDatabase.LoadAssetAtPath<GameObject>(path) == null)
+        {
+            Save(BuildFresh(newRoot, complete), name);
+            return $"{name}: built at {path} - {built}";
+        }
+
+        GameObject contents = PrefabUtility.LoadPrefabContents(path);
+
+        try
+        {
+            List<string> added = complete(contents);
+            if (added.Count == 0) return $"{name}: kept as it is";
+
+            PrefabUtility.SaveAsPrefabAsset(contents, path);
+            return $"{name}: kept, and added what it lacked - {string.Join(", ", added)}";
+        }
+        finally
+        {
+            PrefabUtility.UnloadPrefabContents(contents);
+        }
+    }
+
+    private static string Rebuild(string name, System.Func<GameObject> newRoot,
+                                  System.Func<GameObject, List<string>> complete)
+    {
+        Save(BuildFresh(newRoot, complete), name);
+        return $"{name}: built again at {PrefabPath(name)}";
+    }
+
+    /// <summary>
+    /// 新建就是全补 / A new screen is an empty root completed: every part is missing, so every part is
+    /// built - by the same code that adds one to an older prefab, so the two come out alike.
+    /// </summary>
+    private static GameObject BuildFresh(System.Func<GameObject> newRoot,
+                                         System.Func<GameObject, List<string>> complete)
+    {
+        GameObject root = newRoot();
+        complete(root);
+        return root;
+    }
 
     // -------------------------------------------------------------- mission screen
 
-    private static void BuildMissionScreen()
+    private static GameObject NewMissionRoot()
     {
-        GameObject root = new GameObject("MissionUI",
+        GameObject root = new GameObject(UI.Sub.MissionUI.UIName,
             typeof(RectTransform), typeof(CanvasGroup), typeof(UI.Sub.MissionUI));
-        RectTransform rootRect = (RectTransform)root.transform;
-        Stretch(rootRect);
-
-        UI.Sub.MissionUI ui = root.GetComponent<UI.Sub.MissionUI>();
-
-        UnityEngine.UI.Image backdrop = NewImage("Backdrop", rootRect, Paper);
-        Stretch((RectTransform)backdrop.transform);
-
-        BuildTopBar(rootRect, ui);
-        BuildRewardColumn(rootRect, ui);
-        BuildMissionColumn(rootRect, ui);
-
-        Save(root, "MissionUI");
+        Stretch((RectTransform)root.transform);
+        return root;
     }
 
-    private static void BuildTopBar(RectTransform parent, UI.Sub.MissionUI ui)
+    /// <summary>
+    /// 补上缺的部分 / Adds each part of the mission board that is missing - the backdrop, the top bar
+    /// with its back button and tabs, the reward column, the mission column - and leaves every part
+    /// that is there as it is. Returns what it added: nothing, on a board that has them all.
+    /// </summary>
+    private static List<string> CompleteMission(GameObject root)
+    {
+        List<string> added = new List<string>();
+        RectTransform rect = (RectTransform)root.transform;
+
+        UI.Sub.MissionUI ui = root.GetComponent<UI.Sub.MissionUI>();
+        if (ui == null)
+        {
+            Debug.LogWarning($"{Tag} {root.name} has no MissionUI component; Reset Mission UI To Default builds it again.");
+            return added;
+        }
+
+        Transform backdrop = EnsurePart(rect, "Backdrop", null, "the backdrop", added, () => BuildBackdrop(rect));
+        Transform bar = EnsurePart(rect, "TopBar", backdrop, "the top bar", added, () => BuildTopBar(rect, ui));
+        Transform rewards = EnsurePart(rect, "Rewards", bar, "the reward column", added,
+                                       () => BuildRewardColumn(rect, ui));
+        EnsurePart(rect, "Missions", rewards, "the mission column", added, () => BuildMissionColumn(rect, ui));
+
+        const string Header = "Missions/Header";
+        Bind(ref ui.dailyTab, nameof(ui.dailyTab), rect, "TopBar/Tabs/Daily", added);
+        Bind(ref ui.weeklyTab, nameof(ui.weeklyTab), rect, "TopBar/Tabs/Weekly", added);
+        Bind(ref ui.rewardTemplate, nameof(ui.rewardTemplate), rect,
+             "Rewards/Scroll/Viewport/Content/RewardRowTemplate", added);
+        Bind(ref ui.boardTitle, nameof(ui.boardTitle), rect, Header + "/BoardTitle", added);
+        Bind(ref ui.claimAllButton, nameof(ui.claimAllButton), rect, Header + "/ClaimAll", added);
+        Bind(ref ui.claimAllLabel, nameof(ui.claimAllLabel), rect, Header + "/ClaimAll/Text", added);
+        Bind(ref ui.pointsFill, nameof(ui.pointsFill), rect, Header + "/PointsGround/Fill", added);
+        Bind(ref ui.pointsLabel, nameof(ui.pointsLabel), rect, Header + "/PointsGround/Label", added);
+        Bind(ref ui.missionTemplate, nameof(ui.missionTemplate), rect,
+             "Missions/Scroll/Viewport/Content/MissionRowTemplate", added);
+
+        return added;
+    }
+
+    private static RectTransform BuildBackdrop(RectTransform parent)
+    {
+        UnityEngine.UI.Image backdrop = NewImage("Backdrop", parent, Paper);
+        Stretch((RectTransform)backdrop.transform);
+        return (RectTransform)backdrop.transform;
+    }
+
+    private static RectTransform BuildTopBar(RectTransform parent, UI.Sub.MissionUI ui)
     {
         RectTransform bar = NewRect("TopBar", parent);
         bar.anchorMin = new Vector2(0f, 1f);
@@ -145,6 +285,7 @@ public static class MissionUISetup
 
         ui.dailyTab = NewTab("Daily", tabs, group, "DAILY", true);
         ui.weeklyTab = NewTab("Weekly", tabs, group, "WEEKLY", false);
+        return bar;
     }
 
     private static Toggle NewTab(string name, RectTransform parent, ToggleGroup group, string label, bool on)
@@ -174,7 +315,7 @@ public static class MissionUISetup
 
     // -------------------------------------------------------------- reward column
 
-    private static void BuildRewardColumn(RectTransform parent, UI.Sub.MissionUI ui)
+    private static RectTransform BuildRewardColumn(RectTransform parent, UI.Sub.MissionUI ui)
     {
         RectTransform column = NewRect("Rewards", parent);
         column.anchorMin = new Vector2(0f, 0f);
@@ -195,6 +336,7 @@ public static class MissionUISetup
 
         RectTransform content = NewScroll(column, 14f);
         ui.rewardTemplate = BuildRewardRowTemplate(content);
+        return column;
     }
 
     /// <summary>
@@ -314,7 +456,7 @@ public static class MissionUISetup
 
     // ------------------------------------------------------------- mission column
 
-    private static void BuildMissionColumn(RectTransform parent, UI.Sub.MissionUI ui)
+    private static RectTransform BuildMissionColumn(RectTransform parent, UI.Sub.MissionUI ui)
     {
         RectTransform column = NewRect("Missions", parent);
         column.anchorMin = Vector2.zero;
@@ -382,6 +524,7 @@ public static class MissionUISetup
 
         RectTransform content = NewScroll(column, 12f);
         ui.missionTemplate = BuildMissionRowTemplate(content);
+        return column;
     }
 
     /// <summary>一行任务 / One mission row, inactive for the same reason the reward row is.</summary>
@@ -533,18 +676,47 @@ public static class MissionUISetup
 
     // --------------------------------------------------------------- reward popup
 
-    private static void BuildRewardPopup()
+    private static GameObject NewRewardPopupRoot()
     {
-        GameObject root = new GameObject("MissionRewardUI",
+        GameObject root = new GameObject(UI.Sub.MissionRewardUI.UIName,
             typeof(RectTransform), typeof(CanvasGroup), typeof(UI.Sub.MissionRewardUI));
-        RectTransform rootRect = (RectTransform)root.transform;
-        Stretch(rootRect);
+        Stretch((RectTransform)root.transform);
+        return root;
+    }
+
+    /// <summary>
+    /// 补上缺的部分 / Adds each part of the reward popup that is missing - the blurred backdrop that
+    /// closes it, the card - and leaves every part that is there as it is. Returns what it added.
+    /// </summary>
+    private static List<string> CompleteRewardPopup(GameObject root)
+    {
+        List<string> added = new List<string>();
+        RectTransform rect = (RectTransform)root.transform;
 
         UI.Sub.MissionRewardUI ui = root.GetComponent<UI.Sub.MissionRewardUI>();
+        if (ui == null)
+        {
+            Debug.LogWarning($"{Tag} {root.name} has no MissionRewardUI component; Reset Mission UI To Default " +
+                             "builds it again.");
+            return added;
+        }
 
+        Transform blur = EnsurePart(rect, "Blur", null, "the blurred backdrop", added, () => BuildRewardBlur(rect, ui));
+        EnsurePart(rect, "Panel", blur, "the card", added, () => BuildRewardPanel(rect, ui));
+
+        Bind(ref ui.blur, nameof(ui.blur), rect, "Blur", added);
+        Bind(ref ui.title, nameof(ui.title), rect, "Panel/TitleGround/Title", added);
+        Bind(ref ui.cellTemplate, nameof(ui.cellTemplate), rect,
+             "Panel/Body/Viewport/Content/RewardCellTemplate", added);
+
+        return added;
+    }
+
+    private static RectTransform BuildRewardBlur(RectTransform parent, UI.Sub.MissionRewardUI ui)
+    {
         // 点背景关闭 / Tapping the backdrop dismisses, the way it does on the item popup. The
         // reward is already in the bag by the time this is up, so dismissing costs nothing.
-        UnityEngine.UI.Image blur = NewImage("Blur", rootRect, new Color(0.70f, 0.71f, 0.73f, 1f));
+        UnityEngine.UI.Image blur = NewImage("Blur", parent, new Color(0.70f, 0.71f, 0.73f, 1f));
         Stretch((RectTransform)blur.transform);
         blur.material = BlurMaterial();
         blur.gameObject.AddComponent<UI.UiBlurCapture>();
@@ -554,8 +726,12 @@ public static class MissionUISetup
         UnityEditor.Events.UnityEventTools.AddBoolPersistentListener(dismiss.onClick, ui.Hide, true);
 
         ui.blur = blur;
+        return (RectTransform)blur.transform;
+    }
 
-        UnityEngine.UI.Image panelImage = NewImage("Panel", rootRect, Paper);
+    private static RectTransform BuildRewardPanel(RectTransform parent, UI.Sub.MissionRewardUI ui)
+    {
+        UnityEngine.UI.Image panelImage = NewImage("Panel", parent, Paper);
         RectTransform panel = (RectTransform)panelImage.transform;
         panel.anchorMin = new Vector2(0.5f, 0.5f);
         panel.anchorMax = new Vector2(0.5f, 0.5f);
@@ -605,7 +781,7 @@ public static class MissionUISetup
         closeLabel.fontStyle = FontStyle.Bold;
         closeLabel.text = "OK";
 
-        Save(root, "MissionRewardUI");
+        return panel;
     }
 
     /// <summary>
@@ -705,13 +881,18 @@ public static class MissionUISetup
 
     // ---------------------------------------------------------------------- wiring
 
-    private static bool HookMissionsTile()
+    /// <summary>
+    /// 只加缺的 / Points Home's MISSIONS tile at the board, adding only what the tile lacks - a clear
+    /// hit area when it draws nothing of its own, a Button, an OpenUIButton naming MissionUI - and
+    /// saving HomeUI only when it changed one of them.
+    /// </summary>
+    private static string HookMissionsTile()
     {
         string homePath = UiPrefabDir + "/HomeUI.prefab";
         if (AssetDatabase.LoadAssetAtPath<GameObject>(homePath) == null)
         {
-            Debug.LogWarning($"[MissionUISetup] No HomeUI prefab at {homePath}, so nothing opens the mission board yet.");
-            return false;
+            Debug.LogWarning($"{Tag} No HomeUI prefab at {homePath}, so nothing opens the mission board yet.");
+            return $"HomeUI {MissionsTileName}: NOT hooked - no HomeUI prefab";
         }
 
         GameObject contents = PrefabUtility.LoadPrefabContents(homePath);
@@ -721,25 +902,63 @@ public static class MissionUISetup
             Transform tile = FindDeep(contents.transform, MissionsTileName);
             if (tile == null)
             {
-                Debug.LogWarning($"[MissionUISetup] HomeUI has no '{MissionsTileName}' child.");
-                return false;
+                Debug.LogWarning($"{Tag} HomeUI has no '{MissionsTileName}' child.");
+                return $"HomeUI {MissionsTileName}: NOT hooked - no such tile";
             }
+
+            List<string> changed = new List<string>();
 
             // 透明图也能接收点击 / An alpha-zero Image is still a raycast target, which is exactly
-            // what makes a tile clickable without drawing anything over the art behind it.
-            if (tile.GetComponent<Graphic>() == null)
+            // what makes a tile clickable without drawing anything over the art behind it. A tile
+            // that draws nothing of its own gets one as a child, stretched over it - once, since a
+            // second run finds it.
+            Graphic face = tile.GetComponent<Graphic>();
+            if (face == null)
             {
-                NewImage("Hit", (RectTransform)tile, new Color(0f, 0f, 0f, 0f));
+                Transform hit = tile.Find("Hit");
+                if (hit != null)
+                {
+                    face = hit.GetComponent<Graphic>();
+                }
+                else
+                {
+                    face = NewImage("Hit", tile, new Color(0f, 0f, 0f, 0f));
+                    Stretch(face.rectTransform);
+                    changed.Add("added a hit area");
+                }
             }
 
-            Button button = tile.GetComponent<Button>() ?? tile.gameObject.AddComponent<Button>();
-            button.targetGraphic = tile.GetComponent<Graphic>();
+            // 显式判空, 不用 ?? / Explicit null checks rather than ??: in the Editor a missing
+            // component can come back as Unity's fake-null object, which compares equal to null
+            // but is not a null reference, so ?? would keep it instead of adding the component.
+            Button button = tile.GetComponent<Button>();
+            if (button == null)
+            {
+                button = tile.gameObject.AddComponent<Button>();
+                changed.Add("added a Button");
+            }
+            if (button.targetGraphic == null && face != null)
+            {
+                button.targetGraphic = face;
+                changed.Add("pointed the Button at the tile's graphic");
+            }
 
-            OpenUIButton open = tile.GetComponent<OpenUIButton>() ?? tile.gameObject.AddComponent<OpenUIButton>();
-            open.uiName = UI.Sub.MissionUI.UIName;
+            OpenUIButton open = tile.GetComponent<OpenUIButton>();
+            if (open == null)
+            {
+                open = tile.gameObject.AddComponent<OpenUIButton>();
+                changed.Add("added an OpenUIButton");
+            }
+            if (open.uiName != UI.Sub.MissionUI.UIName)
+            {
+                open.uiName = UI.Sub.MissionUI.UIName;
+                changed.Add($"named {UI.Sub.MissionUI.UIName} on it");
+            }
+
+            if (changed.Count == 0) return $"HomeUI {MissionsTileName}: already opens {UI.Sub.MissionUI.UIName}";
 
             PrefabUtility.SaveAsPrefabAsset(contents, homePath);
-            return true;
+            return $"HomeUI {MissionsTileName}: now opens {UI.Sub.MissionUI.UIName} - {string.Join(", ", changed)}";
         }
         finally
         {
@@ -756,11 +975,59 @@ public static class MissionUISetup
         return false;
     }
 
+    private static void LoadFont()
+    {
+        font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (font == null) Debug.LogWarning($"{Tag} No builtin font found; Text components will render blank.");
+    }
+
+    private static string PrefabPath(string name) => $"{UiPrefabDir}/{name}.prefab";
+
     private static void Save(GameObject root, string name)
     {
         Directory.CreateDirectory(UiPrefabDir);
-        PrefabUtility.SaveAsPrefabAsset(root, $"{UiPrefabDir}/{name}.prefab");
+        PrefabUtility.SaveAsPrefabAsset(root, PrefabPath(name));
         Object.DestroyImmediate(root);
+    }
+
+    /// <summary>
+    /// 有就留着, 没有才建 / The screen's part called <paramref name="name"/>: the one that is there,
+    /// kept as it is, or a new one from <paramref name="build"/> when there is none - put straight
+    /// after the part before it, so a backdrop added to an older prefab still draws behind the rest.
+    /// </summary>
+    private static Transform EnsurePart(Transform root, string name, Transform previous, string what,
+                                        List<string> added, System.Func<RectTransform> build)
+    {
+        Transform part = root.Find(name);
+        if (part != null) return part;
+
+        part = build();
+        part.SetSiblingIndex(previous != null ? previous.GetSiblingIndex() + 1 : 0);
+        added.Add(what);
+        return part;
+    }
+
+    /// <summary>
+    /// 只绑空的 / Points one of the screen's fields at the node it reads, only when the field points at
+    /// nothing: one pointed elsewhere by hand stays where it was put. A node that is not there is
+    /// reported rather than built - Reset Mission UI To Default builds the whole screen again.
+    /// </summary>
+    private static void Bind<T>(ref T field, string fieldName, Transform root, string path, List<string> added)
+        where T : Component
+    {
+        if (field != null) return;
+
+        Transform node = root.Find(path);
+        T found = node != null ? node.GetComponent<T>() : null;
+        if (found == null)
+        {
+            Debug.LogWarning($"{Tag} {root.name}.{fieldName} is empty and there is no {typeof(T).Name} at " +
+                             $"{path} to point it at; Reset Mission UI To Default builds the screen again.");
+            return;
+        }
+
+        field = found;
+        added.Add($"{fieldName} pointed at {path}");
     }
 
     /// <summary>
