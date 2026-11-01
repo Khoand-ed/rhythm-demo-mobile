@@ -119,7 +119,7 @@ XLua, Spine and DOTween under `Assets/Plugins/`.
 ### Remote config and the admin page
 
 Maintenance, the minimum client version, the feature flags (headhunting, store, ranked
-play, leaderboards) and the Home announcement are edited live at
+play, leaderboards, Manufacture) and the Home announcement are edited live at
 `http://127.0.0.1:5199/admin/`, without a build or a restart. The page signs in with an
 ordinary account that has been made administrator - and there is deliberately no endpoint
 that can do that, so the first one is granted by hand:
@@ -313,6 +313,42 @@ Substitute drops from 1-2, 2-1 and 2-3). Promotion keeps the level and only rais
 55 for a 3-star, 45 to 60 to 70 for a 4-star, 50 to 70 to 80 for a 5-star - so nothing about how
 the operator plays changes until it is levelled again, on the new phase's EXP curve and LMD rate.
 Built by `Arknights/Character/Build Promotion UI`; `Reset Promotion UI To Default` rebuilds it.
+
+### Manufacture
+
+Home's **MANUFACTURE** tile opens the base: two stations that make LMD and battle records by the
+server's clock, also while the game is closed, and a room where up to five of the player's operators
+stand.
+
+- **Unlocking.** The first clear of 1-1 pays Manufacture Blueprint I (item 30), which opens it.
+  Blueprint II (1-3) and III (2-3) let the stations be raised to Lv2 and Lv3. Blueprints are held,
+  never spent: nothing in the game can take them from the bag. An account that cleared those stages
+  before Manufacture existed is handed its blueprints the first time it opens the screen.
+- **The stations.**
+  - The LMD station makes 100 LMD an hour at Lv1 and holds 8 hours' worth.
+  - The EXP station makes a Basic Battle Record every 2 hours, up to 4, and Frontline records from Lv2.
+  - A full store stops until it is collected. Collect takes one station, Collect all both.
+  - Raising a station costs LMD (8,000 to Lv2, 25,000 to Lv3) and needs the blueprint. Whatever the
+    station holds is collected first.
+  - The numbers live in the server's `ManufactureRules`; the screen only shows what the server sends.
+- **The room.**
+  - ROOM chooses up to five owned operators to stand in it. Until the player chooses, the first five
+    in the save stand. The choice is kept on the device, per server, not on the account.
+  - Tapping an operator bounces them and they say a line. The lines are
+    `Assets/Manufacture/Resources/Manufacture/ManufactureLines.asset`, edited in the Inspector.
+  - On a clone without the local art (below), no operator has a battle rig, so the room stays empty.
+- **The switch.** Manufacture is behind the **Manufacture** feature flag on the admin page, off in a new
+  database. With it off, the screen says Manufacture is unavailable, the server refuses its calls and
+  no blueprint is paid; they are caught up once it is on.
+- **Faster time on Local.** `Manufacture:TimeScale` in
+  `server/src/Promuse.Api/appsettings.Development.json` runs the stations faster: 60, the default
+  there, makes an hour of production a minute, so a full store or a whole upgrade path can be tried
+  in minutes. The API refuses to start with any value but 1 outside Development, so Staging and
+  Production always run in real time. Restart the API after changing it.
+- **Built by** `Arknights/Manufacture/Build Manufacture UI`. It also hooks Home's tile and creates the
+  lines asset, once. Run on a screen built by an earlier version, it adds only the parts that screen
+  lacks. `Reset Manufacture UI To Default` builds the screen again over the same prefab and keeps the
+  lines.
 
 ### How a ranked result is checked
 
@@ -571,7 +607,7 @@ workflow builds images and deploys nothing.
 
 | Menu | What lives there |
 |---|---|
-| **`Arknights/`** | Content pipeline — AssetBundles, placeholder art, audio import, local character art, the Home / Depot / event / campaign / mail, notice and calendar / profile / assistant / level-up / promotion screen builders, and the story tools |
+| **`Arknights/`** | Content pipeline — AssetBundles, placeholder art, audio import, local character art, the Home / Depot / event / campaign / mail, notice and calendar / profile / assistant / level-up / promotion / Manufacture screen builders, and the story tools |
 | **`Beatmap/`** | Charting — `Beatmap Studio...` and `Timeline Editor...` author charts; `Import All Beatmaps` turns the JSON under `Assets/Beatmaps/` into `SongChart` assets |
 | **`Tools/Rhythm/`** | Gameplay scene setup — note system, HUD, hit feedback, character stage, skip button, song-select wiring, results screen, loading screen |
 
