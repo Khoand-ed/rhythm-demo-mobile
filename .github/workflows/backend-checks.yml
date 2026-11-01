@@ -73,7 +73,14 @@ permissions:
 jobs:
   build-and-test:
     name: Build and test
-    runs-on: ubuntu-latest
+    # ubuntu-24.04, not ubuntu-latest. Between 2026-10-19 and 2026-11-19 GitHub moves
+    # ubuntu-latest to 26.04, and everything preinstalled on the image moves with it -
+    # shellcheck 0.9 to 0.11, Python 3.12 to 3.14, the kernel 6 to 7. That is a change
+    # of its own, to make on purpose in one pull request, rather than one that arrives
+    # unannounced in the middle of an unrelated one.
+    #
+    # The other jobs in this file use the same label for the same reason.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
 
     steps:
@@ -146,7 +153,7 @@ jobs:
 
   migrations:
     name: Migrations apply to a real database
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
 
     # A separate job rather than more steps on the one above. Unit tests need no
@@ -247,7 +254,7 @@ jobs:
 
   container:
     name: Image builds, migrates and starts
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
 
     # 部署用的就是这个镜像 / The image a deploy runs, built and started the way a deploy starts it:
