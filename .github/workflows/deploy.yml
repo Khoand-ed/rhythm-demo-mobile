@@ -54,7 +54,7 @@ jobs:
       tag: ${{ steps.name.outputs.tag }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           lfs: false
           fetch-depth: 1

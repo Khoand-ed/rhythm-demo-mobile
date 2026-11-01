@@ -81,7 +81,7 @@ jobs:
       # LFS bandwidth is shared with every human clone. Nothing here reads a
       # binary: the linked game sources are .cs, which .gitattributes leaves as
       # text.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           lfs: false
           fetch-depth: 1
@@ -177,7 +177,7 @@ jobs:
       ConnectionStrings__Promuse: 'Host=localhost;Port=5432;Database=promuse;Username=promuse;Password=ci_only_throwaway'
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           lfs: false
           fetch-depth: 1
@@ -256,7 +256,7 @@ jobs:
     # files from Assets/, which the context must carry), the user it runs as and the JSON logs.
     # A deploy that would fail on the server fails here, in the pull request.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           lfs: false
           fetch-depth: 1

@@ -52,7 +52,7 @@ jobs:
       # actually needs. The free LFS quota is 1 GiB/month shared with every human
       # clone, and 23 of this repository's 31 MB of LFS is art and audio that no
       # test reads - 18 MB of it is .wav.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           lfs: false
           fetch-depth: 1

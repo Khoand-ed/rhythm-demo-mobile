@@ -67,7 +67,7 @@ jobs:
       # Caddy and the monitoring - is one for both environments, and a production deploy of an older
       # tag would otherwise put that tag's older edge configuration back under staging too. The image
       # is what a deploy chooses; how it is run is main's.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: main
           lfs: false

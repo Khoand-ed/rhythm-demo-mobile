@@ -29,7 +29,7 @@ jobs:
       # bandwidth quota shared with every human clone. Fetching them on every
       # push would exhaust that quota in about a month and break `git lfs pull`
       # for the whole team until it resets.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           lfs: false
           fetch-depth: 1
