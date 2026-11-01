@@ -45,9 +45,18 @@ jobs:
           lfs: false
           fetch-depth: 1
 
-      # shellcheck ships with GitHub's Ubuntu runners. -x follows the `source lib.sh` lines.
+      # From its own image, pinned like every other tool in this file, rather than the copy the
+      # runner image happens to carry: that one is 0.9.0 on ubuntu-24.04 and 0.11.0 on 26.04, so
+      # moving the runner would move this check with it. 0.9.0 is the version the runner has been
+      # running, so pinning it changes nothing about what passes. A newer one is a change to this
+      # line, with whatever it newly reports fixed in the same pull request.
+      #
+      # -x follows the `source lib.sh` lines. The globs are expanded here, on the runner, into
+      # paths relative to the mounted checkout.
       - name: Shell scripts
-        run: shellcheck -x -P deploy/scripts -S warning deploy/scripts/*.sh deploy/local/*.sh deploy/docker/*.sh
+        run: >-
+          docker run --rm -v "$PWD:/mnt:ro" -w /mnt koalaman/shellcheck:v0.9.0
+          -x -P deploy/scripts -S warning deploy/scripts/*.sh deploy/local/*.sh deploy/docker/*.sh
 
       - name: Compose files
         run: |
