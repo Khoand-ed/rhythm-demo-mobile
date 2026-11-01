@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using Data.Char;
 using Data.Player;
 using DG.Tweening;
 using Manager;
@@ -14,8 +16,8 @@ using UnityEngine.UI;
 
 namespace Promuse.Manufacture {
     /// <summary>
-    /// 制造站界面 / The Manufacture screen: the room, its two stations, collecting, raising a station,
-    /// and the lock before Manufacture is open.
+    /// 制造站界面 / The Manufacture screen: the room and the operators standing in it, its two stations,
+    /// collecting, raising a station, and the lock before Manufacture is open.
     ///
     /// 只有它调度 / It orchestrates and nothing else draws itself: the station cards and the upgrade
     /// panel only draw what they are handed, and ManufactureManager is the only one that talks to the
@@ -48,6 +50,12 @@ namespace Promuse.Manufacture {
         public StationCard lmdCard;
         public StationCard expCard;
 
+        [Header("房间 / Room")]
+        [Tooltip("Opens the room picker. On the top bar; goes away with the stations.")]
+        public Button roomButton;
+        public ManufactureRoom room;
+        public RoomPicker roomPicker;
+
         [Header("覆盖 / Overlays")]
         public UpgradePanel upgradePanel;
         public GameObject lockOverlay;
@@ -57,6 +65,7 @@ namespace Promuse.Manufacture {
         private float nextTick;
         private bool busy;
         private bool loading;
+        private RoomStore roomStore;
 
         private static ManufactureManager Manager => ManufactureManager.Inst();
 
@@ -78,6 +87,11 @@ namespace Promuse.Manufacture {
 
             upgradePanel.Confirm += panel => UpgradeAsync(panel.StationId, panel.FromLevel);
             upgradePanel.Close();
+
+            roomStore = RoomStore.ForCurrentServer();
+            roomButton.onClick.AddListener(OpenRoomPicker);
+            roomPicker.Confirm += ChooseRoom;
+            roomPicker.Close();
         }
 
         public override void Show() {
@@ -89,6 +103,7 @@ namespace Promuse.Manufacture {
             Manager.Changed -= Draw;
             Manager.Changed += Draw;
             upgradePanel.Close();
+            roomPicker.Close();
 
             // What is known already, at once - a view from the last visit keeps ticking - and the
             // fresh one corrects it when it arrives.
@@ -118,10 +133,16 @@ namespace Promuse.Manufacture {
         }
 
         /// <summary>
-        /// 先关面板 / Android Back closes the upgrade panel first; only with nothing open over the
-        /// stations does it leave the screen, through its own back button.
+        /// 先关面板 / Android Back closes the room picker or the upgrade panel first, keeping nothing the
+        /// picker had not confirmed; only with nothing open over the screen does it leave, through its own
+        /// back button.
         /// </summary>
         public override void OnBack() {
+            if (roomPicker.IsOpen) {
+                roomPicker.Close();
+                DrawStations();
+                return;
+            }
             if (upgradePanel.IsOpen) {
                 upgradePanel.Close();
                 DrawStations();
@@ -228,6 +249,7 @@ namespace Promuse.Manufacture {
             }
 
             lockOverlay.SetActive(false);
+            DrawRoom();
             DrawStations();
         }
 
@@ -251,12 +273,13 @@ namespace Promuse.Manufacture {
             // 盖住时不让按 / Nothing under an overlay can be pressed. Collect all sits on the top bar,
             // above the lock, so it goes away with the stations it would collect: a locked, loading or
             // failed screen offers nothing to press but Back and Retry.
-            bool covered = lockOverlay.activeSelf || upgradePanel.IsOpen;
+            bool covered = lockOverlay.activeSelf || upgradePanel.IsOpen || roomPicker.IsOpen;
             stationLayer.interactable = !covered;
             stationLayer.blocksRaycasts = !covered;
 
             collectAllButton.gameObject.SetActive(open && !lockOverlay.activeSelf);
             collectAllButton.interactable = !busy && anything;
+            roomButton.gameObject.SetActive(open && !lockOverlay.activeSelf);
         }
 
         private void ShowLock(string message, bool retry) {
@@ -264,6 +287,49 @@ namespace Promuse.Manufacture {
             retryButton.gameObject.SetActive(retry);
             lockOverlay.SetActive(true);
             upgradePanel.Close();
+            roomPicker.Close();
+            room.Clear();
+            DrawStations();
+        }
+
+        // ------------------------------------------------------------------ room
+
+        /// <summary>The operators the player owns, in the order the save lists them.</summary>
+        private static List<string> OwnedOperators() {
+            List<string> ids = new List<string>();
+            PlayerData player = PlayerManager.Inst().Get();
+            List<CharData> owned = player != null ? player.GetCharList() : null;
+            if (owned == null) return ids;
+
+            foreach (CharData character in owned) {
+                if (character != null) ids.Add(character.GetId());
+            }
+            return ids;
+        }
+
+        /// <summary>Who stands in the room: the choice kept on this device for this server, or the default.</summary>
+        private List<string> RoomChoice() => RoomSelection.Resolve(roomStore.Load(), OwnedOperators());
+
+        // 同一批人不重建 / ManufactureRoom keeps the operators already standing when asked for the same ones,
+        // so this runs on every redraw for free.
+        private void DrawRoom() => room.Show(RoomChoice());
+
+        private void OpenRoomPicker() {
+            ManufactureView view = Manager.View;
+            if (busy || view == null || !view.IsUnlocked) return;
+
+            roomPicker.Open(OwnedOperators(), RoomChoice());
+            DrawStations();
+        }
+
+        /// <summary>
+        /// 确认后才保存 / Confirmed: kept for this server, and an operator no longer owned drops out of the
+        /// list as it is written.
+        /// </summary>
+        private void ChooseRoom(IReadOnlyList<string> ids) {
+            roomStore.Save(RoomSelection.Resolve(ids, OwnedOperators()));
+            roomPicker.Close();
+            DrawRoom();
             DrawStations();
         }
     }

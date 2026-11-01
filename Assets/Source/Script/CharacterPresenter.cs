@@ -183,11 +183,9 @@ public class CharacterPresenter : MonoBehaviour
 
         // 按高度缩放 / Scaled by the visible height of the idle pose, so a rig drawn at another size
         // still stands as tall as the rest. Falls back to the export's own height for a rig with nothing
-        // visible to measure.
-        float height = VisibleTop();
-        if (height <= 0.01f) height = data.Height * rig.scale;
-        float heightScale = motion != null && motion.heightScale > 0f ? motion.heightScale : 1f;
-        float scale = height > 0.01f ? targetHeight * heightScale / height : 1f;
+        // visible to measure. Tools.RigHeight is the one definition; the Manufacture room uses it too.
+        float height = Tools.RigHeight.Standing(VisibleTop(), rig, data);
+        float scale = Tools.RigHeight.ScaleFor(height, targetHeight, motion != null ? motion.heightScale : 1f);
         t.localScale = new Vector3(scale, scale, 1f);
 
         MeshRenderer meshRenderer = operatorRig.GetComponent<MeshRenderer>();
@@ -199,8 +197,7 @@ public class CharacterPresenter : MonoBehaviour
     }
 
     // The top of everything drawn in the first frame of idle, above the rig's origin - its feet - in
-    // the rig's own units. Attachments at zero alpha are effects waiting their turn and do not count;
-    // neither does anything hanging below the feet, like a weapon held low.
+    // the rig's own units (Tools.RigHeight.VisibleTop), with the pose cleared again afterwards.
     private float VisibleTop()
     {
         Spine.Animation pose = Resolve(Idle);
@@ -210,31 +207,7 @@ public class CharacterPresenter : MonoBehaviour
             operatorRig.Update(0f);
         }
 
-        float top = 0f;
-        float[] vertices = new float[256];
-        foreach (Spine.Slot slot in operatorRig.Skeleton.DrawOrder)
-        {
-            if (!slot.Bone.Active) continue;
-
-            int count;
-            if (slot.Attachment is Spine.RegionAttachment region)
-            {
-                if (slot.A * region.A <= 0.02f) continue;
-                region.ComputeWorldVertices(slot.Bone, vertices, 0);
-                count = 8;
-            }
-            else if (slot.Attachment is Spine.MeshAttachment mesh)
-            {
-                if (slot.A * mesh.A <= 0.02f) continue;
-                count = mesh.WorldVerticesLength;
-                if (vertices.Length < count) vertices = new float[count];
-                mesh.ComputeWorldVertices(slot, vertices);
-            }
-            else continue;
-
-            for (int i = 1; i < count; i += 2) top = Mathf.Max(top, vertices[i]);
-        }
-
+        float top = Tools.RigHeight.VisibleTop(operatorRig.Skeleton);
         operatorRig.AnimationState.ClearTracks();
         return top;
     }

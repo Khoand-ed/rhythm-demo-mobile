@@ -1,0 +1,39 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 29ee9110616bcbc47876bce1296b6b54, type: 3}
+  m_Name: ManufactureLines
+  m_EditorClassIdentifier: Promuse.Manufacture::Promuse.Manufacture.ManufactureLines
+  fallback:
+  - Everything's running on time.
+  - Need something, Doctor?
+  - The stations won't run themselves. Well, they do, actually.
+  entries:
+  - charId: AMIYA
+    lines:
+    - The line is running smoothly. Thank you for checking in, Doctor.
+    - Every record we make here helps someone train. Let's keep going.
+    - Take a break if you need one. I'll keep an eye on the stations.
+  - charId: NOVA
+    lines:
+    - Another batch done! I could do this all day.
+    - The machine keeps its own tempo. I'm learning to follow it.
+    - Collect it before it fills up, okay? I hate seeing it stop.
+  - charId: ECHO
+    lines:
+    - ...The press hums in four-four. Did you notice?
+    - I counted the units. Twice. They're all there.
+    - It's quiet in here. I like it.
+  - charId: PULSE
+    lines:
+    - Keep the beat, keep the line moving. Same thing, really.
+    - Hey, Doctor! The press sounds great on the off-beat.
+    - Raise the station a level and I'll make it sing.

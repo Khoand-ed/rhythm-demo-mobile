@@ -62,6 +62,22 @@ public class ManufactureCardTests
     }
 
     [Test]
+    public void AFullLv2Store_FitsItsCard_OnOneLine()
+    {
+        // "1,250 / 1,250" is wider than the card at full size; it once wrapped over the product's name.
+        StationCard card = Ui.lmdCard;
+        var lv2 = new StationLevel(2, 2, 50, 1440, 25);
+        StationState full = new StationState(ManufactureStations.Lmd, 2, 3, lv2, 0, Now.AddHours(-11), null, null, null);
+        card.Bind(full, ManufactureManager.Read(full, Now), Now, busy: false);
+        card.stored.ForceMeshUpdate();
+
+        Assert.AreEqual("1,250 / 1,250", card.stored.text);
+        Assert.AreEqual(TMPro.TextWrappingModes.NoWrap, card.stored.textWrappingMode);
+        Assert.AreEqual(1, card.stored.textInfo.lineCount);
+        Assert.IsFalse(card.stored.isTextOverflowing, "it shrinks to fit rather than spilling out");
+    }
+
+    [Test]
     public void ARequestOut_LocksBothButtons()
     {
         StationCard card = Ui.lmdCard;

@@ -21,7 +21,7 @@ other way: predefined assemblies auto-reference every asmdef, never the reverse.
 | `Arknights` (asmdef) | `Assets/Arknights/` — UI, data, managers, Lua | DOTween, Spine, XLua, TMP, uGUI |
 | `Rhythm.Core` (asmdef) | `Assets/Source/Script/Core/` — judging, health, fever, chart data | UnityEngine only |
 | `Promuse.Net` (asmdef) | `Assets/Promuse.Net/` — wire contracts, HTTP transport, token store | UnityEngine, Newtonsoft |
-| `Promuse.Manufacture` (asmdef) | `Assets/Manufacture/` — Manufacture's data and its screen, and later its room | `Arknights`, `Promuse.Net`, DOTween, TMP, uGUI |
+| `Promuse.Manufacture` (asmdef) | `Assets/Manufacture/` — Manufacture's data, its screen and the room's operators | `Arknights`, `Promuse.Net`, DOTween, Spine, TMP, uGUI |
 | `Assembly-CSharp` (default) | `Assets/Source/Script/`, `Assets/Bridge/` | **everything above** |
 | `Assembly-CSharp-Editor` (default) | `Assets/Editor/` | everything above |
 
@@ -133,6 +133,7 @@ Only an Android build compiles all of them, and no CI makes one.
 | Showing an operator's standing art | `SplashFrame.Show(image, meta)` (Lua: `CS.UI.SplashFrame.Show`), never `image.sprite = meta.GetImage()`. The splash is whole and uncut; only a frame keeps its proportions. A new screen's `Image` needs a frame - add it to the list in `OperatorSplashFrames` |
 | Setting `Application.targetFrameRate` anywhere else, or removing `Manager.FrameRate` | It sets 60 once, before the first scene. A phone left to itself draws at 30, and a tap is judged on the first frame that sees it - up to 33 ms late, most of a Great window. A second place setting it (a scene, a screen) silently wins wherever it runs |
 | Anything in `CharacterPresenter` choosing by chance | It is presentation, and the server replays a run from its seed. Pick from the event (lane, note type), never from `RunState.NextRoll()` or `UnityEngine.Random` |
+| Sizing an operator anywhere it stands | `Tools.RigHeight` (`Assets/Arknights/Utils/`) is the one measure, shared by the rhythm stage (`CharacterPresenter`) and the Manufacture room (`ManufactureChibi`): the top of what the idle pose draws, never the height a Spine export records. A second measure makes the same operator a different size in each place |
 
 ## Working here
 
