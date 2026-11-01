@@ -86,7 +86,7 @@ jobs:
           lfs: false
           fetch-depth: 1
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           # Floats on the patch line rather than pinning 10.0.401. A backend has
           # none of the reproducibility constraints the Unity editor version has,
@@ -182,7 +182,7 @@ jobs:
           lfs: false
           fetch-depth: 1
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
 
