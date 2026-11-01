@@ -137,7 +137,7 @@ jobs:
       # Under server/ rather than the repository root so that everything the
       # backend generates stays in one place, and one .gitignore rule covers a
       # developer running this exact command locally.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: backend-test-results
