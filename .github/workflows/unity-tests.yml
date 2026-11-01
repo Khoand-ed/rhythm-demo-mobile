@@ -77,7 +77,7 @@ jobs:
       # Hashing Assets/** would invalidate this on every commit and is slow over
       # 92 MB of assets, so the key covers only what actually invalidates a
       # Library: the package lock, the editor version, and the asmdefs.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: Library
           key: Library-editmode-${{ hashFiles('Packages/packages-lock.json', 'ProjectSettings/ProjectVersion.txt') }}-${{ hashFiles('Assets/**/*.asmdef') }}

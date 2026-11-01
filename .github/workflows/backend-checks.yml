@@ -96,7 +96,7 @@ jobs:
       # Keyed on the project files rather than a lock file: the repository does
       # not use packages.lock.json, so this is what actually changes when a
       # dependency does.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('server/**/*.csproj', 'server/dotnet-tools.json') }}
@@ -186,7 +186,7 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('server/**/*.csproj', 'server/dotnet-tools.json') }}
