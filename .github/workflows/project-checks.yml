@@ -20,7 +20,12 @@ permissions:
 jobs:
   checks:
     name: Unity repo integrity
-    runs-on: ubuntu-latest
+    # ubuntu-24.04, not ubuntu-latest. Between 2026-10-19 and 2026-11-19 GitHub moves
+    # ubuntu-latest to 26.04, and everything preinstalled on the image moves with it -
+    # shellcheck 0.9 to 0.11, Python 3.12 to 3.14, the kernel 6 to 7. That is a change
+    # of its own, to make on purpose in one pull request, rather than one that arrives
+    # unannounced in the middle of an unrelated one.
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
 
     steps:
@@ -29,12 +34,12 @@ jobs:
       # bandwidth quota shared with every human clone. Fetching them on every
       # push would exhaust that quota in about a month and break `git lfs pull`
       # for the whole team until it resets.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           lfs: false
           fetch-depth: 1
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 

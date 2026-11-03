@@ -73,7 +73,14 @@ permissions:
 jobs:
   build-and-test:
     name: Build and test
-    runs-on: ubuntu-latest
+    # ubuntu-24.04, not ubuntu-latest. Between 2026-10-19 and 2026-11-19 GitHub moves
+    # ubuntu-latest to 26.04, and everything preinstalled on the image moves with it -
+    # shellcheck 0.9 to 0.11, Python 3.12 to 3.14, the kernel 6 to 7. That is a change
+    # of its own, to make on purpose in one pull request, rather than one that arrives
+    # unannounced in the middle of an unrelated one.
+    #
+    # The other jobs in this file use the same label for the same reason.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
 
     steps:
@@ -81,12 +88,12 @@ jobs:
       # LFS bandwidth is shared with every human clone. Nothing here reads a
       # binary: the linked game sources are .cs, which .gitattributes leaves as
       # text.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           lfs: false
           fetch-depth: 1
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           # Floats on the patch line rather than pinning 10.0.401. A backend has
           # none of the reproducibility constraints the Unity editor version has,
@@ -96,7 +103,7 @@ jobs:
       # Keyed on the project files rather than a lock file: the repository does
       # not use packages.lock.json, so this is what actually changes when a
       # dependency does.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('server/**/*.csproj', 'server/dotnet-tools.json') }}
@@ -137,7 +144,7 @@ jobs:
       # Under server/ rather than the repository root so that everything the
       # backend generates stays in one place, and one .gitignore rule covers a
       # developer running this exact command locally.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: backend-test-results
@@ -146,7 +153,7 @@ jobs:
 
   migrations:
     name: Migrations apply to a real database
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
 
     # A separate job rather than more steps on the one above. Unit tests need no
@@ -177,16 +184,16 @@ jobs:
       ConnectionStrings__Promuse: 'Host=localhost;Port=5432;Database=promuse;Username=promuse;Password=ci_only_throwaway'
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           lfs: false
           fetch-depth: 1
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('server/**/*.csproj', 'server/dotnet-tools.json') }}
@@ -247,7 +254,7 @@ jobs:
 
   container:
     name: Image builds, migrates and starts
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
 
     # 部署用的就是这个镜像 / The image a deploy runs, built and started the way a deploy starts it:
@@ -256,7 +263,7 @@ jobs:
     # files from Assets/, which the context must carry), the user it runs as and the JSON logs.
     # A deploy that would fail on the server fails here, in the pull request.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           lfs: false
           fetch-depth: 1

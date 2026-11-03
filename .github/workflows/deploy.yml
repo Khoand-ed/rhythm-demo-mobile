@@ -45,7 +45,14 @@ jobs:
   image:
     name: Image
     needs: checks
-    runs-on: ubuntu-latest
+    # ubuntu-24.04, not ubuntu-latest. Between 2026-10-19 and 2026-11-19 GitHub moves
+    # ubuntu-latest to 26.04, and everything preinstalled on the image moves with it -
+    # shellcheck 0.9 to 0.11, Python 3.12 to 3.14, the kernel 6 to 7. That is a change
+    # of its own, to make on purpose in one pull request, rather than one that arrives
+    # unannounced in the middle of an unrelated one.
+    #
+    # The other jobs in this file use the same label for the same reason.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
       contents: read
@@ -54,7 +61,7 @@ jobs:
       tag: ${{ steps.name.outputs.tag }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           lfs: false
           fetch-depth: 1
@@ -111,7 +118,7 @@ jobs:
   release:
     name: Release image
     if: github.event_name == 'push' && github.ref_type == 'tag'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: read

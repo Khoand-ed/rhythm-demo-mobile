@@ -28,7 +28,14 @@ jobs:
   no-vm:
     name: Not deployed - no VM yet
     if: vars.VM_HOST == ''
-    runs-on: ubuntu-latest
+    # ubuntu-24.04, not ubuntu-latest. Between 2026-10-19 and 2026-11-19 GitHub moves
+    # ubuntu-latest to 26.04, and everything preinstalled on the image moves with it -
+    # shellcheck 0.9 to 0.11, Python 3.12 to 3.14, the kernel 6 to 7. That is a change
+    # of its own, to make on purpose in one pull request, rather than one that arrives
+    # unannounced in the middle of an unrelated one.
+    #
+    # The other jobs in this file use the same label for the same reason.
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: Nothing to deploy to
@@ -47,7 +54,7 @@ jobs:
   deploy:
     name: Deploy ${{ inputs.environment }}
     if: vars.VM_HOST != ''
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     environment:
       name: ${{ inputs.environment }}
@@ -67,7 +74,7 @@ jobs:
       # Caddy and the monitoring - is one for both environments, and a production deploy of an older
       # tag would otherwise put that tag's older edge configuration back under staging too. The image
       # is what a deploy chooses; how it is run is main's.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: main
           lfs: false
