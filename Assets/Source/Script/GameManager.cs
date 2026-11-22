@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using Data.Char;
+using Settings;
 using Tools;
 using UnityEngine;
 using UnityEngine.UI;
@@ -380,6 +381,14 @@ void Update()
 
         SongChart chart = noteSpawner.chart;
         Conductor.instance.songOffset = chart.offset;
+
+        // 玩家的音频偏移 / The player's audio offset, read again because this scene can be opened
+        // straight from the Editor, where GameStart never loaded it. Set here, once, before the song
+        // starts and before PauseMenu measures the run-up - never while it runs, or song time would
+        // jump. A ranked run is safe at any setting: the trace records the song time that was judged,
+        // and the server replays exactly that.
+        GameSettings.LoadGame();
+        Conductor.instance.latencyOffset = GameSettings.AUDIO_OFFSET_MS / 1000f;
 
         if (chart.clip != null && Conductor.instance.theMusic != null)
         {
