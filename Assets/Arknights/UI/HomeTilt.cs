@@ -111,10 +111,15 @@ namespace UI {
                 return;
             }
 
-            rest = TiltMath.Recentre(rest, angles, dt, recentreSeconds);
+            // 侧躺时后仰不可信 / Lying on one side, recline cannot be trusted: Y fades out, and the rest
+            // pose's recline holds rather than drifting toward a reading that may have flipped by 180.
+            float trust = TiltMath.ReclineWeight(gravity);
+            Vector2 drifted = TiltMath.Recentre(rest, angles, dt, recentreSeconds);
+            rest = new Vector2(drifted.x, Mathf.LerpAngle(rest.y, drifted.y, trust));
+
             Vector2 offset = TiltMath.Offset(rest, angles);
             X = TiltMath.Normalise(offset.x, deadZoneDegrees, rangeDegrees);
-            Y = TiltMath.Normalise(offset.y, deadZoneDegrees, rangeDegrees);
+            Y = TiltMath.Normalise(offset.y, deadZoneDegrees, rangeDegrees) * trust;
             Available = true;
         }
 

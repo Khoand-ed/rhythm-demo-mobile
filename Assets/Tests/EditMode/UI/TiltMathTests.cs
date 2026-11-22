@@ -53,6 +53,20 @@ public class TiltMathTests
         Assert.AreEqual(TiltMath.Angles(Reclined(35f)).y, TiltMath.Angles(Reclined(35f) * 1.2f).y, Tolerance);
     }
 
+    [Test]
+    public void LyingOnOneSide_ReclineIsNotTrusted()
+    {
+        // The long edge down: gravity almost along the screen's x axis, where recline swings wildly.
+        Assert.AreEqual(0f, TiltMath.ReclineWeight(new Vector3(0.98f, -0.14f, -0.14f)), Tolerance);
+        Assert.AreEqual(0f, TiltMath.ReclineWeight(new Vector3(-0.98f, -0.14f, -0.10f)), Tolerance, "a wobble there changes nothing");
+
+        Assert.AreEqual(1f, TiltMath.ReclineWeight(new Vector3(0f, -1f, 0f)), Tolerance, "upright");
+        Assert.AreEqual(1f, TiltMath.ReclineWeight(Reclined(60f)), Tolerance, "reclined, any amount");
+
+        float r = 45f * Mathf.Deg2Rad;
+        Assert.AreEqual(1f, TiltMath.ReclineWeight(new Vector3(Mathf.Sin(r), -Mathf.Cos(r), 0f)), Tolerance, "a 45 degree lean is trusted fully");
+    }
+
     // --- -1..1 -----------------------------------------------------------------------------------
 
     [Test]

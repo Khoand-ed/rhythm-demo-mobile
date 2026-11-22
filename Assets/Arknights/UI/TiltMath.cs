@@ -25,6 +25,21 @@ namespace UI {
             return new Vector2(lean, recline);
         }
 
+        /// <summary>
+        /// 侧躺时不看后仰 / How far the recline angle can be trusted, 0..1. Recline reads gravity's share
+        /// in the screen's y-z plane, and that share vanishes as gravity lines up with the screen's x
+        /// axis - a player lying on their side holds the landscape phone long edge down. There a 2 degree
+        /// wobble swings recline by 10, and crossing the axis flips it by 180. Full weight up to about 60
+        /// degrees of lean, none past about 75.
+        /// </summary>
+        public static float ReclineWeight(Vector3 gravity) {
+            float length = gravity.magnitude;
+            if (length < 1e-4f) return 0f;
+
+            float share = Mathf.Sqrt(gravity.y * gravity.y + gravity.z * gravity.z) / length;
+            return Mathf.Clamp01((share - 0.25f) / 0.25f);
+        }
+
         /// <summary>How far <paramref name="now"/> is from <paramref name="rest"/>, each angle the short way round.</summary>
         public static Vector2 Offset(Vector2 rest, Vector2 now) {
             return new Vector2(Mathf.DeltaAngle(rest.x, now.x), Mathf.DeltaAngle(rest.y, now.y));
