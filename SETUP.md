@@ -457,6 +457,18 @@ adb logcat -s Unity | findstr FrameRate
 1.1 is the first build that judges through `RunJudge`. Raise `bundleVersion` (and the Android version
 code) for a build that changes how runs are judged, then the minimum on the admin page.
 
+**Home's tilt.** On a phone, Home's parallax follows how the phone is tilted (`UI.HomeTilt`, the gravity
+sensor through the Input System), measured from however it is held and settling back to the middle over
+a few seconds; in the Editor it still follows the mouse. Its strength, dead zone, settling time and
+direction are the `TILT_*` constants at the top of `HomeUI.lua.txt`. They can only be judged on the
+phone - the Editor has no sensor, and the Parallax Tuner follows the pointer - and a Lua change reaches
+the phone only in a new build. Settings → GAME → HOME TILT switches it off.
+
+**The audio offset.** Settings → SOUND → AUDIO OFFSET, -300..+300 ms, saved on the device: raise it when
+the music reaches the player late (Bluetooth), and notes reach the line and are judged that much later.
+It applies from the next song. Ranked runs are unaffected by it on the server - the trace records the
+song time that was judged - so changing it needs no new minimum version.
+
 ### The API in a container
 
 What a deploy runs. Day-to-day development stays on `dotnet run`; the image is for checking what
@@ -605,9 +617,9 @@ part of the game it tests:
   manager behind them.
 
 They are not all pure logic. `RulesetParityTests` opens `Main.unity` beside whatever is
-open and reads the `CharMeta` assets; `BackKeyTests`, `SoundSettingsTests` and the
-Manufacture screen and card tests load prefabs through `AssetDatabase`, and
-`SoundSettingsTests` writes PlayerPrefs, putting back what was there; `TokenRefreshTests`
+open and reads the `CharMeta` assets; `BackKeyTests`, `SoundSettingsTests`, `PlaySettingsTests` and
+the Manufacture screen and card tests load prefabs through `AssetDatabase`, and
+`SoundSettingsTests` and `PlaySettingsTests` write PlayerPrefs, putting back what was there; `TokenRefreshTests`
 talks HTTP through `UnityWebRequest` to a small fake server it starts on the loopback.
 None of them needs a database, the dev API or the gitignored audio and art. A whole run
 takes two or three seconds on CI, over a second of it the token refresh tests.
