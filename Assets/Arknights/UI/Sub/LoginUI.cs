@@ -390,12 +390,22 @@ namespace UI.Sub {
                         // 再试就从头再问一遍配置 / A retry asks for the config again too: the failure that
                         // kept the session out may have kept the config out, and maintenance may have
                         // begun since. Sent once the dialog has gone, as in ConfirmName.
-                        CommonDialogUI.Message(CommonDialogUI.GroundType.BLACK, $"{result.Message}\nTry again?", () => {
-                            SetHomeButtons(false);
-                            Delay.add(() => {
-                                if (this != null) ResumeStoredSession(RemoteConfigManager.Inst().CheckOnLogin());
-                            }, 0.3f);
-                        });
+                        //
+                        // 一个勾 / One tick, and it tries again: there is no "no" to give. A player who
+                        // would rather not has the sign-in buttons, shown just above, under the dialog.
+                        CommonDialogUI retry = CommonDialogUI.Message(CommonDialogUI.GroundType.BLACK,
+                            $"{result.Message}\nTap the tick to try again.");
+                        if (retry != null) {
+                            retry.AddBackListener(() => {
+                                // 自己关 / Closed here too: the dialog only wires its own close once it
+                                // has faded in, and a quick tap would retry with it left open.
+                                UIManager.Inst().Hide("CommonDialogUI");
+                                SetHomeButtons(false);
+                                Delay.add(() => {
+                                    if (this != null) ResumeStoredSession(RemoteConfigManager.Inst().CheckOnLogin());
+                                }, 0.3f);
+                            });
+                        }
                         break;
                 }
             } catch (Exception e) {

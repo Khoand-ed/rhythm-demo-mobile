@@ -30,7 +30,11 @@ namespace UI.Sub {
 
         public override void Show() {
             base.Show();
-            
+
+            // 上一个还在淡出时又打开 / Opened again while the last one is still fading out: that fade's
+            // end would switch off the buttons and background this one is about to set.
+            canvasGroup.DOKill();
+
             Material blurryShader = blur.material;
             blurryShader.SetFloat("_Size",0);
             float value = 0;
@@ -94,8 +98,15 @@ namespace UI.Sub {
             this.mode = mode;
             this.message.color = GetText();
             this.message.text = message;
-            GetGround().SetActive(true);
-            GetMode().SetActive(true);
+
+            // 只留这一种 / Exactly this mode's buttons and this background. Switching on only the one
+            // wanted left the other as the prefab or the last dialog had it: mode_One is on in the
+            // prefab, so the first two-button dialog of a session showed three buttons - two ticks
+            // and a cross.
+            whiteGround.SetActive(type == GroundType.WHITE);
+            blackGround.SetActive(type == GroundType.BLACK);
+            mode_One.SetActive(mode == Mode.ONE);
+            mode_Two.SetActive(mode == Mode.TWO);
         }
 
         public void AddBackListener(UnityAction method) {
