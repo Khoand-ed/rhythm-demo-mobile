@@ -919,8 +919,6 @@ namespace Arknights.EditorTools {
                 new Vector2(293, -164), new Vector2(270, 150), 34, TileBlue, Color.white, ui, "ShopUI");
             MenuTile(root, "RecruitTile", "RECRUIT", null,
                 new Vector2(574, -112), new Vector2(263, 61), 26, TileLight, TileInk, null, null);
-            MenuTile(root, "PublicRecruitTile", "PUBLIC RECRUIT", null,
-                new Vector2(552, -198), new Vector2(205, 68), 21, TileBlue, Color.white, null, null);
             MenuTile(root, "HeadhuntTile", "HEADHUNTING", null,
                 new Vector2(801, -198), new Vector2(234, 68), 21, TileBlue, Color.white, null, null);
 

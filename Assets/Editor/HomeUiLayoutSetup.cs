@@ -58,7 +58,7 @@ public static class HomeUiLayoutSetup
     {
         "time", "dragonCoinSlot", "syntheticJadeSlot", "sourceStoneSlot",
         "OperationTile", "SquadTile", "OperatorsTile", "StoreTile", "RecruitTile",
-        "PublicRecruitTile", "HeadhuntTile", "MissionsTile", "ManufactureTile", "DepotTile"
+        "HeadhuntTile", "MissionsTile", "ManufactureTile", "DepotTile"
     };
 
     // 左边一块 / LeftPanel: the news panel, and the profile and assistant buttons beside it (placed by
