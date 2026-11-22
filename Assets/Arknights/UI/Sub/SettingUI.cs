@@ -30,6 +30,15 @@ namespace UI.Sub {
         public Toggle sound_voice;
         public Slider sound_voice_value;
 
+        // 两行由工具加 / Added to the prefab by Arknights/Settings/Build Offset And Tilt Rows.
+        public Toggle game_tilt;
+        public Slider sound_offset;
+        public Button sound_offset_minus;
+        public Button sound_offset_plus;
+        public Text sound_offset_readout;
+
+        private const int OffsetStepMs = 5;
+
         public override void Init() {
             // game_keep_speed.Initialization(GameSettings.GAME_KEEP_SPEED);
             // game_performance.Initialization(GameSettings.GAME_PERFORMANCE);
@@ -44,7 +53,16 @@ namespace UI.Sub {
             sound_music_value.value = GameSettings.SOUND_MUSIC_VALUE;
             SetSwitch(sound_voice, GameSettings.SOUND_VOICE_ENABLE);
             sound_voice_value.value = GameSettings.SOUND_VOICE_VALUE;
-            
+
+            // 新的两行可以不存在 / The two newer rows are null-checked: a tool adds them, and Init must not
+            // throw on a prefab without them, or the whole screen - LOG OUT included - fails to open.
+            if (game_tilt != null) {
+                SetSwitch(game_tilt, GameSettings.HOME_TILT_ENABLE);
+                game_tilt.onValueChanged.AddListener(value => GameSettings.HOME_TILT_ENABLE = value);
+            }
+
+            if (sound_offset != null) InitOffset();
+
             game_keep_speed.onValueChanged.AddListener(value => GameSettings.GAME_KEEP_SPEED = value);
             game_performance.onValueChanged.AddListener(value => GameSettings.GAME_PERFORMANCE = value);
             game_profileScreen.onValueChanged.AddListener(value => {
@@ -103,6 +121,7 @@ namespace UI.Sub {
             // 关界面时存 / Saved as the screen closes - every way out (its close button, Android Back,
             // signing out) comes through here - rather than on every step of a slider drag.
             GameSettings.SaveSound();
+            GameSettings.SaveGame();
 
             Material blurryShader = blur.material;
             float value = blurryShader.GetFloat("_Size");
@@ -114,7 +133,41 @@ namespace UI.Sub {
         // otherwise writes PlayerPrefs to disk only as the app quits, and Android can end an app in
         // the background without it ever quitting.
         private void OnApplicationPause(bool paused) {
-            if (paused) GameSettings.SaveSound();
+            if (!paused) return;
+            GameSettings.SaveSound();
+            GameSettings.SaveGame();
+        }
+
+        /// <summary>
+        /// 音频偏移 / The audio offset: a slider in 1 ms steps, -/+ buttons for 5, and the value spelled
+        /// out. Takes effect from the next song - the gameplay scene reads it as a song starts.
+        /// </summary>
+        private void InitOffset() {
+            // 范围以代码为准 / The range comes from GameSettings, whatever the prefab was built with.
+            // Set before any listener exists, so clamping here tells nobody.
+            sound_offset.wholeNumbers = true;
+            sound_offset.minValue = -GameSettings.AudioOffsetLimitMs;
+            sound_offset.maxValue = GameSettings.AudioOffsetLimitMs;
+            sound_offset.SetValueWithoutNotify(GameSettings.AUDIO_OFFSET_MS);
+            ShowOffset(GameSettings.AUDIO_OFFSET_MS);
+
+            sound_offset.onValueChanged.AddListener(value => {
+                GameSettings.AUDIO_OFFSET_MS = GameSettings.AudioOffset(Mathf.RoundToInt(value));
+                ShowOffset(GameSettings.AUDIO_OFFSET_MS);
+            });
+
+            if (sound_offset_minus != null) sound_offset_minus.onClick.AddListener(() => StepOffset(-OffsetStepMs));
+            if (sound_offset_plus != null) sound_offset_plus.onClick.AddListener(() => StepOffset(OffsetStepMs));
+        }
+
+        // 经过滑条 / Through the slider, so the setting and the readout follow from its one listener.
+        private void StepOffset(int milliseconds) {
+            sound_offset.value = GameSettings.AudioOffset(Mathf.RoundToInt(sound_offset.value) + milliseconds);
+        }
+
+        private void ShowOffset(int milliseconds) {
+            if (sound_offset_readout == null) return;
+            sound_offset_readout.text = (milliseconds > 0 ? "+" : "") + milliseconds + " ms";
         }
 
         private static void SetSwitch(Toggle toggle, bool on) {

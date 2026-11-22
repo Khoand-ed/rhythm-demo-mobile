@@ -2638,6 +2638,9 @@ namespace Arknights.EditorTools {
 
             soundPage.SetActive(false);
 
+            // 偏移和倾斜两行 / The HOME TILT and AUDIO OFFSET rows, copied from the rows above.
+            SettingsRowsSetup.BuildInto(ui);
+
             SavePrefab(root, "SettingUI");
         }
 
