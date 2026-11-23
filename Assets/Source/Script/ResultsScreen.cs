@@ -297,9 +297,17 @@ public class ResultsScreen : MonoBehaviour
 
     private void ClearCells()
     {
+        // 先摘下来再销毁 / Out of the grid at once: Destroy waits for the end of the frame, and until then
+        // a retry's new cells would be laid out after the old ones. Off and unparented, the grid forgets it
+        // now. DestroyImmediate outside Play Mode (a test or a render of the screen), where Destroy is refused.
         foreach (GameObject cell in cells)
         {
-            if (cell != null) Destroy(cell);
+            if (cell == null) continue;
+
+            cell.SetActive(false);
+            cell.transform.SetParent(null, false);
+            if (Application.isPlaying) Destroy(cell);
+            else DestroyImmediate(cell);
         }
 
         cells.Clear();
