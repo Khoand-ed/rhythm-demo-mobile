@@ -283,9 +283,9 @@ namespace Data.Player {
         /// it from a button, and a sign-out that appears to hang while a request
         /// times out is worse than one the server hears about a second later.
         ///
-        /// At once includes the stored session: the login screen SettingUI returns
-        /// to reopens any session it finds, so one left there for the logout's
-        /// round trip would sign the player straight back in.
+        /// At once includes the stored session: the login screen - SettingUI returns
+        /// to it, and its LOG OUT calls this - shows START for any session it finds,
+        /// so one left there for the logout's round trip would offer the old account.
         /// </summary>
         public void Exit() {
             playerData = null;
