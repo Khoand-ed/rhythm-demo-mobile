@@ -92,6 +92,9 @@ public class CampaignEndpointTests(PromuseApiFactory factory) : HomeContentTestB
         Assert.Equal(6 * 12, rewards.Exp);
         Assert.Equal(orundum + 50, await BalanceAsync(player.PlayerId, Orundum));
 
+        // 不是活动关卡 / A campaign stage is not an event's: no event currency, whatever is running.
+        Assert.Empty(rewards.EventItems!);
+
         CampaignView view = await ViewAsync(player);
         Assert.True(view.Chapters[0].Stages[0].IsCleared);
         Assert.True(view.Chapters[0].Stages[1].IsUnlocked);
@@ -109,6 +112,7 @@ public class CampaignEndpointTests(PromuseApiFactory factory) : HomeContentTestB
 
         RunCompletion plain = await WinAsync(player, null);
         Assert.Equal((0, 0, 72), (plain.Rewards!.FirstClearOrundum, plain.Rewards.Drops.Count, plain.Rewards.Exp));
+        Assert.Empty(plain.Rewards.EventItems!);
         Assert.False((await ViewAsync(player)).Chapters[0].Stages[0].IsCleared);
     }
 

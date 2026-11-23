@@ -214,6 +214,10 @@ namespace Promuse.Contracts.Runs
     /// What else a campaign stage's first clear paid - a Manufacture blueprint, on the stages that
     /// pay one. Empty otherwise; null from a server older than it.
     /// </param>
+    /// <param name="EventItems">
+    /// What an event stage's clear paid in the event's own currency. Empty for any other run;
+    /// null from a server older than it.
+    /// </param>
     public sealed record RunRewards(
         int FirstClearOrundum,
         IReadOnlyList<ItemStack> Drops,
@@ -221,5 +225,6 @@ namespace Promuse.Contracts.Runs
         int LevelBefore,
         int LevelAfter,
         int PrimeFromLevels,
-        IReadOnlyList<ItemStack>? FirstClearItems = null);
+        IReadOnlyList<ItemStack>? FirstClearItems = null,
+        IReadOnlyList<ItemStack>? EventItems = null);
 }
