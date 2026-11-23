@@ -142,6 +142,10 @@ public static class ResultsScreenSetup
         private readonly TMP_FontAsset font;
         private ResultsScreen screen;
 
+        // 第一次改造 / This pass is turning the old panel into the new one: every old node is moved into
+        // its block. After that only a node loose at the panel's root - one another tool just added - is.
+        private bool first;
+
         private readonly List<string> added = new List<string>();
         private readonly List<string> moved = new List<string>();
 
@@ -164,7 +168,7 @@ public static class ResultsScreenSetup
             Undo.RecordObject(gm, UndoName);
 
             screen = results.GetComponent<ResultsScreen>();
-            bool first = screen == null;
+            first = screen == null;
             if (first)
             {
                 screen = Undo.AddComponent<ResultsScreen>(results.gameObject);
@@ -246,7 +250,8 @@ public static class ResultsScreenSetup
         {
             RectTransform art = Group(results, "OperatorArt", 0, out bool made, typeof(CanvasRenderer), typeof(UnityEngine.UI.Image));
             UnityEngine.UI.Image slot = art.GetComponent<UnityEngine.UI.Image>();
-            if (slot == null) slot = art.gameObject.AddComponent<UnityEngine.UI.Image>();
+            bool slotMade = slot == null;
+            if (slotMade) slot = art.gameObject.AddComponent<UnityEngine.UI.Image>();
 
             UI.SplashFrame frame = art.GetComponent<UI.SplashFrame>();
             bool framed = frame == null;
@@ -270,9 +275,12 @@ public static class ResultsScreenSetup
             }
 
             // 框只是框 / The frame's own Image draws nothing and catches nothing - the splash is its child.
-            slot.sprite = null;
-            slot.color = Color.clear;
-            slot.raycastTarget = false;
+            if (made || slotMade || reset)
+            {
+                slot.sprite = null;
+                slot.color = Color.clear;
+                slot.raycastTarget = false;
+            }
 
             Transform child = art.Find("Splash");
             UnityEngine.UI.Image splash = child != null ? child.GetComponent<UnityEngine.UI.Image>() : null;
@@ -287,7 +295,7 @@ public static class ResultsScreenSetup
                 added.Add("OperatorArt/Splash");
             }
 
-            frame.splash = splash;
+            if (reset || frame.splash == null) frame.splash = splash;
             if (reset || screen.operatorArt == null) screen.operatorArt = slot;
 
             // 只在字下面压暗 / Dark under the two blocks and the bar, the operator clear between them.
@@ -852,7 +860,10 @@ public static class ResultsScreenSetup
         /// <summary>Moves a node under <paramref name="parent"/> if it is not there. True when it should be placed.</summary>
         private bool Into(Transform node, RectTransform parent, int index)
         {
-            bool moving = node.parent != parent;
+            // 手动挪过的不拉回来 / A node somewhere else in the layout was put there by hand: a re-run leaves
+            // it where it is, unstyled. The first conversion, a reset, or a node loose at the root (one
+            // Add Leaderboard And Retry or Wire Song Flow just made) is moved in.
+            bool moving = node.parent != parent && (first || reset || node.parent == results);
 
             if (moving)
             {
