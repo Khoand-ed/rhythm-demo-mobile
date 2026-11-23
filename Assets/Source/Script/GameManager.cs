@@ -57,6 +57,11 @@ public class GameManager : MonoBehaviour, IRunJudgeListener
     public Button resultsRetryButton;
     public TextMeshProUGUI resultsRetryLabel;
 
+    [Tooltip("The results screen's own parts - the operator behind it, the song line, EARLY/LATE, HI-SCORE " +
+             "and the reward cells. Built by Tools/Rhythm/Build Results Screen; left empty, the screen " +
+             "shows only the fields above and the rewards as one line in rewardsText.")]
+    public ResultsScreen resultsView;
+
     [Tooltip("One line over everything else - why a retry was refused, for instance. Added by " +
              "Tools/Rhythm/Wire Song Flow; left unassigned, the message only reaches the log.")]
     public GameObject noticeRoot;
@@ -156,6 +161,16 @@ public class GameManager : MonoBehaviour, IRunJudgeListener
 
     private bool openingRun;
     private Coroutine noticeRoutine;
+
+    // 早/晚 / EARLY and LATE on the results screen: Great and Hit taps, by which side of the note the
+    // press landed - the same sign the FAST/SLOW tag reads. Counted from what the judge reports, never
+    // fed back into it; RunState and the trace know nothing of these.
+    private int earlyHits;
+    private int lateHits;
+
+    // 第几次 / Moved on by every reset, so a server answer for an attempt the player has already
+    // retried is not drawn over the new one's results.
+    private int attempt;
 
     // 每帧的输入 / Every gameplay frame's input, for the server. Kept across a retry's reset only
     // in the sense that BeginTrace empties it: the trace sent is the attempt that was reported.
@@ -260,6 +275,9 @@ public class GameManager : MonoBehaviour, IRunJudgeListener
 
         if (noticeRoot != null) noticeRoot.SetActive(false);
 
+        if (resultsView == null && resultsScreen != null) resultsView = resultsScreen.GetComponent<ResultsScreen>();
+        if (resultsView != null) resultsView.Clear();
+
         scoreText.text = "Score: 0";
         multiText.text = "0";
 
@@ -321,13 +339,6 @@ void Update()
                 resultsScreen.SetActive(true);
                 LabelRetry();
 
-                // 服务端记一笔 / The run is closed on the server, which is where the mission
-                // counters live. The activeInHierarchy guard above already makes this fire once
-                // per run rather than once per frame, and Restart turns the screen back off,
-                // which is what lets a second run count again - but the run id is not reissued
-                // by a restart, so the report is keyed on it and a replayed one is refused.
-                ReportRun(!state.failed);
-
                 if (character != null) character.OnFinish(!state.failed);
 
                 normalsText.text = "" + state.normalHits;
@@ -339,7 +350,8 @@ void Update()
 
                 percentHitText.text = percentHit.ToString("F1") + "%";
 
-                rankText.text = CalculateRank(percentHit);
+                string rank = CalculateRank(percentHit);
+                rankText.text = rank;
 
                 finalScoreText.text = state.score.ToString();
 
@@ -349,6 +361,17 @@ void Update()
                 {
                     fullComboText.text = state.IsFullCombo ? "FULL COMBO" : "";
                 }
+
+                // 先开页面再上报 / The screen first: Show() empties it for this attempt, and the report
+                // below writes its first status into it at once.
+                ShowResultsView(rank);
+
+                // 服务端记一笔 / The run is closed on the server, which is where the mission
+                // counters live. The activeInHierarchy guard above already makes this fire once
+                // per run rather than once per frame, and Restart turns the screen back off,
+                // which is what lets a second run count again - but the run id is not reissued
+                // by a restart, so the report is keyed on it and a replayed one is refused.
+                ReportRun(!state.failed);
             }
         }
     }
@@ -530,6 +553,14 @@ void Update()
 
     public void OnHit(int lane, int index, NoteType type, Judgement judgement, float signedDelta, bool holdBegins)
     {
+        // 早还是晚 / A press before the note is early - the FAST tag; after it, late - SLOW. A Perfect
+        // needs no correction and is counted as neither, as it gets no tag.
+        if (judgement == Judgement.Great || judgement == Judgement.Hit)
+        {
+            if (signedDelta < 0f) earlyHits++;
+            else lateHits++;
+        }
+
         NoteView view = noteSpawner.ViewOf(lane, index);
         Vector3 hitAt = view != null ? view.transform.position : LaneButtonPos(lane);
 
@@ -789,8 +820,15 @@ void Update()
         PushGauges();
 
         PushHud();
+
+        // 上一次的结算全清 / Nothing of the last attempt's results stays, and an answer still on its
+        // way for it is dropped when it lands (ReportRun checks the attempt).
+        attempt++;
+        earlyHits = 0;
+        lateHits = 0;
         if (rankingText != null) rankingText.text = "";
         if (rewardsText != null) rewardsText.text = "";
+        if (resultsView != null) resultsView.Clear();
         resultsScreen.SetActive(false);
     }
 
@@ -992,9 +1030,34 @@ void Update()
     {
         if (resultsRetryLabel == null) return;
 
-        resultsRetryLabel.text = scored ? $"RETRY  -{runCost} SANITY"
-                               : playMode == PlayMode.Practice ? "RETRY (PRACTICE)"
-                               : "RETRY";
+        resultsRetryLabel.text = scored ? $"RESTART  -{runCost} SANITY"
+                               : playMode == PlayMode.Practice ? "RESTART (PRACTICE)"
+                               : "RESTART";
+    }
+
+    /// <summary>
+    /// 结算页的其余部分 / The results screen's own parts, from what this attempt ended with: the song, the
+    /// operator, EARLY/LATE, the tags, and the stage whose best HI-SCORE fetches - a ranked run's only,
+    /// so practice and the Editor's run-less scene show a dash.
+    /// </summary>
+    private void ShowResultsView(string rank)
+    {
+        if (resultsView == null) return;
+
+        SongChart chart = noteSpawner != null ? noteSpawner.chart : null;
+
+        resultsView.Show(new ResultsScreen.Summary
+        {
+            songName = chart == null ? "" : !string.IsNullOrEmpty(chart.songName) ? chart.songName : chart.name,
+            difficulty = chart == null ? "" : chart.DifficultyLabel + " " + chart.difficulty,
+            operatorMeta = operatorMeta,
+            rank = rank,
+            early = earlyHits,
+            late = lateHits,
+            failed = state.failed,
+            fullCombo = state.IsFullCombo,
+            hiScoreStage = scored && chart != null && !string.IsNullOrEmpty(chart.stageId) ? chart.stageId : null,
+        });
     }
 
     // ------------------------------------------------------------------ notice
@@ -1088,11 +1151,18 @@ void Update()
         // 练习不上报 / Practice reports nothing: it opened no run, and counts for nothing by design.
         if (!scored)
         {
-            ShowRanking(playMode == PlayMode.Practice ? "PRACTICE - NOT SCORED" : "");
+            bool practice = playMode == PlayMode.Practice;
+            ShowRanking(practice ? "PRACTICE - NOT SCORED" : "");
+            ShowRewardsStatus(practice ? "PRACTICE - NO REWARDS" : "");
             return;
         }
 
         if (runId == System.Guid.Empty) return;
+
+        // 这一次的回答 / The answer below belongs to this attempt. A retry pressed while it is out moves
+        // the attempt on, and the answer then only does what is not drawing: the player's state and the
+        // offline queue still take it, the new attempt's screen does not.
+        int mine = attempt;
 
         // 只报一次 / Cleared first, so a results screen that is somehow shown twice cannot send
         // this twice. The server would refuse the second one anyway - the run is already closed,
@@ -1105,9 +1175,12 @@ void Update()
         RunResult outcome = BuildResult();
 
         ShowRanking("Submitting...");
+        ShowRewardsStatus("Calculating rewards...");
 
         ApiResult<RunCompletion> result = await Data.Player.PlayerManager.Inst().Api
             .CompleteRunAsync(reporting, won, outcome);
+
+        bool current = this != null && mine == attempt;
 
         if (!result.IsSuccess)
         {
@@ -1119,12 +1192,18 @@ void Update()
             {
                 Data.Player.PlayerManager.Inst().Api.Pending.Add(reporting, won, outcome, System.DateTimeOffset.UtcNow);
                 Debug.LogWarning($"[GameManager] Run {reporting} could not be sent ({result.Message}); queued.");
+                if (!current) return;
+
                 ShowRanking("SAVED - WILL SEND WHEN ONLINE");
+                ShowRewardsStatus("Rewards will be credited when the result is sent");
                 return;
             }
 
             Debug.LogWarning($"[GameManager] Could not close run {reporting}: {result.Message}");
+            if (!current) return;
+
             ShowRanking("Not recorded");
+            ShowRewardsStatus("No rewards");
             return;
         }
 
@@ -1141,17 +1220,37 @@ void Update()
             Debug.LogWarning($"[GameManager] Run {reporting} was rejected: {string.Join(", ", review.Reasons)}");
         }
 
-        string verdict = DescribeReview(review);
+        // NEW BEST 有自己的牌子 / With the results view, NEW BEST is its own tag beside HI-SCORE, not
+        // words in the ranking line.
+        string verdict = DescribeReview(review, resultsView == null);
         Debug.Log($"[GameManager] Run {reporting} closed: {(review != null ? review.Verdict.ToString() : "no result")}. {verdict}");
 
+        if (!current) return;
+
         ShowRanking(verdict);
-        ShowRewards(result.Value.Rewards);
+        if (resultsView != null) resultsView.SetRanking(review);
+
+        // 被拒就什么都没有 / A rejected run paid nothing, whatever the answer carries.
+        if (review != null && review.Verdict == ScoreVerdict.Rejected) ShowRewardsStatus("No rewards");
+        else ShowRewards(result.Value.Rewards);
+    }
+
+    /// <summary>What the rewards are waiting on, or why there are none.</summary>
+    private void ShowRewardsStatus(string text)
+    {
+        if (this == null) return;
+
+        if (resultsView != null) resultsView.SetRewardsStatus(text);
+        else if (rewardsText != null) rewardsText.text = text;
     }
 
     private void ShowRewards(RunRewards rewards)
     {
-        if (this == null || rewardsText == null) return;
-        rewardsText.text = DescribeRewards(rewards);
+        if (this == null) return;
+
+        // 有格子就画格子 / Cells on the results view; one line of text on a scene not converted yet.
+        if (resultsView != null) resultsView.SetRewards(rewards);
+        else if (rewardsText != null) rewardsText.text = DescribeRewards(rewards);
     }
 
     /// <summary>
@@ -1179,6 +1278,15 @@ void Update()
         foreach (Promuse.Contracts.Players.ItemStack drop in rewards.Drops)
         {
             parts.Add(global::UI.ItemVisual.Name(drop.ItemId) + " ×" + global::UI.ItemVisual.Amount(drop.Amount));
+        }
+
+        // 活动代币 / An event stage's currency. Null from a server older than the field.
+        if (rewards.EventItems != null)
+        {
+            foreach (Promuse.Contracts.Players.ItemStack item in rewards.EventItems)
+            {
+                parts.Add(global::UI.ItemVisual.Name(item.ItemId) + " ×" + global::UI.ItemVisual.Amount(item.Amount));
+            }
         }
         if (rewards.Exp > 0) parts.Add("+" + rewards.Exp + " EXP");
 
@@ -1245,14 +1353,14 @@ void Update()
         rankingText.text = text;
     }
 
-    private static string DescribeReview(ScoreReview review)
+    private static string DescribeReview(ScoreReview review, bool sayNewBest)
     {
         if (review == null) return "";
 
         switch (review.Verdict)
         {
             case ScoreVerdict.Accepted:
-                string line = review.IsPersonalBest ? "NEW BEST   " : "";
+                string line = sayNewBest && review.IsPersonalBest ? "NEW BEST   " : "";
                 if (review.AllTimeRank.HasValue) line += "#" + review.AllTimeRank.Value + " all-time";
                 if (review.WeeklyRank.HasValue) line += "   #" + review.WeeklyRank.Value + " this week";
                 return line;
