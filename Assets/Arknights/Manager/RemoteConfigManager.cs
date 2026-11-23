@@ -24,7 +24,7 @@ namespace Manager {
         private const string SeenAnnouncementKey = "Promuse.Announcement.Seen";
 
         // 每个版本只提醒一次 / Maintenance and update warnings are shown once per config version per
-        // session, not on every return to Home.
+        // session, not on every return to Home. The login screen's START asks to be told every time.
         private int warnedVersion = -1;
         private Task refreshing;
 
@@ -62,14 +62,18 @@ namespace Manager {
             if (!result.IsSuccess) Debug.LogWarning($"[RemoteConfigManager] Config not refreshed: {result.Message}");
         }
 
-        /// <summary>The login screen opened: say if the game is closed or this build too old.</summary>
+        /// <summary>The login screen opened, or START was tapped: say if the game is closed or this build too old.</summary>
+        /// <param name="warnAgain">
+        /// Show the warning even if it was already shown for this config version: START asks on every
+        /// tap, and a tap that does nothing without a word looks broken.
+        /// </param>
         /// <returns>
-        /// True when it is - the player has been told, and the login screen does not reopen a stored
-        /// session over the warning: the server would refuse it anyway.
+        /// True when it is - the player has been told, and START does not reopen the stored session
+        /// over the warning: the server would refuse it anyway.
         /// </returns>
-        public async Task<bool> CheckOnLogin() {
+        public async Task<bool> CheckOnLogin(bool warnAgain = false) {
             await RefreshAsync();
-            return WarnIfBlocked();
+            return WarnIfBlocked(warnAgain);
         }
 
         /// <summary>
@@ -95,12 +99,12 @@ namespace Manager {
         }
 
         /// <returns>True when a warning was shown (or already shown for this version).</returns>
-        private bool WarnIfBlocked() {
+        private bool WarnIfBlocked(bool again = false) {
             RemoteConfig config = Current;
             if (config == null) return false;
 
             bool blocked = IsOutdated || InMaintenance;
-            if (!blocked || warnedVersion == config.Version) return blocked;
+            if (!blocked || (!again && warnedVersion == config.Version)) return blocked;
 
             warnedVersion = config.Version;
 

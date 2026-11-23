@@ -462,6 +462,7 @@ namespace Arknights.EditorTools {
 
             // ---- 服务器标签, 在上方黑条里 / the server badge, in the top bar
             ServerBadgeSetup.BuildInto(ui);
+            LoginStartSetup.BuildInto(ui);
 
             SavePrefab(root, "LoginUI");
         }

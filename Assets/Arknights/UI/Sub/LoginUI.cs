@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Threading.Tasks;
 using Data.Player;
 using Promuse.Contracts.Players;
 using Promuse.Net;
@@ -24,7 +23,13 @@ namespace UI.Sub {
 
         public Button home_login;
         public Button home_register;
-        
+
+        // 已登录的标题 / What the title shows instead of the two above while the device holds a session:
+        // START, which goes in on the tap, and LOG OUT in the corner. Built by LoginStartSetup; an older
+        // prefab without them keeps the two sign-in buttons as the only way in.
+        public Button home_start;
+        public Button home_logout;
+
         public InputField login_userName;
         public InputField login_password;
         public Button login_enter;
@@ -55,13 +60,10 @@ namespace UI.Sub {
         private AudioClip clip;
         private AudioClip loop_clip;
         
-        // 上次的会话正在重开 / The session a previous run left is being reopened (ResumeStoredSession).
+        // 开始键正在重开会话 / START is reopening the session this device holds (StartGame).
         private bool resuming;
 
-        // 标题至少停这么久 / How long the title stays up, at least, before a reopened session moves on:
-        // long enough to be seen, short of being a wait. Counted from Show.
-        private const float TitleSeconds = 1.5f;
-        private float shownAt;
+        private bool HasStart => home_start != null && home_logout != null;
 
         /// <summary>
         /// Back closes the sign-in or sign-up form when one is open. Anywhere else here - the first screen,
@@ -110,20 +112,8 @@ namespace UI.Sub {
                 });
             });
             
-            login_back.onClick.AddListener(() => {
-                loginPanel.DOFade(0,0.5f).OnComplete(() => {
-                    login_password.text = "";
-                    loginPanel.gameObject.SetActive(false);
-                    homePanel.gameObject.SetActive(true);
-                    homePanel.DOFade(1,0.5f);
-                    backGround.DOFade(0,0.5f).SetDelay(0.5f);
-                    // sphere.DOLocalMove(new Vector3(0,263,-830),1f).SetEase(Ease.Linear);
-                    sphere.DOAnchorPosY(263,1f).SetEase(Ease.Linear);
-                    sphereCamera.DOColor(red,1f);
-                    // sphere.DOScale(1.5f,1f).SetEase(Ease.Linear);
-                });
-            });
-            
+            login_back.onClick.AddListener(() => BackToTitle(loginPanel, () => login_password.text = ""));
+
             home_register.onClick.AddListener(() => {
                 homePanel.DOFade(0,0.5f).OnComplete(() => {
                     homePanel.gameObject.SetActive(false);
@@ -136,21 +126,18 @@ namespace UI.Sub {
                 });
             });
             
-            register_back.onClick.AddListener(() => {
-                registerPanel.DOFade(0,0.5f).OnComplete(() => {
-                    register_password.text = "";
-                    register_rePassword.text = "";
-                    registerPanel.gameObject.SetActive(false);
-                    homePanel.gameObject.SetActive(true);
-                    homePanel.DOFade(1,0.5f);
-                    backGround.DOFade(0,0.5f).SetDelay(0.5f);
-                    // sphere.DOLocalMove(new Vector3(0,100,-830),1f).SetEase(Ease.Linear);
-                    sphere.DOAnchorPosY(263,1f).SetEase(Ease.Linear);
-                    sphereCamera.DOColor(red,1f);
-                    // sphere.DOScale(1.5f,1f).SetEase(Ease.Linear);
-                });
-            });
-            
+            register_back.onClick.AddListener(() => BackToTitle(registerPanel, () => {
+                register_password.text = "";
+                register_rePassword.text = "";
+            }));
+
+            // 开始 / START and LOG OUT, when the prefab has them. Wired here and never in the prefab: a
+            // persistent Hide on LOG OUT would make it this screen's exit button, the one Back presses.
+            if (HasStart) {
+                home_start.onClick.AddListener(StartGame);
+                home_logout.onClick.AddListener(AskToSignOut);
+            }
+
             login_enter.onClick.AddListener(async () => {
                 string userName = login_userName.text;
                 string password = login_password.text;
@@ -176,7 +163,11 @@ namespace UI.Sub {
                     return;
                 }
 
-                EnterGame(loginPanel);
+                // 登录了也先回标题 / Signed in: back to the title, which now shows START. The account is
+                // loaded; the tap on START is what goes in, as for a session kept from a previous run.
+                // An older prefab without START goes straight in, as it always did.
+                if (HasStart) BackToTitle(loginPanel, () => login_password.text = "");
+                else EnterGame(loginPanel);
             });
             
             register_enter.onClick.AddListener(async () => {
@@ -221,8 +212,8 @@ namespace UI.Sub {
                     return;
                 }
 
-                // 注册即登录 / Signing up signs in, so the name screen is next and Home after it. The
-                // username only signs in: no one else ever sees it.
+                // 注册即登录 / Signing up signs in, so the name screen is next and the title's START after
+                // it. The username only signs in: no one else ever sees it.
                 register_password.text = "";
                 register_rePassword.text = "";
                 CommonDialogUI.Message(CommonDialogUI.GroundType.WHITE, "Registration successful.")
@@ -233,9 +224,8 @@ namespace UI.Sub {
 
         /// <summary>
         /// 起名界面 / "Do you remember your name?" - the name in the game, chosen once. Comes after
-        /// signing up, or after signing in to an account that never got past it; Home opens only
-        /// after. The ball sinks to where the loading screen keeps it, so going on from here is
-        /// one continuous move.
+        /// signing up, or after signing in to (or START reopening) an account that never got past it;
+        /// Home opens only after. The ball sinks to where the loading screen keeps it.
         /// </summary>
         private void ShowNamePanel(CanvasGroup from) {
             lowerRightPanel.DOFade(0, 0.5f);
@@ -285,10 +275,15 @@ namespace UI.Sub {
             }
 
             // 名字加编号才是正式的 / The name and the tag the server drew for it, as everyone will see it.
+            // Then back to the title and its START, as after a password sign-in - or straight in on an
+            // older prefab without START.
             PlayerData data = result.Value;
             CommonDialogUI.Message(CommonDialogUI.GroundType.WHITE,
                     $"Welcome, Doctor <color=#00B0FF>{data.GetName()}{PlayerTag.Format(data.GetTag())}</color>.")
-                .AddBackListener(() => EnterGame(namePanel));
+                .AddBackListener(() => {
+                    if (HasStart) BackToTitle(namePanel);
+                    else EnterGame(namePanel);
+                });
         }
 
         /// <summary>
@@ -340,28 +335,34 @@ namespace UI.Sub {
         }
 
         /// <summary>
-        /// 上次的会话 / Reopens the session a previous run left on this device, once the config check
-        /// has said the game is open to this build, and goes where a password sign-in goes - the name
-        /// screen for an account that never chose one, Home otherwise - without the password.
-        /// <see cref="SessionResume"/> holds the rules.
+        /// 开始 / START: reopens the session this device holds and goes where a password sign-in goes -
+        /// the name screen for an account that never chose one, Home otherwise - without the password.
+        /// Nothing happens until the tap, as on any gacha title screen; <see cref="SessionResume"/>
+        /// holds the rules.
         ///
-        /// 按钮先收起来 / ACCOUNT LOGIN and REGISTER are put away while it runs: a sign-in pressed over
-        /// it would race it for the player's save, and a screen about to move on by itself should not
-        /// offer to go somewhere else. They come back whenever it does not move on - the game closed to
-        /// this build, the session gone, the server out of reach - and then the screen is the one a
-        /// device without a session sees.
+        /// 每次都先问配置 / Each tap asks for the config again first, and a maintenance or update warning
+        /// is shown on every tap, not once per config version: the tap asks "can I play?" and is owed
+        /// its answer. START stays for when the game opens.
+        ///
+        /// 按下就锁住 / START and LOG OUT are locked while it runs: a second tap would race the first for
+        /// the player's save, and a sign-out would pull the session out from under it. They are given
+        /// back whenever it does not move on - the game closed, the server out of reach - so START is
+        /// the retry.
         /// </summary>
-        private async void ResumeStoredSession(Task<bool> closedCheck) {
+        private async void StartGame() {
             if (resuming) return;
             resuming = true;
-            SetHomeButtons(false);
+            SetTitleBusy(true);
+            bool movedOn = false;
 
             try {
-                bool closed = await closedCheck;
+                bool closed = await RemoteConfigManager.Inst().CheckOnLogin(warnAgain: true);
                 if (this == null) return;
 
                 if (!SessionResume.ShouldTry(PlayerManager.Inst().HasStoredSession, closed)) {
-                    SetHomeButtons(true);
+                    // 关着就等 / Closed: its warning is up, and START waits for the game to open. No
+                    // session after all: the two sign-in buttons.
+                    if (!closed) BackToSignIn();
                     return;
                 }
 
@@ -373,91 +374,136 @@ namespace UI.Sub {
 
                 switch (next) {
                     case SessionResume.Next.EnterGame:
+                        movedOn = true;
                         LeaveTitle(() => EnterGame(homePanel));
                         break;
 
                     case SessionResume.Next.ChooseName:
+                        movedOn = true;
                         LeaveTitle(() => ShowNamePanel(homePanel));
                         break;
 
                     case SessionResume.Next.SignInAgain:
-                        SetHomeButtons(true);
-                        CommonDialogUI.Message(CommonDialogUI.GroundType.BLACK, "Your session has ended. Please sign in again.");
+                        BackToSignIn();
                         break;
 
                     case SessionResume.Next.TryAgain:
-                        SetHomeButtons(true);
-                        // 再试就从头再问一遍配置 / A retry asks for the config again too: the failure that
-                        // kept the session out may have kept the config out, and maintenance may have
-                        // begun since. Sent once the dialog has gone, as in ConfirmName.
-                        //
-                        // 一个勾 / One tick, and it tries again: there is no "no" to give. A player who
-                        // would rather not has the sign-in buttons, shown just above, under the dialog.
-                        CommonDialogUI retry = CommonDialogUI.Message(CommonDialogUI.GroundType.BLACK,
-                            $"{result.Message}\nTap the tick to try again.");
-                        if (retry != null) {
-                            retry.AddBackListener(() => {
-                                // 自己关 / Closed here too: the dialog only wires its own close once it
-                                // has faded in, and a quick tap would retry with it left open.
-                                UIManager.Inst().Hide("CommonDialogUI");
-                                SetHomeButtons(false);
-                                Delay.add(() => {
-                                    if (this != null) ResumeStoredSession(RemoteConfigManager.Inst().CheckOnLogin());
-                                }, 0.3f);
-                            });
-                        }
+                        // 开始键就是重试 / START is the retry: the reason, one tick, and START still there.
+                        CommonDialogUI.Message(CommonDialogUI.GroundType.BLACK,
+                            $"{result.Message}\nTap START to try again.");
                         break;
                 }
             } catch (Exception e) {
-                // 出错也不能把人困在这 / Whatever broke, the screen is left as it is without a session:
-                // the buttons out, so the player can still sign in by hand.
+                // 出错也不能把人困在这 / Whatever broke, the title is left as it was, START ready again.
                 Debug.LogException(e);
-                if (this != null) SetHomeButtons(true);
             } finally {
                 resuming = false;
+                if (!movedOn && this != null) SetTitleBusy(false);
             }
         }
 
-        private void SetHomeButtons(bool shown) {
-            home_login.gameObject.SetActive(shown);
-            home_register.gameObject.SetActive(shown);
+        /// <summary>
+        /// 会话没了 / The server no longer honours the session and the device has let it go: the title a
+        /// device without a session shows, with a word on why.
+        /// </summary>
+        private void BackToSignIn() {
+            ShowTitleButtons();
+            CommonDialogUI.Message(CommonDialogUI.GroundType.BLACK, "Your session has ended. Please sign in again.");
         }
 
         /// <summary>
-        /// 从标题直接走 / Leaves the title the way a reopened session does: once it has been up for
-        /// <see cref="TitleSeconds"/>, the backdrop goes dark and the ball's light goes out as on the way
-        /// to a form, so the loading bar and the name screen stand on the black they always stand on.
+        /// 登出 / LOG OUT asks first - the tick signs out, the cross stays. Exit lets go of the session at
+        /// once, before the server answers the logout, so the title shows the sign-in buttons straight
+        /// away and nothing pressed after could find the old session.
+        /// </summary>
+        private void AskToSignOut() {
+            if (resuming) return;
+
+            CommonDialogUI.Message(CommonDialogUI.GroundType.BLACK, "Sign out of this account?", () => {
+                if (resuming || this == null) return;
+                PlayerManager.Inst().Exit();
+                ShowTitleButtons();
+            });
+        }
+
+        /// <summary>
+        /// 标题上放哪几个键 / Which buttons the title shows: START and LOG OUT while the device holds a
+        /// session - kept from a previous run, or just made by a sign-in or a sign-up - and ACCOUNT
+        /// LOGIN and REGISTER otherwise, and always on an older prefab without START.
+        /// </summary>
+        private void ShowTitleButtons() {
+            bool signedIn = HasStart && PlayerManager.Inst().HasStoredSession;
+            home_login.gameObject.SetActive(!signedIn);
+            home_register.gameObject.SetActive(!signedIn);
+            if (!HasStart) return;
+
+            home_start.gameObject.SetActive(signedIn);
+            home_logout.gameObject.SetActive(signedIn);
+            SetTitleBusy(false);
+        }
+
+        private void SetTitleBusy(bool busy) {
+            if (!HasStart) return;
+            home_start.interactable = !busy;
+            home_logout.interactable = !busy;
+        }
+
+        /// <summary>
+        /// 回到标题 / Back to the title from a form or the name screen: the panel in front fades, the
+        /// ball rises back and its light comes on, and the title shows the buttons that now fit -
+        /// START after a sign-in, the two sign-in buttons after backing out of a form.
+        /// </summary>
+        /// <param name="tidy">Run once the panel has faded - the passwords cleared out of sight.</param>
+        private void BackToTitle(CanvasGroup from, Action tidy = null) {
+            from.DOFade(0,0.5f).OnComplete(() => {
+                tidy?.Invoke();
+                from.gameObject.SetActive(false);
+                ShowTitleButtons();
+                homePanel.gameObject.SetActive(true);
+                homePanel.DOFade(1,0.5f);
+                backGround.DOFade(0,0.5f).SetDelay(0.5f);
+
+                // 起名页收起了右下角, 球也缩了 / The name screen put away the corner panel and shrank the ball.
+                if (!lowerRightPanel.gameObject.activeSelf) {
+                    lowerRightPanel.alpha = 0f;
+                    lowerRightPanel.gameObject.SetActive(true);
+                }
+                lowerRightPanel.DOFade(1,0.5f);
+                sphere.DOScale(1f,1f).SetEase(Ease.Linear);
+                sphere.DOAnchorPosY(263,1f).SetEase(Ease.Linear);
+                sphereCamera.DOColor(red,1f);
+            });
+        }
+
+        /// <summary>
+        /// 从标题直接走 / Leaves the title the way START does: the backdrop goes dark and the ball's light
+        /// goes out as on the way to a form, so the loading bar and the name screen stand on the black
+        /// they always stand on.
         /// </summary>
         private void LeaveTitle(Action next) {
-            float wait = Mathf.Max(0f, shownAt + TitleSeconds - Time.realtimeSinceStartup);
-
-            Delay.add(() => {
-                if (this == null) return;
-
-                backGround.DOFade(1, 0.5f);
-                sphereCamera.DOColor(black, 1f);
-                next();
-            }, wait);
+            backGround.DOFade(1, 0.5f);
+            sphereCamera.DOColor(black, 1f);
+            next();
         }
 
         public override void Show() {
             base.Show();
-            shownAt = Time.realtimeSinceStartup;
 
             // 登录前先看一眼 / Before anyone signs in: is the game in maintenance, is this build too
-            // old? The server refuses either way; this is what lets the screen say why first.
-            Task<bool> closed = RemoteConfigManager.Inst().CheckOnLogin();
+            // old? The server refuses either way; this is what lets the screen say why first. Once per
+            // config version here - START asks again, and says it again, on every tap.
+            _ = RemoteConfigManager.Inst().CheckOnLogin();
 
-            // 记得就不再问密码 / Then a session this device still holds is reopened without asking for
-            // the password again. A sign-out has already let go of its own, so the screen it returns
-            // to offers the two buttons as always.
-            if (PlayerManager.Inst().HasStoredSession) ResumeStoredSession(closed);
+            // 记得也不自己进 / A session this device still holds is no longer reopened by itself: the
+            // title shows START, and the tap goes in. A sign-out has already let go of its own, so the
+            // screen it returns to offers the two sign-in buttons as always.
+            ShowTitleButtons();
 
             SoundManager.Inst().PlayMusic(clip, false, () => {
                 SoundManager.Inst().PlayMusic(loop_clip, true);
             });
             canvasGroup.alpha = 0;
-            canvasGroup.DOFade(1,0.5f); 
+            canvasGroup.DOFade(1,0.5f);
         }
 
         public override void Hide(bool destroy = false) {
