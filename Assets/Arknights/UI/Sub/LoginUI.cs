@@ -63,6 +63,10 @@ namespace UI.Sub {
         // 开始键正在重开会话 / START is reopening the session this device holds (StartGame).
         private bool resuming;
 
+        // 已经在进游戏 / On the way in: the loading bars run and Home opens over this screen. Back has
+        // nothing left to close here, and a question asked now would be left open under Home.
+        private bool entering;
+
         private bool HasStart => home_start != null && home_logout != null;
 
         /// <summary>
@@ -71,6 +75,9 @@ namespace UI.Sub {
         /// leave the game.
         /// </summary>
         public override void OnBack() {
+            // 正在走就别问 / START is reopening the session, or the game is loading: either moves on by
+            // itself in a moment, and a "leave?" left open would stay behind under Home.
+            if (resuming || entering) return;
             if (registerPanel.gameObject.activeSelf) { Press(register_back); return; }
             if (loginPanel.gameObject.activeSelf) { Press(login_back); return; }
             BackKey.AskToLeave();
@@ -145,9 +152,13 @@ namespace UI.Sub {
                 // 防重复提交 / Login is not idempotent - a second press while the
                 // first is in flight is a second sign-in, and on a slow
                 // connection that is easy to do by accident.
+                // 返回也锁住 / Back too: closing the form under a sign-in still in flight would leave
+                // its answer to open the title, or the name screen, over whatever came next.
                 login_enter.interactable = false;
+                login_back.interactable = false;
                 ApiResult<PlayerData> result = await PlayerManager.Inst().LoginAsync(userName, password);
                 login_enter.interactable = true;
+                login_back.interactable = true;
 
                 if (!result.IsSuccess) {
                     // 服务端的措辞 / The server's own wording, including for a
@@ -204,8 +215,10 @@ namespace UI.Sub {
                 }
 
                 register_enter.interactable = false;
+                register_back.interactable = false;
                 ApiResult<PlayerData> result = await PlayerManager.Inst().RegisterAsync(userName, password);
                 register_enter.interactable = true;
+                register_back.interactable = true;
 
                 if (!result.IsSuccess) {
                     CommonDialogUI.Message(CommonDialogUI.GroundType.BLACK, result.Message);
@@ -291,6 +304,8 @@ namespace UI.Sub {
         /// and the two bars close into one line.
         /// </summary>
         private void EnterGame(CanvasGroup from) {
+            entering = true;
+
             // 登陆界面消失
             lowerRightPanel.DOFade(0,0.5f);
 
@@ -481,6 +496,10 @@ namespace UI.Sub {
         /// they always stand on.
         /// </summary>
         private void LeaveTitle(Action next) {
+            // 走之前关掉对话框 / Nothing asked on the title outlives it: a dialog still open here would
+            // stay shown under Home, its tick still wired to whatever it asked.
+            UIManager.Inst().Hide("CommonDialogUI");
+
             backGround.DOFade(1, 0.5f);
             sphereCamera.DOColor(black, 1f);
             next();
