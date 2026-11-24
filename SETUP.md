@@ -469,6 +469,14 @@ otherwise 45. The first line the game logs says which display it found:
 adb logcat -s Unity | findstr FrameRate
 ```
 
+**The system bars.** The game starts with no status or navigation bar (Player Settings > Android >
+Insets), and `Manager.SystemBars` hides one that a swipe, the keyboard or a return from Home brings back:
+about 2 s after it shows in the menus, 0.5 s during a song. It logs each bar once, as it goes - hidden
+by the game, or gone by itself - and what brought it:
+```
+adb logcat -s Unity | findstr SystemBars
+```
+
 **The version.** The server refuses a build older than remote config's minimum client version, and
 1.1 is the first build that judges through `RunJudge`. Raise `bundleVersion` (and the Android version
 code) for a build that changes how runs are judged, then the minimum on the admin page.
