@@ -462,6 +462,7 @@ namespace Arknights.EditorTools {
 
             // ---- 服务器标签, 在上方黑条里 / the server badge, in the top bar
             ServerBadgeSetup.BuildInto(ui);
+            LoginStartSetup.BuildInto(ui);
 
             SavePrefab(root, "LoginUI");
         }
@@ -917,12 +918,12 @@ namespace Arknights.EditorTools {
 
             MenuTile(root, "StoreTile", "STORE", null,
                 new Vector2(293, -164), new Vector2(270, 150), 34, TileBlue, Color.white, ui, "ShopUI");
+            // 第三行与 STORE 等高 / Row three is STORE | RECRUIT | HEADHUNTING, all three STORE's height
+            // and centre, as in HomeUI.prefab since PUBLIC RECRUIT went.
             MenuTile(root, "RecruitTile", "RECRUIT", null,
-                new Vector2(574, -112), new Vector2(263, 61), 26, TileLight, TileInk, null, null);
-            MenuTile(root, "PublicRecruitTile", "PUBLIC RECRUIT", null,
-                new Vector2(552, -198), new Vector2(205, 68), 21, TileBlue, Color.white, null, null);
+                new Vector2(574, -164), new Vector2(263, 150), 26, TileLight, TileInk, null, null);
             MenuTile(root, "HeadhuntTile", "HEADHUNTING", null,
-                new Vector2(801, -198), new Vector2(234, 68), 21, TileBlue, Color.white, null, null);
+                new Vector2(801, -164), new Vector2(234, 150), 21, TileBlue, Color.white, null, null);
 
             GameObject missions = MenuTile(root, "MissionsTile", "MISSIONS", null,
                 new Vector2(194, -325), new Vector2(219, 130), 36, TileLight, TileInk, null, null);
@@ -2637,6 +2638,9 @@ namespace Arknights.EditorTools {
             ui.sound_voice = VolumeRow(soundPage, "sound_voice", "VOICE", 80, out ui.sound_voice_value);
 
             soundPage.SetActive(false);
+
+            // 偏移和倾斜两行 / The HOME TILT and AUDIO OFFSET rows, copied from the rows above.
+            SettingsRowsSetup.BuildInto(ui);
 
             SavePrefab(root, "SettingUI");
         }

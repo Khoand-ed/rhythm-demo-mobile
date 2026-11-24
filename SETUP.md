@@ -97,18 +97,24 @@ XLua, Spine and DOTween under `Assets/Plugins/`.
    back to it at the next sign-in. The screen is built into `LoginUI.prefab` by
    `Arknights/Login/Build Name Entry`.
 7. **Next time there is no password to type.** The device keeps the session - one
-   per server, see *Which server the game talks to* - and the login screen reopens it
-   by itself once the maintenance / minimum-version check has passed: Home, or the
-   name screen for an account without a name, exactly as after a password. ACCOUNT
-   LOGIN and REGISTER stay hidden while it tries, and come back whenever it does not
-   go on:
-   - maintenance, or a build older than the minimum - that warning only; the session
-     waits for the game to open;
+   per server, see *Which server the game talks to* - and the login screen becomes a
+   title screen: one **START** in the middle where ACCOUNT LOGIN and REGISTER were,
+   and **LOG OUT** in the top-left corner. It shows the same after a sign-in or a
+   sign-up, so going in is always the tap on START. START checks maintenance and the
+   minimum version, then reopens the session: Home, or the name screen for an account
+   without a name. When it does not go on, the title stays:
+   - maintenance, or a build older than the minimum - that warning, on every tap;
+     START waits for the game to open;
    - the session has ended (30 days unused, or revoked) - "Your session has ended",
-     and the device lets it go;
-   - the server cannot be reached - the reason and *Try again?*; the session is kept.
+     the device lets it go, and the title shows the sign-in buttons again;
+   - the server cannot be reached - the reason with one tick; the session is kept and
+     START is the retry.
 
-   To change account, return to the login screen from Settings: that signs out.
+   LOG OUT asks first (tick to sign out, cross to stay), then shows the sign-in
+   buttons. Returning to the login screen from Settings signs out too. START and LOG
+   OUT are built into `LoginUI.prefab` by `Arknights/Login/Build Start And Log Out
+   Buttons`; on a prefab without them the screen behaves as before and goes straight
+   in after a sign-in.
 
 ### Remote config and the admin page
 
@@ -163,6 +169,16 @@ The screen is built by `Arknights/Campaign/Build Campaign UI`.
 Every cleared ranked run - campaign, event or song list - also pays player EXP: Sanity × the
 config's **EXP per Sanity** (12 when empty). Each level reached pays level / 5 Originite Prime and
 refills Sanity; the results screen shows all of it.
+
+**The results screen** (built into `Main.unity` by `Tools/Rhythm/Build Results Screen`) puts the
+operator in the middle and the rank below it; the song, accuracy, max combo, the four judgements and
+EARLY/LATE on the left; SCORE, the HI-SCORE from the stage's leaderboard (NEW BEST when the server
+made this run the player's best) and the review on the right, with a row of everything the run paid
+under them - first-clear Orundum and items (marked FIRST), the drops and the event currency - and
+the EXP and any level-up above the row. RESTART and CONTINUE sit along the bottom. An item the client
+has no `ItemMeta` for shows as "Item #id". The event currency comes from the server
+(`RunRewards.EventItems`), so an API older than this build shows the row without it until the API
+is deployed again.
 
 ### Stories
 
@@ -457,6 +473,18 @@ adb logcat -s Unity | findstr FrameRate
 1.1 is the first build that judges through `RunJudge`. Raise `bundleVersion` (and the Android version
 code) for a build that changes how runs are judged, then the minimum on the admin page.
 
+**Home's tilt.** On a phone, Home's parallax follows how the phone is tilted (`UI.HomeTilt`, the gravity
+sensor through the Input System), measured from however it is held and settling back to the middle over
+a few seconds; in the Editor it still follows the mouse. Its strength, dead zone, settling time and
+direction are the `TILT_*` constants at the top of `HomeUI.lua.txt`. They can only be judged on the
+phone - the Editor has no sensor, and the Parallax Tuner follows the pointer - and a Lua change reaches
+the phone only in a new build. Settings → GAME → HOME TILT switches it off.
+
+**The audio offset.** Settings → SOUND → AUDIO OFFSET, -300..+300 ms, saved on the device: raise it when
+the music reaches the player late (Bluetooth), and notes reach the line and are judged that much later.
+It applies from the next song. Ranked runs are unaffected by it on the server - the trace records the
+song time that was judged - so changing it needs no new minimum version.
+
 ### The API in a container
 
 What a deploy runs. Day-to-day development stays on `dotnet run`; the image is for checking what
@@ -532,7 +560,7 @@ workflow builds images and deploys nothing.
 |---|---|
 | **`Arknights/`** | Content pipeline — AssetBundles, placeholder art, audio import, local character art, the Home / Depot / event / campaign / mail, notice and calendar / profile / assistant / level-up / promotion screen builders, and the story tools |
 | **`Beatmap/`** | Charting — `Beatmap Studio...` and `Timeline Editor...` author charts; `Import All Beatmaps` turns the JSON under `Assets/Beatmaps/` into `SongChart` assets |
-| **`Tools/Rhythm/`** | Gameplay scene setup — note system, HUD, hit feedback, character stage, skip button, song-select wiring, loading screen |
+| **`Tools/Rhythm/`** | Gameplay scene setup — note system, HUD, hit feedback, character stage, skip button, song-select wiring, results screen, loading screen |
 
 Two conventions these tools all follow, worth knowing before you write another one:
 
@@ -605,9 +633,9 @@ part of the game it tests:
   manager behind them.
 
 They are not all pure logic. `RulesetParityTests` opens `Main.unity` beside whatever is
-open and reads the `CharMeta` assets; `BackKeyTests`, `SoundSettingsTests` and the
-Manufacture screen and card tests load prefabs through `AssetDatabase`, and
-`SoundSettingsTests` writes PlayerPrefs, putting back what was there; `TokenRefreshTests`
+open and reads the `CharMeta` assets; `BackKeyTests`, `SoundSettingsTests`, `PlaySettingsTests` and
+the Manufacture screen and card tests load prefabs through `AssetDatabase`, and
+`SoundSettingsTests` and `PlaySettingsTests` write PlayerPrefs, putting back what was there; `TokenRefreshTests`
 talks HTTP through `UnityWebRequest` to a small fake server it starts on the loopback.
 None of them needs a database, the dev API or the gitignored audio and art. A whole run
 takes two or three seconds on CI, over a second of it the token refresh tests.

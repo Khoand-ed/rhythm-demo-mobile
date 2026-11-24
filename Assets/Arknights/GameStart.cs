@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using Manager;
 using Scripts.Game;
+using Settings;
 using Tools;
 using UI;
 using UnityEngine;
@@ -21,6 +22,10 @@ namespace Scripts {
         }
 
         private void Boot() {
+            // 存下的玩法设置先读 / The saved play settings first - Home's tilt switch is read the moment
+            // Home appears. The volumes load with SoundManager, which the Lua environment creates.
+            GameSettings.LoadGame();
+
             GameManager.Inst();
             LuaEnvManager.Inst();
 

@@ -482,8 +482,9 @@ public class SongSelectUISetup
             return false;
         }
 
+        // 在哪一层都算 / Anywhere under the panel: Build Results Screen moves it into its bottom bar.
         Transform results = gameManager.resultsScreen.transform;
-        Transform existing = results.Find("BackButton");
+        Transform existing = FindDeep(results, "BackButton");
         if (existing != null) return true;
 
         Image back = NewImage("BackButton", (RectTransform)results, Faint, "T_ChamferSmall");
@@ -508,6 +509,9 @@ public class SongSelectUISetup
 
         EditorUtility.SetDirty(gameManager.resultsScreen);
         EditorSceneManager.MarkSceneDirty(gameManager.gameObject.scene);
+
+        // 已经改过版面就放进去 / On a results screen already converted, the new button goes into its bar.
+        ResultsScreenSetup.Refit(gameManager);
         return true;
     }
 
@@ -801,7 +805,7 @@ public class SongSelectUISetup
 
             foreach (string path in new[] { "RetryButton", "RankingText", "RewardsText" })
             {
-                Transform node = results != null ? results.Find(path) : null;
+                Transform node = results != null ? FindDeep(results, path) : null;
                 if (node != null) Object.DestroyImmediate(node.gameObject);
             }
 
@@ -889,7 +893,9 @@ public class SongSelectUISetup
 
         // 放在返回键左边, 不挪它 / Left of the existing Back button rather than moving it: something
         // already placed is never repositioned by a re-run.
-        Transform retry = results.Find("RetryButton");
+        // 在哪一层都算 / Each found anywhere under the panel, so a results screen Build Results Screen
+        // has regrouped is recognised as complete rather than given a second of each.
+        Transform retry = FindDeep(results, "RetryButton");
         if (retry == null)
         {
             Image face = NewImage("RetryButton", results, Accent, "T_ChamferSmall");
@@ -916,7 +922,7 @@ public class SongSelectUISetup
         if (gameManager.resultsRetryButton == null) { gameManager.resultsRetryButton = retry.GetComponent<Button>(); assigned = true; }
         if (gameManager.resultsRetryLabel == null) { gameManager.resultsRetryLabel = retry.GetComponentInChildren<TextMeshProUGUI>(true); assigned = true; }
 
-        Transform ranking = results.Find("RankingText");
+        Transform ranking = FindDeep(results, "RankingText");
         if (ranking == null)
         {
             // 正对着 RETRY / Centred over RETRY and in the gap between the Final Score row and the
@@ -938,7 +944,7 @@ public class SongSelectUISetup
 
         if (gameManager.rankingText == null) { gameManager.rankingText = ranking.GetComponent<TextMeshProUGUI>(); assigned = true; }
 
-        Transform rewards = results.Find("RewardsText");
+        Transform rewards = FindDeep(results, "RewardsText");
         if (rewards == null)
         {
             // 奖励在最上面 / The run's rewards along the top of the panel, above the title - the one
@@ -996,6 +1002,14 @@ public class SongSelectUISetup
         {
             EditorUtility.SetDirty(gameManager);
             EditorSceneManager.MarkSceneDirty(gameManager.gameObject.scene);
+        }
+
+        // 已经改过版面就放进去 / On a results screen already converted, what was just added goes into its
+        // group - RETRY into the bottom bar, the two lines under the score - instead of where it is made.
+        if (added.Count > 0)
+        {
+            string refit = ResultsScreenSetup.Refit(gameManager);
+            if (refit.Length > 0) added.Add(refit);
         }
 
         return added.Count > 0 ? "added " + string.Join(", ", added)

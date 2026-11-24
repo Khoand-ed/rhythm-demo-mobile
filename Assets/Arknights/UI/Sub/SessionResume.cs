@@ -1,9 +1,9 @@
 namespace UI.Sub {
     /// <summary>
-    /// 上次的会话 / What the login screen does with the session a previous run left on this device
+    /// 上次的会话 / What the login screen's START does with the session this device holds
     /// (<see cref="Data.Player.PlayerManager.ResumeAsync"/>): whether to reopen it at all, and where
-    /// the screen goes once it has tried. Kept apart from LoginUI so the rules can be tested without
-    /// a scene, a server or a tween.
+    /// the screen goes once it has tried. Nothing is reopened until the tap. Kept apart from LoginUI
+    /// so the rules can be tested without a scene, a server or a tween.
     /// </summary>
     public static class SessionResume {
         public enum Next {
@@ -21,8 +21,8 @@ namespace UI.Sub {
 
             /// <summary>
             /// 会话还在 / It could not be reopened - no network, the server down or in maintenance - but
-            /// the device still holds it, and it may be perfectly good. Say why, and offer to try
-            /// again rather than throw away a session the server never refused.
+            /// the device still holds it, and it may be perfectly good. Say why and leave START to try
+            /// again, rather than throw away a session the server never refused.
             /// </summary>
             TryAgain,
         }
