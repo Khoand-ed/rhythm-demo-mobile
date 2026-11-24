@@ -90,8 +90,8 @@ local MOVE2_TILT_Y = 5
 --- what separates the near group from it. Tilting it too was tried and reverted.
 
 --- 指针停一秒后归位 / Settle back to centre once the pointer has been still for a
---- second, so a screen nobody is touching stops holding a tilt. On a phone that
---- is the moment a finger lifts, where there is no pointer to follow at all.
+--- second, so a screen nobody is touching stops holding a tilt. The pointer is
+--- followed in the Editor and on a PC only - a phone follows its tilt, below.
 ---
 --- 跟随速度也影响强度 / FOLLOW_SPEED is part of how strong this reads, not just how
 --- responsive it is: a slower lerp spends less time near full deflection, so the
@@ -104,6 +104,28 @@ local FOLLOW_SPEED = 3
 --- squared, so a mouse jittering by a pixel still counts as still.
 local MOVED_THRESHOLD = 4
 
+--- 手机跟着手机倾斜 / On a phone the planes follow how the phone is tilted, not a
+--- finger: a touch only presses buttons. UI.HomeTilt reads the gravity sensor while
+--- Home is the screen on top and hands back -1..1 on each axis - the range the
+--- pointer gives - so every amplitude above applies to the tilt unchanged.
+---
+--- 以拿着的姿势为中心 / Measured from the pose the phone rests in when Home appears.
+--- That rest pose then drifts toward the pose held now over TILT_RECENTRE_SECONDS,
+--- so a tilt held for a while settles back to the middle - sitting, lying down or on
+--- a table, the phone at rest is the middle.
+---
+--- 方向 / Whichever edge goes down draws the near plane toward it, like a gentle
+--- spirit level: lowering the right edge moves the planes as the pointer moving right
+--- does, and tipping the top edge away as the pointer moving DOWN does - MOVE2_Y is
+--- negative, so the near plane climbs only for a negative y, hence TILT_SIGN_Y = -1.
+--- Flip a sign if the phone reads better the other way. These can only be tuned on a
+--- phone: the Editor has no sensor, and the Parallax Tuner follows the pointer.
+local TILT_RANGE_DEGREES = 15
+local TILT_DEAD_ZONE_DEGREES = 0.75
+local TILT_RECENTRE_SECONDS = 5
+local TILT_SIGN_X = 1
+local TILT_SIGN_Y = -1
+
 local target = Vector2.zero
 local current = Vector2.zero
 
@@ -113,6 +135,9 @@ local lastX = -99999
 local lastY = -99999
 local idle = 0
 
+---@type UI.HomeTilt
+local tilt
+
 ---@type Data.Player.PlayerData
 local data;
 
@@ -121,11 +146,49 @@ function init()
     --- these two, so read that once rather than assuming it is zero.
     move1Base = move1.localPosition
     move2Base = move2.localPosition
+
+    --- 倾斜来源 / The tilt source goes on Home's own object, so it switches off with
+    --- Home - under a song the UI camera is off, which this script never hears about.
+    tilt = CS.UI.HomeTilt.On(self.gameObject)
+    tilt:Tune(TILT_RANGE_DEGREES, TILT_DEAD_ZONE_DEGREES, TILT_RECENTRE_SECONDS)
 end
 
-function update()---刷新时间 - 跟随鼠标
+function update()---刷新时间 - 跟随倾斜或鼠标
     time.text = DateTime.Now:ToString("yyyy/MM/dd/ HH:mm")
 
+    if tilt ~= nil and not tilt.FollowsPointer then
+        followTilt()
+    else
+        followPointer()
+    end
+
+    current = Vector2.Lerp(current, target, FOLLOW_SPEED * Time.deltaTime)
+
+    local position = move1.localPosition
+    position.x = move1Base.x + current.x * MOVE1_X
+    position.y = move1Base.y + current.y * MOVE1_Y
+    move1.localPosition = position
+
+    position = move2.localPosition
+    position.x = move2Base.x + current.x * MOVE2_X
+    position.y = move2Base.y + current.y * MOVE2_Y
+    move2.localPosition = position
+    move2.localRotation = Quaternion.Euler(current.y * MOVE2_TILT_X, current.x * MOVE2_TILT_Y, 0)
+end
+
+--- 手机: 跟着倾斜 / A phone: the tilt, or stand still - with the switch off, under
+--- another screen, or on a phone with no sensor. Never the pointer: on a phone that
+--- is a finger, and following it jolted the UI toward every tile pressed.
+function followTilt()
+    if tilt.Available then
+        target = Vector2(tilt.X * TILT_SIGN_X, tilt.Y * TILT_SIGN_Y)
+    else
+        target = Vector2.zero
+    end
+end
+
+--- 编辑器和电脑: 跟着指针 / The Editor and a PC: the pointer, as before.
+function followPointer()
     local moved = false
 
     if screenHasMouse() then
@@ -154,19 +217,6 @@ function update()---刷新时间 - 跟随鼠标
             target = Vector2.zero
         end
     end
-
-    current = Vector2.Lerp(current, target, FOLLOW_SPEED * Time.deltaTime)
-
-    local position = move1.localPosition
-    position.x = move1Base.x + current.x * MOVE1_X
-    position.y = move1Base.y + current.y * MOVE1_Y
-    move1.localPosition = position
-
-    position = move2.localPosition
-    position.x = move2Base.x + current.x * MOVE2_X
-    position.y = move2Base.y + current.y * MOVE2_Y
-    move2.localPosition = position
-    move2.localRotation = Quaternion.Euler(current.y * MOVE2_TILT_X, current.x * MOVE2_TILT_Y, 0)
 end
 
 function show()

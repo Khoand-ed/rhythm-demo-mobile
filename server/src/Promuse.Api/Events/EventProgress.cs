@@ -3,6 +3,7 @@ using Promuse.Api.Economy;
 using Promuse.Api.Infrastructure;
 using Promuse.Contracts;
 using Promuse.Contracts.Events;
+using Promuse.Contracts.Players;
 using Promuse.Persistence;
 using Promuse.Persistence.Entities;
 
@@ -29,14 +30,17 @@ public sealed class EventProgress(PromuseDbContext db, Inventory inventory)
     /// currency - only for a run opened as a stage of that event (<paramref name="runEventId"/>):
     /// the same chart played from the song list is not the event's stage.
     /// </summary>
-    /// <returns>True when the player's bag changed, so the caller bumps the state version.</returns>
-    public async Task<bool> OnRunClosedAsync(
+    /// <returns>
+    /// 付了什么 / The currency the stage's clear credited - empty when nothing was paid (not a clear,
+    /// not a stage of a running event, an event without a currency). Not empty means the player's
+    /// bag changed, so the caller bumps the state version; it also goes on the results screen.
+    /// </returns>
+    public async Task<List<ItemStack>> OnRunClosedAsync(
         Guid accountId, string stageId, string? runEventId, bool cleared, bool accepted, int? score,
         DateTimeOffset now, CancellationToken ct)
     {
-        if (!cleared) return false;
-
-        bool paid = false;
+        var paid = new List<ItemStack>();
+        if (!cleared) return paid;
 
         foreach ((string eventId, EventDefinition d) in await OpenAsync(now, ct))
         {
@@ -55,7 +59,7 @@ public sealed class EventProgress(PromuseDbContext db, Inventory inventory)
             if (d.CurrencyItemId is { } currency)
             {
                 await inventory.CreditAsync(accountId, currency, stage.CurrencyPerClear, ct);
-                paid = true;
+                paid.Add(new ItemStack(currency, stage.CurrencyPerClear));
             }
         }
 

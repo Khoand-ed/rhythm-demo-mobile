@@ -8,6 +8,7 @@ using Promuse.Contracts;
 using Promuse.Contracts.Auth;
 using Promuse.Contracts.Events;
 using Promuse.Contracts.Gacha;
+using Promuse.Contracts.Players;
 using Promuse.Contracts.Runs;
 using Promuse.Contracts.Shop;
 using Promuse.Persistence;
@@ -286,6 +287,9 @@ public class EventEndpointTests(PromuseApiFactory factory)
             RunCompletion done = await WinAsync(player, eventId: id);
             Assert.Equal(25, done.Player.Inventory.Single(i => i.ItemId == Token).Amount);
 
+            // 结算界面 / The results screen is told what the clear paid, not left to work it out.
+            Assert.Equal([new ItemStack(Token, 25)], done.Rewards!.EventItems!);
+
             EventView view = await ViewAsync(player, id);
             Assert.Equal(25, view.CurrencyBalance);
             Assert.True(view.Missions.Single(m => m.Mission.MissionId == "clear1").IsComplete);
@@ -355,6 +359,7 @@ public class EventEndpointTests(PromuseApiFactory factory)
             // stage_001 from the song list: the missions count, the stage neither clears nor pays.
             RunCompletion plain = await WinAsync(player);
             Assert.DoesNotContain(plain.Player.Inventory, i => i.ItemId == Token);
+            Assert.Empty(plain.Rewards!.EventItems!);
             EventView afterPlain = await ViewAsync(player, id);
             Assert.False(afterPlain.Stages[1].IsCleared);
             Assert.True(afterPlain.Missions.Single(m => m.Mission.MissionId == "stage1").IsComplete);
@@ -362,6 +367,7 @@ public class EventEndpointTests(PromuseApiFactory factory)
             // Played from the event, it clears and pays.
             RunCompletion played = await WinAsync(player, eventId: id);
             Assert.Equal(25, played.Player.Inventory.Single(i => i.ItemId == Token).Amount);
+            Assert.Equal([new ItemStack(Token, 25)], played.Rewards!.EventItems!);
             Assert.True((await ViewAsync(player, id)).Stages[1].IsCleared);
         }
         finally
@@ -500,6 +506,7 @@ public class EventEndpointTests(PromuseApiFactory factory)
 
             RunCompletion done = await WinAsync(player);
             Assert.DoesNotContain(done.Player.Inventory, i => i.ItemId == Token);
+            Assert.Empty(done.Rewards!.EventItems!);
         }
         finally
         {

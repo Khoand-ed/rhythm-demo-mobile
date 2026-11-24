@@ -78,5 +78,56 @@ namespace Settings {
 
         // 滑条是 0-100 / The sliders run 0-100; a value outside that is a damaged pref, not a choice.
         private static int Volume(int value) => Mathf.Clamp(value, 0, 100);
+
+        // ------------------------------------------------------------------ saved play settings
+
+        /// <summary>
+        /// 主界面跟着手机倾斜 / Home's parallax follows the phone's tilt. Off, Home stands still on a
+        /// phone - for a player the motion bothers. Read every frame by UI.HomeTilt, so switching it
+        /// takes effect as the settings screen closes.
+        /// </summary>
+        public static bool HOME_TILT_ENABLE = true;
+
+        /// <summary>
+        /// 音频偏移, 毫秒 / The audio offset in milliseconds: how much later than its sound a note
+        /// reaches the line and is judged. Positive when the sound reaches the player late - Bluetooth
+        /// headphones, a slow speaker. The gameplay scene hands it to Conductor.latencyOffset once,
+        /// before the song starts, so it applies from the next song.
+        /// </summary>
+        public static int AUDIO_OFFSET_MS = 0;
+
+        /// <summary>
+        /// 偏移上下限 / How far the offset goes either way. A lag over 200 ms - the widest judging window -
+        /// misses every tap, and Bluetooth often adds that much, so the range reaches past it.
+        /// </summary>
+        public const int AudioOffsetLimitMs = 300;
+
+        // 同样按设备存 / Per device too, for the reason above: a phone and its headphones are this
+        // device's, whichever server a build talks to.
+        private const string HomeTiltEnableKey = "Promuse.Settings.HomeTilt.Enabled";
+        private const string AudioOffsetKey = "Promuse.Settings.AudioOffset.Ms";
+
+        /// <summary>
+        /// 读取存下的玩法设置 / Puts the saved settings that are not volumes - Home's tilt and the audio
+        /// offset - over the defaults above. GameStart calls it as the front-end boots, and the gameplay
+        /// scene again before it reads the offset, since that scene can be opened straight from the
+        /// Editor without GameStart. Reading it twice is harmless: the settings screen saves as it
+        /// closes, so what is saved is what is in memory.
+        /// </summary>
+        public static void LoadGame() {
+            HOME_TILT_ENABLE = PlayerPrefs.GetInt(HomeTiltEnableKey, HOME_TILT_ENABLE ? 1 : 0) != 0;
+            AUDIO_OFFSET_MS = AudioOffset(PlayerPrefs.GetInt(AudioOffsetKey, AUDIO_OFFSET_MS));
+        }
+
+        /// <summary>Writes them and flushes to disk, at the same moments as <see cref="SaveSound"/>.</summary>
+        public static void SaveGame() {
+            PlayerPrefs.SetInt(HomeTiltEnableKey, HOME_TILT_ENABLE ? 1 : 0);
+            PlayerPrefs.SetInt(AudioOffsetKey, AUDIO_OFFSET_MS);
+            PlayerPrefs.Save();
+        }
+
+        /// <summary>The offset kept within <see cref="AudioOffsetLimitMs"/> either way.</summary>
+        public static int AudioOffset(int milliseconds) =>
+            Mathf.Clamp(milliseconds, -AudioOffsetLimitMs, AudioOffsetLimitMs);
     }
 }

@@ -154,8 +154,8 @@ public class PauseMenu : MonoBehaviour
 
         float required = game.noteSpawner != null ? game.noteSpawner.GetRequiredLeadIn() : 0f;
 
-        // StartSong itself takes the larger of the two, so the wait has to match.
-        return Mathf.Max(Conductor.instance.startDelay, required);
+        // StartSong leaves exactly this silence, the audio offset included, so the wait has to match.
+        return Conductor.instance.RunUpSeconds(required);
     }
 
     // ----------------------------------------------------------------------- pause

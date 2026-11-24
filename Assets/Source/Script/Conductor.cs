@@ -12,7 +12,10 @@ public class Conductor : MonoBehaviour
     public AudioSource theMusic;
 
     // Shifts judging earlier (negative) or later (positive) to compensate for
-    // output latency on a given device. Tune by ear.
+    // output latency on a given device. The player's AUDIO OFFSET setting, handed
+    // in by GameManager before the song starts. Never change it while the song
+    // runs: SongTime would jump, and a ranked trace whose time goes backwards is
+    // refused by the server.
     public float latencyOffset = 0f;
 
     // Per-song sync offset, taken from the chart. Device latency is a per-player
@@ -79,7 +82,7 @@ public class Conductor : MonoBehaviour
     // partway down its path. NoteSpawner.GetRequiredLeadIn() computes it.
     public void StartSong(float extraLeadIn = 0f)
     {
-        double delay = Mathf.Max(startDelay, extraLeadIn);
+        double delay = RunUpSeconds(extraLeadIn);
         double startAt = AudioSettings.dspTime + delay;
         songStartDsp = startAt;
 
@@ -89,6 +92,18 @@ public class Conductor : MonoBehaviour
 
         IsPlaying = true;
         IsPaused = false;
+    }
+
+    // The silence StartSong leaves before the first sample. PauseMenu waits exactly
+    // this long through its GO, so the two must agree - hence one method.
+    //
+    // A negative offset starts song time that much later than the audio, which eats
+    // into the notes' run-up: on a chart whose first note is at 0.036 s the first
+    // notes would appear part-way down their lanes. The run-up grows by it. A
+    // positive offset only lengthens the run-up, so that case is left as it was.
+    public float RunUpSeconds(float extraLeadIn)
+    {
+        return Mathf.Max(startDelay, extraLeadIn + Mathf.Max(0f, -TotalOffset));
     }
 
     public void Pause()
@@ -117,7 +132,10 @@ public class Conductor : MonoBehaviour
 
         if (theMusic.clip != null)
         {
-            theMusic.time = Mathf.Min(songTime, theMusic.clip.length - 0.01f);
+            // The audio sits at song time plus the offsets, the relationship
+            // StartSong and SkipTo keep. Placing it at song time alone was only
+            // right while both offsets were 0.
+            theMusic.time = Mathf.Clamp(songTime + TotalOffset, 0f, theMusic.clip.length - 0.01f);
         }
 
         songStartDsp = AudioSettings.dspTime - TotalOffset - songTime;
