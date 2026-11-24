@@ -69,17 +69,48 @@ namespace Promuse.Manufacture {
             StationLevel from = station.Current;
             StationLevel to = next.To;
 
+            // 打开时写一次 / What the level change is does not move while the panel is open: written once.
             title.text = StationCard.TitleOf(station.StationId) + "  Lv" + from.Level + " → Lv" + to.Level;
             product.text = from.ItemId == to.ItemId
                 ? "Makes " + ItemVisual.Name(to.ItemId)
                 : "Makes " + ItemVisual.Name(from.ItemId) + " → " + ItemVisual.Name(to.ItemId);
             pace.text = ManufactureFormat.Pace(from) + "   →   " + ManufactureFormat.Pace(to);
             holds.text = ManufactureFormat.Holds(from) + "   →   " + ManufactureFormat.Holds(to);
+            note.text = "What the station holds now is collected first, at its current level.";
+
+            Render(station, reading, held, busy: false);
+            gameObject.SetActive(true);
+        }
+
+        /// <summary>
+        /// 开着就跟着走 / Keeps an open panel up to date on the screen's tick: <paramref name="station"/> as the
+        /// screen knows it now, read at the same moment as its card. The station fills while the panel is
+        /// open and the bag changes, so "from the station", "short" and the button follow - and the button
+        /// stays off while <paramref name="busy"/>, a request out.
+        ///
+        /// 等级变了就关 / The server is asked to raise the level the player saw. Once the station is no
+        /// longer at it - raised elsewhere, or gone - the panel closes rather than offer a price that no
+        /// longer applies. A closed panel stays closed.
+        /// </summary>
+        public void Follow(StationState station, StationReading reading, Func<int, int> held, bool busy) {
+            if (!IsOpen) return;
+            if (station == null || reading == null || station.Next == null ||
+                station.StationId != StationId || station.Level != FromLevel) {
+                Close();
+                return;
+            }
+            Render(station, reading, held, busy);
+        }
+
+        /// <summary>The rows that move while the panel is open: the blueprint, the price against the bag, and the button.</summary>
+        private void Render(StationState station, StationReading reading, Func<int, int> held, bool busy) {
+            StationUpgrade next = station.Next;
+            StationLevel from = station.Current;
 
             bool hasBlueprint = held(next.BlueprintItemId) > 0;
-            blueprint.text = hasBlueprint
+            Set(blueprint, hasBlueprint
                 ? ItemVisual.Name(next.BlueprintItemId) + " - held, not spent"
-                : ItemVisual.Name(next.BlueprintItemId) + " - clear " + next.BlueprintStageCode + " to get it";
+                : ItemVisual.Name(next.BlueprintItemId) + " - clear " + next.BlueprintStageCode + " to get it");
             blueprint.color = hasBlueprint ? OkInk : ShortInk;
 
             bool canPay = true;
@@ -95,13 +126,17 @@ namespace Promuse.Manufacture {
                             // 差多少 / Short of it, by how much - the reason the button is off.
                             (missing > 0 ? "  - " + ManufactureFormat.Amount(missing) + " short" : "");
             }
-            cost.text = costText;
+            Set(cost, costText);
             cost.color = canPay ? Color.white : ShortInk;
 
-            note.text = "What the station holds now is collected first, at its current level.";
+            OffButton.Set(confirmButton, !busy && hasBlueprint && canPay);
+        }
 
-            confirmButton.interactable = hasBlueprint && canPay;
-            gameObject.SetActive(true);
+        // 同值不写 / The panel sits on the canvas Home shares, and it is redrawn four times a second: a
+        // text is written only when it changes, so an unchanged tick never rebuilds that canvas. A
+        // Graphic's colour already skips a write that changes nothing.
+        private static void Set(TMP_Text text, string value) {
+            if (text.text != value) text.text = value;
         }
 
         public void Close() => gameObject.SetActive(false);
