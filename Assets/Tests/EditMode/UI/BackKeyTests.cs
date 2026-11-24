@@ -56,6 +56,7 @@ public class BackKeyTests
     // breaks quietly.
     [TestCase("DepotUI", "TopBar/BackButton")]
     [TestCase("MissionUI", "TopBar/BackButton")]
+    [TestCase("ManufactureUI", "TopBar/BackButton")]
     [TestCase("SettingUI", "TopBar/back")]
     [TestCase("ShopUI", "TopBar/back")]
     [TestCase("CharInfoUI", "back")]

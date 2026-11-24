@@ -8,6 +8,9 @@ namespace UI {
     public class UIManager : Single<UIManager> {
         private Dictionary<string, UIBase> uiDictionary = new Dictionary<string, UIBase>();
 
+        // 被盖住而关掉的界面 / The screens a cover screen has switched off (Cover / Uncover).
+        private readonly ScreenCovers<UIBase> covers = new ScreenCovers<UIBase>();
+
         private GameObject camera;
         private GameObject canvas;
 
@@ -49,6 +52,8 @@ namespace UI {
         public UIBase Show(string type) {
             if (!uiDictionary.TryGetValue(type, out UIBase ui)) ui = Load(type);
             if (ui == null) return null;
+            // 放到最上面 / It goes on top, so no cover below it holds it any more; its own Show switches it on.
+            covers.Release(ui);
             ui.transform.SetAsLastSibling();
             ui.Show();
             ui.UpdateView();
@@ -86,6 +91,56 @@ namespace UI {
         public void Update(string type) {
             if (uiDictionary.TryGetValue(type, out UIBase ui)) ui.UpdateView();
         }
+
+        // ------------------------------------------------------------------ covers
+
+        /// <summary>
+        /// 盖住下面 / Switches off every open screen below <paramref name="cover"/>, for as long as it is
+        /// up: they cannot be seen, so they are neither drawn nor run - Home's layers, its rig and its Lua
+        /// update stop costing a frame while a full screen hides them.
+        ///
+        /// 只给不透明的界面用 / Only for a screen opaque from edge to edge, and only once it is fully shown -
+        /// whatever it does not paint over shows the camera's clear colour instead. The covered screens'
+        /// own Show and Hide are not called - no Lua show or hide, no music - and their state stays Show,
+        /// so Top(), OpenScreens() and Android Back still count them as open. Uncover puts them back.
+        /// Covering again while covering does nothing.
+        ///
+        /// 可以叠 / Covers may stack: a second cover opened over the first records the screens the first
+        /// already switched off as well, so each comes back only once every cover holding it has gone -
+        /// never under a cover still up. A screen switched off some other way is not a cover's to wake.
+        /// </summary>
+        public void Cover(UIBase cover) {
+            if (cover == null || cover.state != UIState.Show) return;
+
+            int top = cover.transform.GetSiblingIndex();
+            List<UIBase> below = new List<UIBase>();
+            foreach (UIBase ui in uiDictionary.Values) {
+                if (ui == null || ui == cover || ui.state != UIState.Show) continue;
+                // 别的盖子关掉的也记上 / Off because another cover holds it: still open, still below, so
+                // recorded too. Off for any other reason: left alone.
+                if (!ui.gameObject.activeSelf && !covers.IsCovered(ui)) continue;
+                if (ui.transform.GetSiblingIndex() < top) below.Add(ui);
+            }
+
+            foreach (UIBase ui in covers.Cover(cover, below)) ui.gameObject.SetActive(false);
+        }
+
+        /// <summary>
+        /// 揭开 / Switches back on what <paramref name="cover"/> switched off, as it starts to go: only the
+        /// screens still open, and held by no other cover. Nothing happens for a screen not covering.
+        /// </summary>
+        public void Uncover(UIBase cover) {
+            foreach (UIBase ui in covers.Uncover(cover, StillOpen)) ui.gameObject.SetActive(true);
+        }
+
+        /// <summary>
+        /// 只丢记录 / Drops <paramref name="cover"/>'s record and switches nothing on - for a cover being
+        /// destroyed without having uncovered, where waking a screen mid-teardown would run its OnEnable
+        /// for nothing.
+        /// </summary>
+        public void Forget(UIBase cover) => covers.Forget(cover);
+
+        private static bool StillOpen(UIBase ui) => ui != null && ui.state == UIState.Show;
         
         // 关闭
         public void Hide(string type, bool destroy = false) {
@@ -94,6 +149,8 @@ namespace UI {
             if (ui.state == UIState.Show) {
                 ui.Hide(destroy);
                 ui.state = UIState.Hide;
+                // 盖着的也揭开 / A cover hidden this way gives back what it held, even if it forgot to.
+                Uncover(ui);
             } else if (destroy) {
                 UnLoad(type);
             }
@@ -123,6 +180,9 @@ namespace UI {
             if (!uiDictionary.ContainsKey(type)) return;
             UIBase ui = uiDictionary[type];
             uiDictionary.Remove(type);
+            // 卸下的盖子交还下面 / An unloaded cover gives back what it held, and is held by none.
+            Uncover(ui);
+            covers.Release(ui);
             Object.Destroy(ui.gameObject);
         }
     }

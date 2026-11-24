@@ -1,5 +1,6 @@
 using NUnit.Framework;
 using Promuse.Manufacture;
+using TMPro;
 using UI;
 using UnityEditor;
 using UnityEngine;
@@ -12,6 +13,7 @@ public class ManufactureScreenTests
 {
     private const string ScreenPath = "Assets/Arknights/Resources/Prefab/UI/ManufactureUI.prefab";
     private const string HomePath = "Assets/Arknights/Resources/Prefab/UI/HomeUI.prefab";
+    private const string DepotPath = "Assets/Arknights/Resources/Prefab/UI/DepotUI.prefab";
 
     private static ManufactureUI Screen()
     {
@@ -92,6 +94,33 @@ public class ManufactureScreenTests
     }
 
     [Test]
+    public void TheWall_HidesEverythingBelow_OnceTheScreenHasFadedIn()
+    {
+        // 盖住主页的前提 / What UIManager.Cover relies on: once the screen's group is at 1, the room's
+        // first layer paints every pixel, so Home below it can be switched off unseen.
+        ManufactureUI ui = Screen();
+        Component root = ui;
+
+        Assert.IsNotNull(root.GetComponent<CanvasGroup>(), "the screen fades through its group");
+
+        Transform room = root.transform.GetChild(0);
+        Assert.AreEqual("Room", room.name, "the room is drawn first, under everything else");
+        Assert.IsTrue(room.gameObject.activeSelf);
+
+        Transform wallChild = room.GetChild(0);
+        Assert.AreEqual("Wall", wallChild.name, "the wall is the room's first layer");
+        Assert.IsTrue(wallChild.gameObject.activeSelf);
+
+        Image wall = wallChild.GetComponent<Image>();
+        Assert.IsNotNull(wall);
+        Assert.IsTrue(wall.enabled);
+        Assert.AreEqual(1f, wall.color.a, "opaque");
+        RectTransform rect = wall.rectTransform;
+        Assert.AreEqual((Vector2.zero, Vector2.one), (rect.anchorMin, rect.anchorMax), "stretched to the screen");
+        Assert.AreEqual((Vector2.zero, Vector2.zero), (rect.offsetMin, rect.offsetMax), "to its very edges");
+    }
+
+    [Test]
     public void TheOverlaysStartHidden_AndTheUpgradePanelDrawsOverTheTopBar()
     {
         ManufactureUI ui = Screen();
@@ -114,6 +143,29 @@ public class ManufactureScreenTests
         Button exit = UIBase.FindExitButton(ui);
         Assert.IsNotNull(exit);
         Assert.AreSame(root.transform.Find("TopBar/BackButton").GetComponent<Button>(), exit);
+    }
+
+    [Test]
+    public void TheBackButton_IsTheSharedSlab()
+    {
+        // 和仓库一样 / The grey slab with its edges and a "‹", the one Depot and Mission leave by.
+        GameObject depot = AssetDatabase.LoadAssetAtPath<GameObject>(DepotPath);
+        Assert.IsNotNull(depot);
+        Image shared = depot.transform.Find("TopBar/BackButton").GetComponent<Image>();
+
+        Component root = Screen();
+        Transform back = root.transform.Find("TopBar/BackButton");
+        Image face = back.GetComponent<Image>();
+
+        Assert.AreEqual(shared.color, face.color, "run Arknights/Manufacture/Build Manufacture UI");
+        Assert.AreEqual(shared.rectTransform.sizeDelta, face.rectTransform.sizeDelta);
+        foreach (string edge in new[] { "EdgeTop", "EdgeBottom", "EdgeLeft", "EdgeRight" })
+        {
+            Assert.IsNotNull(back.Find(edge), edge);
+        }
+        Assert.AreEqual("‹", back.GetComponentInChildren<TMP_Text>(true).text);
+        Assert.AreEqual(back.childCount - 1, back.GetComponentInChildren<TMP_Text>(true).transform.GetSiblingIndex(),
+                        "the glyph draws over the edges");
     }
 
     [Test]

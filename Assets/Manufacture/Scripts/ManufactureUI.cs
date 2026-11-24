@@ -9,6 +9,7 @@ using Promuse.Contracts.Characters;
 using Promuse.Contracts.Manufacture;
 using Promuse.Net;
 using TMPro;
+using Tools;
 using UI;
 using UI.Sub;
 using UnityEngine;
@@ -29,6 +30,10 @@ namespace Promuse.Manufacture {
     /// included - rebuild its batches four times a second; on a child canvas only the child does.
     /// The stations' layer is also switched off for input while the lock or the upgrade panel is
     /// up, rather than trusting draw order across canvases to stop a press reaching it.
+    ///
+    /// 盖住主页 / The room's wall is opaque from edge to edge, so once the screen has faded in, Home
+    /// below cannot be seen: the screen covers it (UIManager.Cover), and Home is neither drawn nor run
+    /// until the screen starts to go. Home shows through both fades, as it always has.
     ///
     /// Built by Arknights/Manufacture/Build Manufacture UI; the field bindings are the contract. Opened
     /// from Home's MANUFACTURE tile.
@@ -66,8 +71,16 @@ namespace Promuse.Manufacture {
         private bool busy;
         private bool loading;
         private RoomStore roomStore;
+        private bool covering;
+        private bool hiding;
 
         private static ManufactureManager Manager => ManufactureManager.Inst();
+
+        /// <summary>How many of an item the player holds, from their bag as the screen knows it.</summary>
+        private static readonly Func<int, int> Held = id => {
+            PlayerData player = PlayerManager.Inst().Get();
+            return player != null ? player.GetItemAmount(id) : 0;
+        };
 
         public static void Open() => UIManager.Inst().Show(UIName);
 
@@ -95,7 +108,11 @@ namespace Promuse.Manufacture {
         }
 
         public override void Show() {
+            hiding = false;
             base.Show();
+            // 一次只有一个渐变 / A fade-out still running is stopped, and with it the Hide it would end in:
+            // shown again, the screen stays.
+            canvasGroup.DOKill();
             canvasGroup.alpha = 0;
             canvasGroup.DOFade(1, 0.25f);
 
@@ -112,12 +129,55 @@ namespace Promuse.Manufacture {
         }
 
         public override void Hide(bool destroy = false) {
+            // 先把主页放回来 / Home comes back before the fade starts, so it shows through it.
+            hiding = true;
+            SetCovering(false);
+
+            // 主页的货币 / Collecting and raising a station change the LMD Home's top row shows, and that
+            // row redraws only when asked. Home is hidden under the room until now, so asking once, as the
+            // screen goes, covers every way the bag changed here - a collect, an upgrade, a fresh load.
+            RefreshHome();
+
             Manager.Changed -= Draw;
+            // A second Back mid-fade restarts the fade rather than running two, and two Hides.
+            canvasGroup.DOKill();
             canvasGroup.DOFade(0, 0.2f).OnComplete(() => base.Hide(destroy));
         }
 
         private void OnDestroy() {
             Manager.Changed -= Draw;
+
+            // 只丢记录 / Destroyed while still covering - leaving Play Mode, quitting - the record goes
+            // and nothing is switched back on: waking Home mid-teardown would only run its OnEnable for
+            // nothing. Every real way out (Hide, an unload) has uncovered already.
+            if (covering) {
+                covering = false;
+                UIManager.Inst().Forget(this);
+            }
+        }
+
+        // 渐入完才盖 / Covered only once fully faded in, and never while going. LateUpdate runs after
+        // DOTween's update and after the frame's taps, so what is drawn this frame is settled.
+        private void LateUpdate() => SetCovering(!hiding && canvasGroup.alpha >= 0.999f);
+
+        private void SetCovering(bool on) {
+            if (on == covering) return;
+            covering = on;
+            if (on) UIManager.Inst().Cover(this);
+            else UIManager.Inst().Uncover(this);
+        }
+
+        /// <summary>
+        /// 刷新失败不能连累本界面 / Wrapped like MissionUI's: HomeUI is driven by Lua, and refreshing it
+        /// runs script through RuaUI - anything that throws in there must not stop this screen closing.
+        /// Update is a no-op when Home is not loaded.
+        /// </summary>
+        private static void RefreshHome() {
+            try {
+                UIManager.Inst().Update(BootIntent.Home);
+            } catch (Exception e) {
+                Debug.LogWarning($"[ManufactureUI] HomeUI refresh failed, its currency row may be stale: {e.Message}");
+            }
         }
 
         // 回到前台就重读 / Back from the background: the device's clock may have been moved while the
@@ -204,15 +264,15 @@ namespace Promuse.Manufacture {
             StationState station = Manager.Station(card.stationId);
             if (station == null || busy) return;
 
-            PlayerData player = PlayerManager.Inst().Get();
-            upgradePanel.Open(station, Manager.ReadNow(station), id => player != null ? player.GetItemAmount(id) : 0);
+            upgradePanel.Open(station, Manager.ReadNow(station), Held);
             DrawStations();
         }
 
         private async void UpgradeAsync(string stationId, int fromLevel) {
             if (busy) return;
             busy = true;
-            upgradePanel.confirmButton.interactable = false;
+            // The open panel follows busy: its confirm goes off, dimmed, and no tick turns it back on mid-request.
+            DrawStations();
 
             try {
                 ApiResult<ManufactureActionResult> result = await Manager.UpgradeAsync(stationId, fromLevel);
@@ -270,6 +330,13 @@ namespace Promuse.Manufacture {
                 if (reading.StoredUnits > 0) anything = true;
             }
 
+            // 面板跟着卡片 / The open panel reads its station at the same moment as the card, so the two
+            // never disagree about what the station holds; it closes itself if the level moved.
+            if (upgradePanel.IsOpen) {
+                StationState shown = open ? Manager.Station(upgradePanel.StationId) : null;
+                upgradePanel.Follow(shown, shown != null ? ManufactureManager.Read(shown, now) : null, Held, busy);
+            }
+
             // 盖住时不让按 / Nothing under an overlay can be pressed. Collect all sits on the top bar,
             // above the lock, so it goes away with the stations it would collect: a locked, loading or
             // failed screen offers nothing to press but Back and Retry.
@@ -278,7 +345,7 @@ namespace Promuse.Manufacture {
             stationLayer.blocksRaycasts = !covered;
 
             collectAllButton.gameObject.SetActive(open && !lockOverlay.activeSelf);
-            collectAllButton.interactable = !busy && anything;
+            OffButton.Set(collectAllButton, !busy && anything);
             roomButton.gameObject.SetActive(open && !lockOverlay.activeSelf);
         }
 

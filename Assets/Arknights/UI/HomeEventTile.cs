@@ -20,8 +20,15 @@ namespace UI {
         public TextMeshProUGUI detail;
         public Button button;
 
+        // 回来时最少隔一分钟 / Home is switched off and on again by a screen that covers it
+        // (UIManager.Cover) and by a song, and each return asked the server again. Coming back
+        // now asks only a minute or more after the last ask: a return from a song, minutes later,
+        // still asks; going in and out of Manufacture asks at most once a minute.
+        private const float ReturnGap = 60f;
+
         private float nextTick;
         private float nextRefresh;
+        private float lastAsked = float.NegativeInfinity;
 
         private void OnEnable() {
             if (button != null) {
@@ -31,7 +38,7 @@ namespace UI {
 
             EventManager.Inst().Changed += Draw;
             Draw();
-            Refresh();
+            if (Time.unscaledTime - lastAsked >= ReturnGap) Refresh();
         }
 
         private void OnDisable() {
@@ -49,7 +56,8 @@ namespace UI {
         // 五分钟问一次 / Asked again every five minutes while Home is up, so an event that starts
         // while the player sits here appears without them leaving the screen.
         private async void Refresh() {
-            nextRefresh = Time.unscaledTime + 300f;
+            lastAsked = Time.unscaledTime;
+            nextRefresh = lastAsked + 300f;
             await EventManager.Inst().LoadAsync();
         }
 
