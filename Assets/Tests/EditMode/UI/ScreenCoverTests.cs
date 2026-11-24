@@ -4,7 +4,8 @@ using UI;
 
 // 盖住的账 / The books UIManager.Cover keeps: which screens a full screen switched off while it is up,
 // and which it gives back as it goes. Plain names stand in for screens - the bookkeeping never looks at
-// one. Only what UIManager can produce today is pinned: one cover over the screens below it.
+// one. Pinned: one cover over the screens below it, and a second cover over the first, which UIManager
+// hands the screens the first already switched off as well (UIManagerCoverTests drives the real one).
 public class ScreenCoverTests
 {
     private const string Home = "HomeUI";
@@ -110,6 +111,23 @@ public class ScreenCoverTests
         Assert.IsFalse(covers.IsCovering(Cover));
         Assert.IsFalse(covers.IsCovered(Home));
         Assert.IsEmpty(covers.Uncover(Cover, AllOpen));
+    }
+
+    [Test]
+    public void StackedCovers_GiveAScreenBackOnlyOnceBothHaveGone()
+    {
+        // A second cover over the first is handed what the first switched off too, and the first.
+        const string Second = "GachaUI";
+        var covers = new ScreenCovers<string>();
+        covers.Cover(Cover, new[] { Home });
+
+        CollectionAssert.AreEqual(new[] { Cover }, covers.Cover(Second, new[] { Home, Cover }),
+                                  "Home is off already; only the first cover is switched off");
+
+        Assert.IsEmpty(covers.Uncover(Cover, AllOpen), "Home stays off under the second cover");
+        Assert.IsTrue(covers.IsCovered(Home));
+
+        CollectionAssert.AreEqual(new[] { Home, Cover }, covers.Uncover(Second, AllOpen));
     }
 
     [Test]

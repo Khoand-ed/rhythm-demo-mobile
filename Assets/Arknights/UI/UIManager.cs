@@ -104,6 +104,10 @@ namespace UI {
         /// own Show and Hide are not called - no Lua show or hide, no music - and their state stays Show,
         /// so Top(), OpenScreens() and Android Back still count them as open. Uncover puts them back.
         /// Covering again while covering does nothing.
+        ///
+        /// 可以叠 / Covers may stack: a second cover opened over the first records the screens the first
+        /// already switched off as well, so each comes back only once every cover holding it has gone -
+        /// never under a cover still up. A screen switched off some other way is not a cover's to wake.
         /// </summary>
         public void Cover(UIBase cover) {
             if (cover == null || cover.state != UIState.Show) return;
@@ -111,7 +115,10 @@ namespace UI {
             int top = cover.transform.GetSiblingIndex();
             List<UIBase> below = new List<UIBase>();
             foreach (UIBase ui in uiDictionary.Values) {
-                if (ui == null || ui == cover || ui.state != UIState.Show || !ui.gameObject.activeSelf) continue;
+                if (ui == null || ui == cover || ui.state != UIState.Show) continue;
+                // 别的盖子关掉的也记上 / Off because another cover holds it: still open, still below, so
+                // recorded too. Off for any other reason: left alone.
+                if (!ui.gameObject.activeSelf && !covers.IsCovered(ui)) continue;
                 if (ui.transform.GetSiblingIndex() < top) below.Add(ui);
             }
 
