@@ -51,6 +51,39 @@ public class SystemBarsTests
         Assert.AreEqual(SystemBars.Verdict.Hide, SystemBars.Decide(keyboardVisible: false, multiWindow: false));
     }
 
+    // --- the behavior -----------------------------------------------------------------------------
+
+    [TestCase(0)]   // Android 11's default, bars by touch: the one an OPPO A92 started at
+    [TestCase(1)]   // Default
+    public void ABehaviorThatLeavesABarUp_IsSetToTransient(int behavior)
+    {
+        Assert.IsTrue(SystemBars.NeedsTransient(behavior));
+    }
+
+    [Test]
+    public void Transient_IsLeftAsItIs()
+    {
+        Assert.IsFalse(SystemBars.NeedsTransient(SystemBars.TransientBySwipe));
+        Assert.AreEqual((int)UnityEngine.Android.AndroidWindowInsets.SystemBarsBehavior.ShowTransientBarsBySwipe,
+            SystemBars.TransientBySwipe, "the number Unity gives transient bars");
+    }
+
+    [Test]
+    public void API29AndEarlier_AreNotSet_TheirBehaviorIsUndefined()
+    {
+        Assert.IsFalse(SystemBars.NeedsTransient(-1));
+    }
+
+    [TestCase(-1, "Undefined (API 29 or earlier)")]
+    [TestCase(0, "ShowBarsByTouch (Android 11's default)")]
+    [TestCase(1, "Default")]
+    [TestCase(2, "ShowTransientBarsBySwipe")]
+    [TestCase(7, "7")]
+    public void TheLog_NamesEveryBehavior(int behavior, string name)
+    {
+        Assert.AreEqual(name, SystemBars.BehaviorName(behavior));
+    }
+
     // --- how soon --------------------------------------------------------------------------------
 
     [Test]

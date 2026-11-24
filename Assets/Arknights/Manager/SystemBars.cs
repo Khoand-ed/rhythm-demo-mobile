@@ -10,7 +10,8 @@ namespace Manager {
     /// 系统栏 / Keeps Android's status bar and navigation bar hidden while the game runs.
     ///
     /// 只在启动时藏不够 / Player Settings (Insets) start the game with no bar and ask for bars a swipe
-    /// shows to go again by themselves (androidSystemBarsBehavior 2 = ShowTransientBarsBySwipe). Some
+    /// shows to go again by themselves (androidSystemBarsBehavior 2 = ShowTransientBarsBySwipe), but an
+    /// Android 11 window still starts at 0, bars by touch (an OPPO A92 logged it), so this sets it. Some
     /// phones bring a bar back and leave it - the navigation bar in 3-button mode, a status bar pulled
     /// down - and the window is edge to edge, so a bar shown after start lies over the game instead of
     /// shrinking it: over the top bar, over the buttons and the right lane at the right edge. Unity hides
@@ -86,6 +87,28 @@ namespace Manager {
         /// <summary>Whether a warning may be logged now, the last one having been at <paramref name="lastWarnedAt"/> (negative infinity for none).</summary>
         public static bool WarningDue(float lastWarnedAt, float now) => now - lastWarnedAt >= WarningInterval;
 
+        /// <summary>ShowTransientBarsBySwipe, as AndroidWindowInsets.SystemBarsBehavior numbers it.</summary>
+        public const int TransientBySwipe = 2;
+
+        /// <summary>
+        /// 行为 / Whether the window's system bar behavior must be set to transient bars. Android numbers it
+        /// itself: 0 is BEHAVIOR_SHOW_BARS_BY_TOUCH - Android 11's default, which Unity's enum has no name
+        /// for, and which leaves a swiped-in bar up - 1 is Default, 2 transient. Unity reads -1 (Undefined)
+        /// on API 29 and earlier, where it cannot be set. So anything from 0 up that is not 2.
+        /// </summary>
+        public static bool NeedsTransient(int behavior) => behavior >= 0 && behavior != TransientBySwipe;
+
+        /// <summary>A behavior as the log names it.</summary>
+        public static string BehaviorName(int behavior) {
+            switch (behavior) {
+                case -1: return "Undefined (API 29 or earlier)";
+                case 0: return "ShowBarsByTouch (Android 11's default)";
+                case 1: return "Default";
+                case TransientBySwipe: return "ShowTransientBarsBySwipe";
+                default: return behavior.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
+        }
+
         /// <summary>The bars, as a log line names them.</summary>
         public static string Describe(bool statusVisible, bool navVisible) =>
             statusVisible && navVisible ? "status and navigation bars"
@@ -148,8 +171,15 @@ namespace Manager {
             private void Start() {
                 try {
                     AndroidWindowInsets insets = AndroidApplication.currentWindowInsets;
-                    Debug.Log($"[SystemBars] Keeping the status and navigation bars hidden: behavior {insets.GetSystemBarsBehavior()}, " +
-                              $"split screen {AndroidApplication.isInMultiWindowMode}. A bar that shows goes after {MenuDelay:0.#} s in the menus, {SongDelay:0.#} s in a song.");
+                    // 一开始就设 / Set before the first swipe, not at the first hide: on Android 11 the window
+                    // starts at 0 (bars by touch), so a bar the player swipes in would stay until this hid it.
+                    int was = (int)insets.GetSystemBarsBehavior();
+                    if (NeedsTransient(was))
+                        insets.SetSystemBarsBehavior(AndroidWindowInsets.SystemBarsBehavior.ShowTransientBarsBySwipe);
+                    int now = (int)insets.GetSystemBarsBehavior();
+                    string behavior = BehaviorName(was) + (now != was ? " -> " + BehaviorName(now) : "");
+                    Debug.Log(FormattableString.Invariant(
+                        $"[SystemBars] Keeping the status and navigation bars hidden: behavior {behavior}, split screen {AndroidApplication.isInMultiWindowMode}. A bar that shows goes after {MenuDelay:0.#} s in the menus, {SongDelay:0.#} s in a song."));
                 } catch (Exception e) {
                     Warn("reading the window insets", e.GetType().Name + ": " + e.Message);
                 }
@@ -208,7 +238,8 @@ namespace Manager {
                     // 自己走了 / Gone before the hide was due - the phone honoured transient bars. The report
                     // of a hide just made is not that.
                     if (now - hiddenAt > 1f)
-                        Debug.Log($"[SystemBars] The {Name(shown)} that showed in {shownIn} went by itself after {now - shownAt:0.0} s.");
+                        Debug.Log(FormattableString.Invariant(
+                            $"[SystemBars] The {Name(shown)} that showed in {shownIn} went by itself after {now - shownAt:0.0} s."));
                     shown = 0;
                     if (reason == AfterShown) pending = false;
                     return;
@@ -234,19 +265,19 @@ namespace Manager {
                         return;
                     }
 
-                    // 行为 / Settings ask for transient bars; put them back if something changed that. Not on
-                    // API 29 and earlier, where the behavior is Undefined and cannot be set.
-                    AndroidWindowInsets.SystemBarsBehavior behavior = insets.GetSystemBarsBehavior();
-                    if (behavior == AndroidWindowInsets.SystemBarsBehavior.Default)
+                    // 行为 / Transient bars, set at start; put back if something changed it (NeedsTransient
+                    // leaves API 29 and earlier alone, where it is Undefined and cannot be set).
+                    int behavior = (int)insets.GetSystemBarsBehavior();
+                    if (NeedsTransient(behavior))
                         insets.SetSystemBarsBehavior(AndroidWindowInsets.SystemBarsBehavior.ShowTransientBarsBySwipe);
 
                     insets.Hide(AndroidWindowInsets.Type.StatusBars | AndroidWindowInsets.Type.NavigationBars);
 
                     float now = Time.unscaledTime;
                     string when = shown != 0 && reason == AfterShown
-                        ? $"{now - shownAt:0.0} s after it showed in {shownIn}"
+                        ? FormattableString.Invariant($"{now - shownAt:0.0} s after it showed in {shownIn}")
                         : $"{reason}, in {SceneManager.GetActiveScene().name}";
-                    Debug.Log($"[SystemBars] Hid the {Describe(status, nav)} {when} (behavior {behavior}).");
+                    Debug.Log($"[SystemBars] Hid the {Describe(status, nav)} {when} (behavior {BehaviorName(behavior)}).");
                     hiddenAt = now;
                     shown = 0;
                 } catch (Exception e) {
@@ -262,7 +293,7 @@ namespace Manager {
                 float now = Time.unscaledTime;
                 if (!WarningDue(lastWarnedAt, now)) return;
                 lastWarnedAt = now;
-                Debug.LogWarning($"[SystemBars] Failed {what}: {error}. Further failures are quiet for {WarningInterval:0} s.");
+                Debug.LogWarning(FormattableString.Invariant($"[SystemBars] Failed {what}: {error}. Further failures are quiet for {WarningInterval:0} s."));
             }
         }
 #endif
