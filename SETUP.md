@@ -471,11 +471,16 @@ adb logcat -s Unity | findstr FrameRate
 
 **The system bars.** The game starts with no status or navigation bar (Player Settings > Android >
 Insets), and `Manager.SystemBars` hides one that a swipe, the keyboard or a return from Home brings back:
-about 2 s after it shows in the menus, 0.5 s during a song. It logs each bar once, as it goes - hidden
-by the game, or gone by itself - and what brought it:
+about 3 s after it shows in the menus, 0.5 s during a song. It logs each bar it is told of once, as it
+goes - hidden by the game, or gone by itself - and what brought it:
 ```
 adb logcat -s Unity | findstr SystemBars
 ```
+To learn whether a phone takes a swiped-in bar away by itself, swipe in the menus and leave the screen
+alone. The system hides such a bar after about 2.25 s (AOSP; a vendor or an accessibility timeout may
+differ), before the game's 3 s: `went by itself`, or no line at all, means it did - a bar shown that way
+may overlay the game without being reported. `Hid the navigation bar 3.0 s after it showed` means the
+phone left it there. A song tells nothing: its 0.5 s always comes first.
 
 **The version.** The server refuses a build older than remote config's minimum client version, and
 1.1 is the first build that judges through `RunJudge`. Raise `bundleVersion` (and the Android version
