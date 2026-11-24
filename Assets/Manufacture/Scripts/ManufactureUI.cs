@@ -76,6 +76,12 @@ namespace Promuse.Manufacture {
 
         private static ManufactureManager Manager => ManufactureManager.Inst();
 
+        /// <summary>How many of an item the player holds, from their bag as the screen knows it.</summary>
+        private static readonly Func<int, int> Held = id => {
+            PlayerData player = PlayerManager.Inst().Get();
+            return player != null ? player.GetItemAmount(id) : 0;
+        };
+
         public static void Open() => UIManager.Inst().Show(UIName);
 
         // ------------------------------------------------------------------ lifecycle
@@ -258,15 +264,15 @@ namespace Promuse.Manufacture {
             StationState station = Manager.Station(card.stationId);
             if (station == null || busy) return;
 
-            PlayerData player = PlayerManager.Inst().Get();
-            upgradePanel.Open(station, Manager.ReadNow(station), id => player != null ? player.GetItemAmount(id) : 0);
+            upgradePanel.Open(station, Manager.ReadNow(station), Held);
             DrawStations();
         }
 
         private async void UpgradeAsync(string stationId, int fromLevel) {
             if (busy) return;
             busy = true;
-            OffButton.Set(upgradePanel.confirmButton, false);
+            // The open panel follows busy: its confirm goes off, dimmed, and no tick turns it back on mid-request.
+            DrawStations();
 
             try {
                 ApiResult<ManufactureActionResult> result = await Manager.UpgradeAsync(stationId, fromLevel);
@@ -322,6 +328,13 @@ namespace Promuse.Manufacture {
                 StationReading reading = ManufactureManager.Read(station, now);
                 card.Bind(station, reading, now, busy);
                 if (reading.StoredUnits > 0) anything = true;
+            }
+
+            // 面板跟着卡片 / The open panel reads its station at the same moment as the card, so the two
+            // never disagree about what the station holds; it closes itself if the level moved.
+            if (upgradePanel.IsOpen) {
+                StationState shown = open ? Manager.Station(upgradePanel.StationId) : null;
+                upgradePanel.Follow(shown, shown != null ? ManufactureManager.Read(shown, now) : null, Held, busy);
             }
 
             // 盖住时不让按 / Nothing under an overlay can be pressed. Collect all sits on the top bar,

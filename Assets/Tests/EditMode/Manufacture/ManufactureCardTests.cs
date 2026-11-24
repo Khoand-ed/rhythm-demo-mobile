@@ -140,5 +140,55 @@ public class ManufactureCardTests
         Assert.AreEqual(1f, OffButton.AlphaOf(panel.confirmButton));
     }
 
+    [Test]
+    public void TheOpenPanel_FollowsTheStation_AndConfirmComesOnWhenItCanBePaid()
+    {
+        UpgradePanel panel = Ui.upgradePanel;
+        Func<int, int> held = id => id == 31 ? 1 : id == 2 ? 7850 : 0;
+
+        // 70 minutes in: two units, 100 LMD; 7,850 + 100 against 8,000.
+        StationState station = Lmd(Now.AddMinutes(-70));
+        panel.Open(station, ManufactureManager.Read(station, Now), held);
+        StringAssert.Contains("+100 from the station", panel.cost.text);
+        StringAssert.EndsWith("50 short", panel.cost.text);
+        Assert.IsFalse(panel.confirmButton.interactable);
+
+        // Twenty minutes on, with the panel still open: a third unit, and the price is met.
+        panel.Follow(station, ManufactureManager.Read(station, Now.AddMinutes(20)), held, busy: false);
+        StringAssert.Contains("+150 from the station", panel.cost.text);
+        StringAssert.DoesNotContain("short", panel.cost.text);
+        Assert.IsTrue(panel.confirmButton.interactable);
+        Assert.AreEqual(1f, OffButton.AlphaOf(panel.confirmButton));
+        Assert.IsTrue(panel.IsOpen);
+
+        // Confirmed: while the request is out the button stays off, however the station reads.
+        panel.Follow(station, ManufactureManager.Read(station, Now.AddMinutes(20)), held, busy: true);
+        Assert.IsFalse(panel.confirmButton.interactable);
+        Assert.AreEqual(OffAlpha, OffButton.AlphaOf(panel.confirmButton));
+    }
+
+    [Test]
+    public void Follow_ClosesThePanel_WhenTheStationMoved_AndNeverOpensIt()
+    {
+        UpgradePanel panel = Ui.upgradePanel;
+        Func<int, int> held = id => 0;
+        StationState station = Lmd(Now.AddMinutes(-70));
+        StationReading reading = ManufactureManager.Read(station, Now);
+
+        panel.Close();
+        panel.Follow(station, reading, held, busy: false);
+        Assert.IsFalse(panel.IsOpen, "a closed panel stays closed");
+
+        // Raised from another device while the panel was open: the price shown no longer applies.
+        panel.Open(station, reading, held);
+        panel.Follow(station with { Level = 2 }, reading, held, busy: false);
+        Assert.IsFalse(panel.IsOpen);
+
+        // Gone from the view - locked, or the view not there.
+        panel.Open(station, reading, held);
+        panel.Follow(null, null, held, busy: false);
+        Assert.IsFalse(panel.IsOpen);
+    }
+
     private const float OffAlpha = OffButton.Alpha;
 }
