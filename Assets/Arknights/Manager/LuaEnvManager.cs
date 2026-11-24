@@ -57,7 +57,7 @@ namespace Manager {
             string[] args = filepath.Split('/');
             string name = args[args.Length - 1];
             TextAsset textAsset = Asset.Load<TextAsset>(filepath.Substring(0, filepath.Length - name.Length), name);
-            return textAsset == null ? null : textAsset.text;
+            return textAsset == null ? null : textAsset.text.TrimStart('\uFEFF');
         }
 
         // 从AB包中加载lua文件
@@ -67,7 +67,23 @@ namespace Manager {
             string[] args = filepath.Split('/');
             string name = args[args.Length - 1];
             TextAsset textAsset = Asset.Load<TextAsset>(filepath.Substring(0, filepath.Length - name.Length), name);
-            return textAsset == null ? null : textAsset.bytes;
+            return textAsset == null ? null : WithoutBom(textAsset.bytes);
+        }
+
+        private static readonly byte[] Utf8Bom = { 0xEF, 0xBB, 0xBF };
+
+        /// <summary>
+        /// 去掉UTF-8 BOM / A script saved with a UTF-8 byte order mark. File.ReadAllText drops it, so
+        /// the Editor never notices; a TextAsset's bytes keep it, and Lua reads those three bytes as
+        /// code - "unexpected symbol near '&lt;\239&gt;'" on the first line, before the front-end starts.
+        /// </summary>
+        public static byte[] WithoutBom(byte[] bytes) {
+            if (bytes == null || bytes.Length < Utf8Bom.Length) return bytes;
+            for (int i = 0; i < Utf8Bom.Length; i++)
+                if (bytes[i] != Utf8Bom[i]) return bytes;
+            byte[] rest = new byte[bytes.Length - Utf8Bom.Length];
+            System.Array.Copy(bytes, Utf8Bom.Length, rest, 0, rest.Length);
+            return rest;
         }
     }
 }
