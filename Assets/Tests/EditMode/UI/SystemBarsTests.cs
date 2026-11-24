@@ -64,6 +64,16 @@ public class SystemBarsTests
     }
 
     [Test]
+    public void InTheMenus_ATransientBar_HasTimeToGoByItself()
+    {
+        // 菜单里系统先藏 / A phone that honours transient bars hides one itself after SystemAutoHide. Were
+        // the game's hide first, every phone would log "Hid the ... after it showed" and the log could not
+        // tell a phone that leaves the bar from one that takes it away. Margin for a late frame.
+        Assert.GreaterOrEqual(SystemBars.MenuDelay, SystemBars.SystemAutoHide + 0.5f);
+        Assert.LessOrEqual(SystemBars.MenuDelay, 5f, "a bar the phone leaves still goes soon");
+    }
+
+    [Test]
     public void TheGameplayScene_IsTheOneSongSelectLoads()
     {
         // SongSelectUI lives in the default assembly, which neither Arknights nor this test can see.

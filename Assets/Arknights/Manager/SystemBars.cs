@@ -17,14 +17,19 @@ namespace Manager {
     /// such a bar only when AndroidWindowInsets.Hide is called, so this calls it.
     ///
     /// 何时藏 / When a bar shows (AndroidApplication.onWindowInsetsChanged, API 30+), when the game gets
-    /// focus back, and once at start. About 2 s after a bar shows in the menus, so a player who pulled the
-    /// shade to read something is not snatched from; about 0.5 s during a song, where the bar covers the
-    /// right lane. Never while the keyboard is up (it is brought back once it closes), never in split
-    /// screen (the system owns the bars there).
+    /// focus back, and once at start. About 3 s after a bar shows in the menus - longer than the system
+    /// leaves a transient bar up (<see cref="SystemAutoHide"/>), so on a phone that honours transient bars
+    /// the system takes it away first and this is only the fallback, and a player who pulled the shade to
+    /// read something is not snatched from; about 0.5 s during a song, where the bar covers the right lane.
+    /// Never while the keyboard is up (it is brought back once it closes), never in split screen (the
+    /// system owns the bars there).
     ///
-    /// 日志 / Each bar that shows is logged once, as it goes - hidden by this or gone by itself - so a
-    /// phone's logcat says what brought it and whether the phone honours transient bars:
-    /// <c>adb logcat -s Unity | findstr SystemBars</c>.
+    /// 日志 / Each bar the game is told of is logged once, as it goes, with what brought it:
+    /// <c>adb logcat -s Unity | findstr SystemBars</c>. Read it after a swipe in the menus, not in a song
+    /// (0.5 s comes before any system timeout). "Hid the ... 3.0 s after it showed" means the bar outlived
+    /// the system's own timeout - the phone left it. "went by itself", or no line at all (a transient bar
+    /// may overlay the game without being reported as visible), means the phone took it away. An
+    /// accessibility setting that lengthens timeouts can stretch the system's past 3 s.
     ///
     /// The decisions are the public static members below, so EditMode tests can check them without a phone;
     /// everything that talks to Android is under UNITY_ANDROID and runs only in a player. Like FrameRate,
@@ -35,8 +40,15 @@ namespace Manager {
         /// <summary>The rhythm scene. SongSelectUI.GameplayScene names it in the default assembly, which this one cannot see; a test keeps them equal.</summary>
         public const string GameplayScene = "Main";
 
-        /// <summary>Seconds a bar may stay after it shows in the menus.</summary>
-        public const float MenuDelay = 2f;
+        /// <summary>
+        /// Seconds AOSP's SystemUI leaves a transient bar up when nobody touches the screen
+        /// (AutoHideController, 2250 ms; a touch cuts it to 350 ms). A vendor's build may differ. Not used
+        /// at run time: <see cref="MenuDelay"/> is kept above it, so the logs can tell the two apart.
+        /// </summary>
+        public const float SystemAutoHide = 2.25f;
+
+        /// <summary>Seconds a bar may stay after it shows in the menus. Above <see cref="SystemAutoHide"/>.</summary>
+        public const float MenuDelay = 3f;
 
         /// <summary>Seconds a bar may stay after it shows during a song.</summary>
         public const float SongDelay = 0.5f;
