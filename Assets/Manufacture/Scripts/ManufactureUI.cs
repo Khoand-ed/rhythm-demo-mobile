@@ -30,6 +30,10 @@ namespace Promuse.Manufacture {
     /// The stations' layer is also switched off for input while the lock or the upgrade panel is
     /// up, rather than trusting draw order across canvases to stop a press reaching it.
     ///
+    /// 盖住主页 / The room's wall is opaque from edge to edge, so once the screen has faded in, Home
+    /// below cannot be seen: the screen covers it (UIManager.Cover), and Home is neither drawn nor run
+    /// until the screen starts to go. Home shows through both fades, as it always has.
+    ///
     /// Built by Arknights/Manufacture/Build Manufacture UI; the field bindings are the contract. Opened
     /// from Home's MANUFACTURE tile.
     /// </summary>
@@ -66,6 +70,8 @@ namespace Promuse.Manufacture {
         private bool busy;
         private bool loading;
         private RoomStore roomStore;
+        private bool covering;
+        private bool hiding;
 
         private static ManufactureManager Manager => ManufactureManager.Inst();
 
@@ -95,7 +101,11 @@ namespace Promuse.Manufacture {
         }
 
         public override void Show() {
+            hiding = false;
             base.Show();
+            // 一次只有一个渐变 / A fade-out still running is stopped, and with it the Hide it would end in:
+            // shown again, the screen stays.
+            canvasGroup.DOKill();
             canvasGroup.alpha = 0;
             canvasGroup.DOFade(1, 0.25f);
 
@@ -112,12 +122,37 @@ namespace Promuse.Manufacture {
         }
 
         public override void Hide(bool destroy = false) {
+            // 先把主页放回来 / Home comes back before the fade starts, so it shows through it.
+            hiding = true;
+            SetCovering(false);
+
             Manager.Changed -= Draw;
+            // A second Back mid-fade restarts the fade rather than running two, and two Hides.
+            canvasGroup.DOKill();
             canvasGroup.DOFade(0, 0.2f).OnComplete(() => base.Hide(destroy));
         }
 
         private void OnDestroy() {
             Manager.Changed -= Draw;
+
+            // 只丢记录 / Destroyed while still covering - leaving Play Mode, quitting - the record goes
+            // and nothing is switched back on: waking Home mid-teardown would only run its OnEnable for
+            // nothing. Every real way out (Hide, an unload) has uncovered already.
+            if (covering) {
+                covering = false;
+                UIManager.Inst().Forget(this);
+            }
+        }
+
+        // 渐入完才盖 / Covered only once fully faded in, and never while going. LateUpdate runs after
+        // DOTween's update and after the frame's taps, so what is drawn this frame is settled.
+        private void LateUpdate() => SetCovering(!hiding && canvasGroup.alpha >= 0.999f);
+
+        private void SetCovering(bool on) {
+            if (on == covering) return;
+            covering = on;
+            if (on) UIManager.Inst().Cover(this);
+            else UIManager.Inst().Uncover(this);
         }
 
         // 回到前台就重读 / Back from the background: the device's clock may have been moved while the

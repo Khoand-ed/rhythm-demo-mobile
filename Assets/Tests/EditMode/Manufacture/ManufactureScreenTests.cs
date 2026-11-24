@@ -92,6 +92,33 @@ public class ManufactureScreenTests
     }
 
     [Test]
+    public void TheWall_HidesEverythingBelow_OnceTheScreenHasFadedIn()
+    {
+        // 盖住主页的前提 / What UIManager.Cover relies on: once the screen's group is at 1, the room's
+        // first layer paints every pixel, so Home below it can be switched off unseen.
+        ManufactureUI ui = Screen();
+        Component root = ui;
+
+        Assert.IsNotNull(root.GetComponent<CanvasGroup>(), "the screen fades through its group");
+
+        Transform room = root.transform.GetChild(0);
+        Assert.AreEqual("Room", room.name, "the room is drawn first, under everything else");
+        Assert.IsTrue(room.gameObject.activeSelf);
+
+        Transform wallChild = room.GetChild(0);
+        Assert.AreEqual("Wall", wallChild.name, "the wall is the room's first layer");
+        Assert.IsTrue(wallChild.gameObject.activeSelf);
+
+        Image wall = wallChild.GetComponent<Image>();
+        Assert.IsNotNull(wall);
+        Assert.IsTrue(wall.enabled);
+        Assert.AreEqual(1f, wall.color.a, "opaque");
+        RectTransform rect = wall.rectTransform;
+        Assert.AreEqual((Vector2.zero, Vector2.one), (rect.anchorMin, rect.anchorMax), "stretched to the screen");
+        Assert.AreEqual((Vector2.zero, Vector2.zero), (rect.offsetMin, rect.offsetMax), "to its very edges");
+    }
+
+    [Test]
     public void TheOverlaysStartHidden_AndTheUpgradePanelDrawsOverTheTopBar()
     {
         ManufactureUI ui = Screen();
