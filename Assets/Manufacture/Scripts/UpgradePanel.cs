@@ -100,7 +100,8 @@ namespace Promuse.Manufacture {
 
             note.text = "What the station holds now is collected first, at its current level.";
 
-            confirmButton.interactable = hasBlueprint && canPay;
+            // 关着就暗 / Off looks off, label and all (OffButton).
+            OffButton.Set(confirmButton, hasBlueprint && canPay);
             gameObject.SetActive(true);
         }
 

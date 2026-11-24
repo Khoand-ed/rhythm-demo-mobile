@@ -266,7 +266,7 @@ namespace Promuse.Manufacture {
         private async void UpgradeAsync(string stationId, int fromLevel) {
             if (busy) return;
             busy = true;
-            upgradePanel.confirmButton.interactable = false;
+            OffButton.Set(upgradePanel.confirmButton, false);
 
             try {
                 ApiResult<ManufactureActionResult> result = await Manager.UpgradeAsync(stationId, fromLevel);
@@ -332,7 +332,7 @@ namespace Promuse.Manufacture {
             stationLayer.blocksRaycasts = !covered;
 
             collectAllButton.gameObject.SetActive(open && !lockOverlay.activeSelf);
-            collectAllButton.interactable = !busy && anything;
+            OffButton.Set(collectAllButton, !busy && anything);
             roomButton.gameObject.SetActive(open && !lockOverlay.activeSelf);
         }
 

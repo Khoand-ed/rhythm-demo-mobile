@@ -51,6 +51,7 @@ public class ManufactureCardTests
         Assert.AreEqual(StationCard.ReadyFace, face.color);
         StringAssert.StartsWith("FULL", card.next.text);
         Assert.IsTrue(card.collectButton.interactable);
+        Assert.AreEqual(1f, OffButton.AlphaOf(card.collectButton));
 
         // Collected: the clock starts again from now, with nothing in the store.
         StationState collected = full with { AnchorAt = Now };
@@ -59,6 +60,7 @@ public class ManufactureCardTests
         Assert.AreEqual(usual, face.color, "back to the prefab's own colour");
         StringAssert.StartsWith("+50 in", card.next.text);
         Assert.IsFalse(card.collectButton.interactable, "nothing to collect");
+        Assert.AreEqual(OffButton.Alpha, OffButton.AlphaOf(card.collectButton), "and it looks off, label and all");
     }
 
     [Test]
@@ -86,6 +88,31 @@ public class ManufactureCardTests
 
         Assert.IsFalse(card.collectButton.interactable);
         Assert.IsFalse(card.upgradeButton.interactable);
+        Assert.AreEqual(OffButton.Alpha, OffButton.AlphaOf(card.collectButton));
+        Assert.AreEqual(OffButton.Alpha, OffButton.AlphaOf(card.upgradeButton));
+
+        // The answer back: both on again, at full strength.
+        card.Bind(station, ManufactureManager.Read(station, Now), Now, busy: false);
+        Assert.AreEqual(1f, OffButton.AlphaOf(card.collectButton));
+        Assert.AreEqual(1f, OffButton.AlphaOf(card.upgradeButton));
+    }
+
+    [Test]
+    public void ASwitchedOffButton_IsDimmedWhole_AndComesBackWhole()
+    {
+        // COLLECT ALL, as the screen switches it: the CanvasGroup dims the label with the face.
+        Button all = Ui.collectAllButton;
+
+        OffButton.Set(all, false);
+        Assert.IsFalse(all.interactable);
+        Assert.AreEqual(OffButton.Alpha, all.GetComponent<CanvasGroup>().alpha);
+
+        OffButton.Set(all, false);
+        Assert.AreEqual(1, all.GetComponents<CanvasGroup>().Length, "one group, however often");
+
+        OffButton.Set(all, true);
+        Assert.IsTrue(all.interactable);
+        Assert.AreEqual(1f, all.GetComponent<CanvasGroup>().alpha);
     }
 
     [Test]
@@ -103,11 +130,15 @@ public class ManufactureCardTests
         StringAssert.Contains("clear 1-3", panel.blueprint.text);
         StringAssert.EndsWith("3,200 short", panel.cost.text);
         Assert.IsFalse(panel.confirmButton.interactable);
+        Assert.AreEqual(OffAlpha, OffButton.AlphaOf(panel.confirmButton), "off looks off, the white label too");
 
         // The blueprint held, and the station's 100 LMD makes up the last of the price.
         panel.Open(station, reading, id => id == 31 ? 1 : id == 2 ? 7900 : 0);
         StringAssert.Contains("held, not spent", panel.blueprint.text);
         StringAssert.DoesNotContain("short", panel.cost.text);
         Assert.IsTrue(panel.confirmButton.interactable);
+        Assert.AreEqual(1f, OffButton.AlphaOf(panel.confirmButton));
     }
+
+    private const float OffAlpha = OffButton.Alpha;
 }

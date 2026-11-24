@@ -104,9 +104,10 @@ namespace Promuse.Manufacture {
             if (collectFace != null) collectFace.color = stopped ? ReadyFace : collectFaceInk;
             if (collectLabel != null) collectLabel.color = stopped ? ReadyInk : collectLabelInk;
 
-            collectButton.interactable = !busy && reading.StoredUnits > 0;
+            // 关着就暗 / Off looks off, label and all (OffButton).
+            OffButton.Set(collectButton, !busy && reading.StoredUnits > 0);
             upgradeButton.gameObject.SetActive(!top);
-            upgradeButton.interactable = !busy;
+            OffButton.Set(upgradeButton, !busy);
         }
 
         private void SetFill(float done) {
