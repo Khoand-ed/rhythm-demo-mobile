@@ -13,18 +13,21 @@ using UnityEngine.UI;
 ///   Arknights/Manufacture/Build Manufacture UI           - builds what is missing, keeps what exists
 ///   Arknights/Manufacture/Reset Manufacture UI To Default - builds the screen again from scratch
 ///
-/// 不动手改过的东西 / Build never changes what is already there: whatever has been placed, recoloured
-/// or swapped for real art by hand stays as it is. On a prefab that exists it only adds the parts a
+/// 不动手改过的东西 / Build never changes what has been changed by hand: whatever has been placed,
+/// recoloured or swapped for real art stays as it is. On a prefab that exists it adds the parts a
 /// later version of the screen has and this one lacks - the room's operators, the ROOM button, the
-/// room picker - and saves nothing when nothing is missing. Only Reset throws the prefab away, and asks
-/// first; it writes over the prefab in place, so the asset keeps its GUID. The lines asset is created
-/// once and never written again by either. Hooking the tile only ever adds what is missing to it.
+/// room picker - and it turns a back button still exactly as the first version built it (white, "BACK")
+/// into the shared back slab, in place, keeping its click. A back button changed in any way is left
+/// alone, and Reset gives the slab. It saves nothing when there is nothing to do. Only Reset throws
+/// the prefab away, and asks first; it writes over the prefab in place, so the asset keeps its GUID.
+/// The lines asset is created once and never written again by either. Hooking the tile only ever adds
+/// what is missing to it.
 ///
 /// 布局 / The screen, bottom to top:
 ///   Room        (child Canvas, ManufactureRoom) wall, windows, floor, five slots the operators stand in
 ///   Hud         (child Canvas, CanvasGroup) the LMD and EXP station cards, left and right
 ///   LockOverlay below the top bar: "Clear 1-1 to unlock", "unavailable", a load error and Retry
-///   TopBar      Back, the title, ROOM, the LMD the player holds, Collect all
+///   TopBar      Back (the grey slab Depot and Mission share), the title, ROOM, the LMD held, Collect all
 ///   UpgradePanel over everything, top bar included, until it is confirmed or cancelled
 ///   RoomPicker  over everything too: who stands in the room, up to five
 /// </summary>
@@ -48,6 +51,19 @@ public static class ManufactureUISetup
     private static readonly Color Yellow = new Color(0.96f, 0.73f, 0.05f, 1f);
     private static readonly Color Dim = new Color(1f, 1f, 1f, 0.6f);
     private static readonly Color Veil = new Color(0f, 0f, 0f, 0.78f);
+
+    // 共用的返回键 / The back slab Depot and Mission build (DepotUISetup's Slab and Edge), so every
+    // screen is left the same way.
+    private static readonly Color BackSlab = new Color(0.30f, 0.31f, 0.33f, 0.90f);
+    private static readonly Color Edge = new Color(1f, 1f, 1f, 0.30f);
+    private static readonly Vector2 BackSlabAt = new Vector2(48f, -26f);
+    private static readonly Vector2 BackSlabSize = new Vector2(170f, 68f);
+    private const string BackGlyph = "‹";
+
+    // 第一版的返回键 / The back button the first version built - the only one Build converts.
+    private static readonly Vector2 OldBackAt = new Vector2(42f, -33f);
+    private static readonly Vector2 OldBackSize = new Vector2(156f, 55f);
+    private const string OldBackLabel = "BACK";
 
     private static string PrefabPath => $"{UiPrefabDir}/{ManufactureUI.UIName}.prefab";
 
@@ -260,7 +276,7 @@ public static class ManufactureUISetup
         RectTransform rect = bar.rectTransform;
 
         // 出口 / The way out, wired in the prefab so Android Back finds it (UIBase.FindExitButton).
-        Button back = SolidButton("BackButton", rect, TopLeft, new Vector2(42f, -33f), new Vector2(156f, 55f), "BACK", Color.white, Bar);
+        UnityEngine.UI.Button back = BackSlabButton(rect);
         UnityEditor.Events.UnityEventTools.AddBoolPersistentListener(back.onClick, ui.Hide, true);
 
         TextMeshProUGUI title = Label(rect, "Title", TopLeft, new Vector2(230f, -30f), new Vector2(600f, 60f), 44f, Color.white, TextAlignmentOptions.Left);
@@ -318,8 +334,9 @@ public static class ManufactureUISetup
 
     /// <summary>
     /// 补上后来的部分 / Adds each part a later version of the screen has and this one lacks - the room's
-    /// operators, the ROOM button, the room picker - leaving everything there as it is. Returns what it
-    /// added: nothing, on a screen that has it all.
+    /// operators, the ROOM button, the room picker - and turns a back button the first version built,
+    /// untouched since, into the back slab. Everything else stays as it is. Returns what it added or
+    /// converted: nothing, on a screen that has it all.
     /// </summary>
     private static List<string> Complete(GameObject root)
     {
@@ -330,7 +347,45 @@ public static class ManufactureUISetup
         EnsureRoom(rect, ui, added);
         EnsureRoomButton(rect, ui, added);
         EnsureRoomPicker(rect, ui, added);
+        EnsureBackSlab(rect, added);
         return added;
+    }
+
+    /// <summary>
+    /// 换成共用的返回键 / The back button as the shared slab. A slab already there - built new, or
+    /// converted before - is left without a word. A button still exactly as the first version built it
+    /// (white face, "BACK", at (42,-33), 156x55, no edges) is converted in place: the same GameObject,
+    /// Button and click to Hide, so Back and the file IDs survive. Anything else was changed by hand and
+    /// is kept; Reset gives the slab.
+    /// </summary>
+    private static void EnsureBackSlab(RectTransform root, List<string> added)
+    {
+        RectTransform back = root.Find("TopBar/BackButton") as RectTransform;
+        if (back == null) return;
+
+        UnityEngine.UI.Image face = back.GetComponent<UnityEngine.UI.Image>();
+        if (back.Find("EdgeTop") != null || (face != null && face.color == BackSlab)) return;
+
+        Transform labelChild = back.Find("Label");
+        TMP_Text label = labelChild != null ? labelChild.GetComponent<TMP_Text>() : null;
+        bool asFirstBuilt = face != null && face.color == Color.white &&
+                            label != null && label.text == OldBackLabel &&
+                            back.anchoredPosition == OldBackAt && back.sizeDelta == OldBackSize;
+        if (!asFirstBuilt)
+        {
+            Debug.Log($"{Tag} BackButton was changed by hand; kept. Reset Manufacture UI To Default gives the shared back slab.");
+            return;
+        }
+
+        face.color = BackSlab;
+        back.anchoredPosition = BackSlabAt;
+        back.sizeDelta = BackSlabSize;
+        AddEdges(back);
+
+        // 符号在边线上面 / The glyph last, over the edges - the order a new slab is built in.
+        StyleBackGlyph(label);
+        label.transform.SetAsLastSibling();
+        added.Add("the back slab");
     }
 
     private static void EnsureRoom(RectTransform root, ManufactureUI ui, List<string> added)
@@ -711,6 +766,49 @@ public static class ManufactureUISetup
         TextMeshProUGUI text = NewText(name, parent, fontSize, color, alignment);
         Place(text.rectTransform, corner, corner, corner, position, size);
         return text;
+    }
+
+    /// <summary>
+    /// 共用的返回键 / The back slab Depot and Mission leave by: grey, edged, a "‹" - at the top bar's
+    /// left. The click is wired by the caller.
+    /// </summary>
+    private static UnityEngine.UI.Button BackSlabButton(RectTransform bar)
+    {
+        UnityEngine.UI.Image face = NewImage("BackButton", bar, BackSlab, raycast: true);
+        Place(face.rectTransform, TopLeft, TopLeft, TopLeft, BackSlabAt, BackSlabSize);
+        AddEdges(face.rectTransform);
+
+        TextMeshProUGUI glyph = NewText("Label", face.rectTransform, 46f, Color.white, TextAlignmentOptions.Center);
+        Stretch(glyph.rectTransform);
+        StyleBackGlyph(glyph);
+
+        UnityEngine.UI.Button button = face.gameObject.AddComponent<UnityEngine.UI.Button>();
+        button.targetGraphic = face;
+        return button;
+    }
+
+    /// <summary>The slab's "‹", the same whether built new or converted.</summary>
+    private static void StyleBackGlyph(TMP_Text glyph)
+    {
+        glyph.text = BackGlyph;
+        glyph.fontSize = 46f;
+        glyph.color = Color.white;
+        glyph.fontStyle = FontStyles.Normal;
+    }
+
+    private static void AddEdges(RectTransform parent)
+    {
+        NewEdge(parent, "EdgeTop", new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0f, -1f), new Vector2(0f, 2f));
+        NewEdge(parent, "EdgeBottom", new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0f, 1f), new Vector2(0f, 2f));
+        NewEdge(parent, "EdgeLeft", new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(1f, 0f), new Vector2(2f, 0f));
+        NewEdge(parent, "EdgeRight", new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(-1f, 0f), new Vector2(2f, 0f));
+    }
+
+    private static void NewEdge(RectTransform parent, string name, Vector2 anchorMin, Vector2 anchorMax,
+                                Vector2 position, Vector2 size)
+    {
+        UnityEngine.UI.Image edge = NewImage(name, parent, Edge, raycast: false);
+        Place(edge.rectTransform, anchorMin, anchorMax, Center, position, size);
     }
 
     private static Button SolidButton(string name, RectTransform parent, Vector2 corner, Vector2 position, Vector2 size,

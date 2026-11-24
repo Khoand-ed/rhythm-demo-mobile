@@ -1,5 +1,6 @@
 using NUnit.Framework;
 using Promuse.Manufacture;
+using TMPro;
 using UI;
 using UnityEditor;
 using UnityEngine;
@@ -12,6 +13,7 @@ public class ManufactureScreenTests
 {
     private const string ScreenPath = "Assets/Arknights/Resources/Prefab/UI/ManufactureUI.prefab";
     private const string HomePath = "Assets/Arknights/Resources/Prefab/UI/HomeUI.prefab";
+    private const string DepotPath = "Assets/Arknights/Resources/Prefab/UI/DepotUI.prefab";
 
     private static ManufactureUI Screen()
     {
@@ -141,6 +143,29 @@ public class ManufactureScreenTests
         Button exit = UIBase.FindExitButton(ui);
         Assert.IsNotNull(exit);
         Assert.AreSame(root.transform.Find("TopBar/BackButton").GetComponent<Button>(), exit);
+    }
+
+    [Test]
+    public void TheBackButton_IsTheSharedSlab()
+    {
+        // 和仓库一样 / The grey slab with its edges and a "‹", the one Depot and Mission leave by.
+        GameObject depot = AssetDatabase.LoadAssetAtPath<GameObject>(DepotPath);
+        Assert.IsNotNull(depot);
+        Image shared = depot.transform.Find("TopBar/BackButton").GetComponent<Image>();
+
+        Component root = Screen();
+        Transform back = root.transform.Find("TopBar/BackButton");
+        Image face = back.GetComponent<Image>();
+
+        Assert.AreEqual(shared.color, face.color, "run Arknights/Manufacture/Build Manufacture UI");
+        Assert.AreEqual(shared.rectTransform.sizeDelta, face.rectTransform.sizeDelta);
+        foreach (string edge in new[] { "EdgeTop", "EdgeBottom", "EdgeLeft", "EdgeRight" })
+        {
+            Assert.IsNotNull(back.Find(edge), edge);
+        }
+        Assert.AreEqual("‹", back.GetComponentInChildren<TMP_Text>(true).text);
+        Assert.AreEqual(back.childCount - 1, back.GetComponentInChildren<TMP_Text>(true).transform.GetSiblingIndex(),
+                        "the glyph draws over the edges");
     }
 
     [Test]
