@@ -9,6 +9,7 @@ using Promuse.Contracts.Characters;
 using Promuse.Contracts.Manufacture;
 using Promuse.Net;
 using TMPro;
+using Tools;
 using UI;
 using UI.Sub;
 using UnityEngine;
@@ -126,6 +127,11 @@ namespace Promuse.Manufacture {
             hiding = true;
             SetCovering(false);
 
+            // 主页的货币 / Collecting and raising a station change the LMD Home's top row shows, and that
+            // row redraws only when asked. Home is hidden under the room until now, so asking once, as the
+            // screen goes, covers every way the bag changed here - a collect, an upgrade, a fresh load.
+            RefreshHome();
+
             Manager.Changed -= Draw;
             // A second Back mid-fade restarts the fade rather than running two, and two Hides.
             canvasGroup.DOKill();
@@ -153,6 +159,19 @@ namespace Promuse.Manufacture {
             covering = on;
             if (on) UIManager.Inst().Cover(this);
             else UIManager.Inst().Uncover(this);
+        }
+
+        /// <summary>
+        /// 刷新失败不能连累本界面 / Wrapped like MissionUI's: HomeUI is driven by Lua, and refreshing it
+        /// runs script through RuaUI - anything that throws in there must not stop this screen closing.
+        /// Update is a no-op when Home is not loaded.
+        /// </summary>
+        private static void RefreshHome() {
+            try {
+                UIManager.Inst().Update(BootIntent.Home);
+            } catch (Exception e) {
+                Debug.LogWarning($"[ManufactureUI] HomeUI refresh failed, its currency row may be stale: {e.Message}");
+            }
         }
 
         // 回到前台就重读 / Back from the background: the device's clock may have been moved while the
