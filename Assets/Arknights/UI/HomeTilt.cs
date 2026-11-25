@@ -5,8 +5,8 @@ using UnityEngine.InputSystem;
 namespace UI {
     /// <summary>
     /// 主界面的倾斜来源 / Where Home's parallax gets its motion on a phone: how the phone is tilted.
-    /// HomeUI.lua reads <see cref="X"/> and <see cref="Y"/> every frame and moves its two planes by
-    /// them, in place of the pointer it follows in the Editor and on a PC, where there is no sensor.
+    /// HomeUI.lua reads <see cref="Target"/> every frame and moves its two planes by it, in place of
+    /// the pointer it follows in the Editor and on a PC, where there is no sensor.
     ///
     /// 重力传感器 / Read from the gravity sensor, or a low-passed accelerometer on a phone without one,
     /// through the Input System. C# reads it rather than the Lua: a sensor API reached only by reflection
@@ -64,6 +64,15 @@ namespace UI {
 
         /// <summary>-1..1: the top edge tipped away is positive.</summary>
         public float Y { get; private set; }
+
+        /// <summary>
+        /// 一次读完 / <see cref="X"/> and <see cref="Y"/> in one read, (0, 0) while the tilt is not
+        /// <see cref="Available"/>. What the Lua reads each frame: it reaches this class by reflection
+        /// (only xLua's own example types have generated wrappers), and every property read is a
+        /// MethodInfo.Invoke that boxes its value. Reading Available, X and Y - and FollowsPointer -
+        /// every frame was the garbage Home gained with the tilt, 0.54 to 3.8 KB a frame on the phone.
+        /// </summary>
+        public Vector2 Target => Available ? new Vector2(X, Y) : Vector2.zero;
 
         /// <summary>
         /// 找到或加上 / The tilt source on <paramref name="host"/>, added if it has none. In C# because a
