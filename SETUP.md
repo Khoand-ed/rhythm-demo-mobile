@@ -442,10 +442,12 @@ three addresses:
 | Server | Address | Use |
 |---|---|---|
 | Local (default) | `http://127.0.0.1:5199` | the dev API on this PC; a phone reaches it through `adb reverse` |
-| Staging | `https://<name>-staging.duckdns.org` | the VM's staging (`deploy/README.md`): every merge to main |
-| Production | `https://<name>.duckdns.org` | the VM's production: tagged releases |
+| Staging | `https://promuse-staging.duckdns.org` | the VM's staging (`deploy/README.md`): every merge to main |
+| Production | `https://promuse-rhythm.duckdns.org` - not in the asset yet | the VM's production: tagged releases |
 
-- **The two VM addresses** are typed into the asset's Inspector once the DuckDNS names exist.
+- **The VM addresses** are typed into the asset's Inspector once the DuckDNS names exist. Staging's is
+  there; production's goes in when production is first deployed, so no build can point at a server
+  that is not running.
 - **A build that cannot work is refused before it starts** (`ServerTargetBuildCheck`), with what to
   change:
   - a server with no address;
