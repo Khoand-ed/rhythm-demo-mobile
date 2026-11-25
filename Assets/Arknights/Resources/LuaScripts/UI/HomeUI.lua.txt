@@ -138,6 +138,16 @@ local idle = 0
 ---@type UI.HomeTilt
 local tilt
 
+--- 不会变的只读一次 / The Editor and a PC follow the pointer, a phone its tilt - fixed for the
+--- run, so read once. Everything read from UI.HomeTilt goes through reflection and boxes its
+--- value: a frame reads it once (tilt.Target), never property by property.
+local followsPointer = true
+
+--- 分钟变了才写 / The clock as shown. os.date is plain Lua, and the text is written only when
+--- the minute changes; formatting C#'s DateTime every frame was a reflected call and a new C#
+--- string sixty times a second for a line that changes once a minute.
+local shownClock
+
 ---@type Data.Player.PlayerData
 local data;
 
@@ -151,12 +161,13 @@ function init()
     --- Home - under a song the UI camera is off, which this script never hears about.
     tilt = CS.UI.HomeTilt.On(self.gameObject)
     tilt:Tune(TILT_RANGE_DEGREES, TILT_DEAD_ZONE_DEGREES, TILT_RECENTRE_SECONDS)
+    followsPointer = tilt.FollowsPointer
 end
 
 function update()---刷新时间 - 跟随倾斜或鼠标
-    time.text = DateTime.Now:ToString("yyyy/MM/dd/ HH:mm")
+    updateClock()
 
-    if tilt ~= nil and not tilt.FollowsPointer then
+    if tilt ~= nil and not followsPointer then
         followTilt()
     else
         followPointer()
@@ -180,10 +191,16 @@ end
 --- another screen, or on a phone with no sensor. Never the pointer: on a phone that
 --- is a finger, and following it jolted the UI toward every tile pressed.
 function followTilt()
-    if tilt.Available then
-        target = Vector2(tilt.X * TILT_SIGN_X, tilt.Y * TILT_SIGN_Y)
-    else
-        target = Vector2.zero
+    local tilted = tilt.Target
+    target = Vector2(tilted.x * TILT_SIGN_X, tilted.y * TILT_SIGN_Y)
+end
+
+--- 和以前一样的格式 / The same text as before, "2026/11/25/ 14:05", in the phone's local time.
+function updateClock()
+    local now = os.date("%Y/%m/%d/ %H:%M")
+    if now ~= shownClock then
+        shownClock = now
+        time.text = now
     end
 end
 
