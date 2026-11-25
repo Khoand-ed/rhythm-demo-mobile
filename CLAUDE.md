@@ -93,7 +93,7 @@ A compile error anywhere fails it before any test runs. A fork's PR skips it, be
 GitHub withholds the licence secret from forks. Both jobs are required checks on main.
 A run takes about nine minutes, the tests a few seconds of that. Its editor is Linux
 with no Android support, so the `UNITY_ANDROID` and `!UNITY_EDITOR` branches
-(`ABManager`, `BundleInstaller`, `FrameRate`, `PauseMenu`) are not compiled there.
+(`ABManager`, `BundleInstaller`, `FrameRate`, `PauseMenu`, `SystemBars`) are not compiled there.
 Only an Android build compiles all of them, and no CI makes one.
 
 ## Traps
@@ -134,6 +134,7 @@ Only an Android build compiles all of them, and no CI makes one.
 | Opening someone's profile card | `ProfileUI.Open(playerId)`. `UIManager.Show("ProfileUI")` on its own - which is all Home's button does - always opens the player's own card |
 | Showing an operator's standing art | `SplashFrame.Show(image, meta)` (Lua: `CS.UI.SplashFrame.Show`), never `image.sprite = meta.GetImage()`. The splash is whole and uncut; only a frame keeps its proportions. A new screen's `Image` needs a frame - add it to the list in `OperatorSplashFrames` |
 | Setting `Application.targetFrameRate` anywhere else, or removing `Manager.FrameRate` | It sets 60 once, before the first scene. A phone left to itself draws at 30, and a tap is judged on the first frame that sees it - up to 33 ms late, most of a Great window. A second place setting it (a scene, a screen) silently wins wherever it runs |
+| Showing or hiding Android's status or navigation bar anywhere else, or removing `Manager.SystemBars` | Player Settings start the game with no bar, but a phone can bring one back and leave it, and the window is edge to edge: the bar lies over the top bar and the right lane. `SystemBars` hides it again (`AndroidWindowInsets.Hide`) - 3 s after it shows in the menus (after the system's own ~2.25 s, so the log tells a phone that leaves a bar from one that takes it away), 0.5 s in a song, never under the keyboard or in split screen. Never `Screen.fullScreen` or `SetResolution`: they switch the window, not the bars. `SystemBarsTests` pins the Insets settings it relies on |
 | Anything in `CharacterPresenter` choosing by chance | It is presentation, and the server replays a run from its seed. Pick from the event (lane, note type), never from `RunState.NextRoll()` or `UnityEngine.Random` |
 | Sizing an operator anywhere it stands | `Tools.RigHeight` (`Assets/Arknights/Utils/`) is the one measure, shared by the rhythm stage (`CharacterPresenter`) and the Manufacture room (`ManufactureChibi`): the top of what the idle pose draws, never the height a Spine export records. A second measure makes the same operator a different size in each place |
 
