@@ -494,7 +494,7 @@ fails for one that has none.
 3. **Install and connect**, with the phone on USB and USB debugging on. `adb` ships with Unity, in
    `Editor/Data/PlaybackEngines/AndroidPlayer/SDK/platform-tools/`:
    ```
-   adb install -r ../builds/Promuse-1.1-local-dev.apk
+   adb install -r ../builds/Promuse-1.3.2-local-dev.apk
    adb reverse tcp:5199 tcp:5199
    ```
    The game calls `http://127.0.0.1:5199`; `adb reverse` makes that the PC. Plain HTTP is allowed
