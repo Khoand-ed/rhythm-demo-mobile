@@ -345,10 +345,15 @@ stand.
   there, makes an hour of production a minute, so a full store or a whole upgrade path can be tried
   in minutes. The API refuses to start with any value but 1 outside Development, so Staging and
   Production always run in real time. Restart the API after changing it.
+- **Home under it.** Once the screen has faded in it covers Home (`UIManager.Cover`): Home is switched
+  off, so nothing of it is drawn or run, and it comes back as the screen starts to close - its music,
+  Lua and Back are not touched. On an OPPO A92 (Android 11) the idle screen draws at 60 FPS, the same
+  as Home; before the cover it was 52, with Home still drawn underneath.
 - **Built by** `Arknights/Manufacture/Build Manufacture UI`. It also hooks Home's tile and creates the
   lines asset, once. Run on a screen built by an earlier version, it adds only the parts that screen
-  lacks. `Reset Manufacture UI To Default` builds the screen again over the same prefab and keeps the
-  lines.
+  lacks, and turns a text BACK button it built itself into the back slab Depot and Mission share
+  (one changed by hand is left alone). `Reset Manufacture UI To Default` builds the screen again over
+  the same prefab and keeps the lines.
 
 ### How a ranked result is checked
 
