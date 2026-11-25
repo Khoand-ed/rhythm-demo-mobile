@@ -14,5 +14,5 @@ MonoBehaviour:
   m_EditorClassIdentifier: Promuse.Net::Promuse.Net.ServerTarget
   environment: 0
   localUrl: http://127.0.0.1:5199
-  stagingUrl: 
+  stagingUrl: https://promuse-staging.duckdns.org
   productionUrl: 
